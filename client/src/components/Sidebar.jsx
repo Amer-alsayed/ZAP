@@ -317,6 +317,9 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
                 onClick={() => {
                   setActiveContact(contact);
                   setSearchQuery('');
+                  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                    document.activeElement.blur();
+                  }
                 }}
               >
                 <div className="contact-avatar-container">

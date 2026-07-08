@@ -1822,6 +1822,10 @@ export default function App() {
   };
 
   const handleBackToMenu = (isFromPopState = false) => {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+
     if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings' || window.history.state === 'recents')) {
       window.history.back();
     }

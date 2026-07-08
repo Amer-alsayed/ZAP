@@ -638,8 +638,10 @@ button {
   border-radius: 8px;
 }
 
-.contact-item:hover {
-  background-color: rgba(255, 255, 255, 0.04);
+@media (hover: hover) {
+  .contact-item:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+  }
 }
 
 .contact-item.active {
