@@ -62,7 +62,7 @@ app.post('/api/upload', (req, res) => {
     const buffer = Buffer.from(fileData, 'base64');
     fs.writeFileSync(filePath, buffer);
 
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${safeFilename}`;
+    const fileUrl = `/uploads/${safeFilename}`;
     res.status(200).json({ fileUrl });
   } catch (error) {
     console.error('File upload error:', error);
