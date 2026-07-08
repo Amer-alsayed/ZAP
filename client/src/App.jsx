@@ -207,6 +207,7 @@ export default function App() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [remoteScreenSharing, setRemoteScreenSharing] = useState(false);
   const [remoteCameraOff, setRemoteCameraOff] = useState(false);
+  const [remoteMuted, setRemoteMuted] = useState(false);
 
   const dummyTrackRef = useRef(null);
   const originalVideoTrackRef = useRef(null);
@@ -574,11 +575,12 @@ export default function App() {
       cleanupCall(true, reason);
     });
 
-    socket.on('call-media-updated', ({ from, mediaType, screenSharing, cameraOff }) => {
-      console.log(`Call media updated by ${from}. mediaType: ${mediaType}, screenSharing: ${screenSharing}, cameraOff: ${cameraOff}`);
+    socket.on('call-media-updated', ({ from, mediaType, screenSharing, cameraOff, muted }) => {
+      console.log(`Call media updated by ${from}. mediaType: ${mediaType}, screenSharing: ${screenSharing}, cameraOff: ${cameraOff}, muted: ${muted}`);
       setCallMediaType(mediaType);
       setRemoteScreenSharing(screenSharing);
       setRemoteCameraOff(!!cameraOff);
+      setRemoteMuted(!!muted);
     });
 
     socket.on('call-error', ({ message }) => {
@@ -1460,6 +1462,18 @@ export default function App() {
         }
       }
     }
+
+    // Notify partner of our mute state change so they reload remoteAudio Ref
+    const socket = getSocket();
+    if (socket && callPartyRef.current) {
+      socket.emit('call-media-update', { 
+        to: callPartyRef.current, 
+        mediaType: callMediaTypeRef.current, 
+        screenSharing: isScreenSharing,
+        cameraOff: isCameraOff,
+        muted: nextMute
+      });
+    }
   };
 
   const handleToggleCamera = async () => {
@@ -1785,6 +1799,7 @@ export default function App() {
     setIsScreenSharing(false);
     setRemoteScreenSharing(false);
     setRemoteCameraOff(false);
+    setRemoteMuted(false);
   };
 
   // Secure sign out
@@ -1941,6 +1956,7 @@ export default function App() {
             isScreenSharing={isScreenSharing}
             remoteScreenSharing={remoteScreenSharing}
             remoteCameraOff={remoteCameraOff}
+            remoteMuted={remoteMuted}
             onToggleMute={handleToggleMute}
             onToggleCamera={handleToggleCamera}
             onToggleScreenShare={handleToggleScreenShare}

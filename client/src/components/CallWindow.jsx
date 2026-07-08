@@ -19,6 +19,7 @@ export default function CallWindow({
   isScreenSharing,
   remoteScreenSharing,
   remoteCameraOff,
+  remoteMuted,
   onToggleMute,
   onToggleCamera,
   onToggleScreenShare
@@ -189,7 +190,7 @@ export default function CallWindow({
       remoteAudioRef.current.srcObject = remoteStream;
       remoteAudioRef.current.play().catch(e => console.log("remote audio play error:", e));
     }
-  }, [remoteStream, renderState, mediaType]);
+  }, [remoteStream, renderState, mediaType, remoteMuted]);
 
   // Call timer
   useEffect(() => {
