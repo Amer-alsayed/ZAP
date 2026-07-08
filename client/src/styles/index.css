@@ -1334,12 +1334,39 @@ button {
   background-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Voice notes player */
 .voice-note-player {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 220px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.voice-speed-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: inherit;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+  transition: background-color 0.2s ease;
+}
+
+.voice-speed-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.message-wrapper.received .voice-speed-btn {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--text-primary);
+}
+
+.message-wrapper.received .voice-speed-btn:hover {
+  background: rgba(0, 0, 0, 0.15);
 }
 
 .play-pause-btn {
@@ -2027,6 +2054,10 @@ button {
 
 /* Responsive Mobile Rules */
 @media (max-width: 768px) {
+  .message-wrapper {
+    max-width: 80% !important;
+  }
+
   .sidebar {
     width: 100% !important;
     min-width: 100% !important;
@@ -2820,27 +2851,33 @@ button {
     transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.sidebar-calls-btn:hover {
-  color: var(--accent-color);
-  background-color: rgba(255, 255, 255, 0.05);
-  transform: scale(1.08);
+@media (hover: hover) {
+  .sidebar-calls-btn:hover {
+    color: var(--accent-color);
+    background-color: rgba(255, 255, 255, 0.05);
+    transform: scale(1.08);
+  }
+  .sidebar-settings-btn:hover {
+    color: var(--accent-color);
+    background-color: rgba(255, 255, 255, 0.05);
+    transform: rotate(30deg) scale(1.05);
+    transform-origin: center center;
+  }
+  .minimize-btn:hover {
+    color: var(--accent-color);
+    background-color: rgba(255, 255, 255, 0.05);
+    transform: scale(1.05);
+  }
+}
+
+.sidebar-settings-btn.active, .sidebar-calls-btn.active {
+  color: var(--accent-color) !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  transform: none !important;
 }
 
 .sidebar-calls-btn {
   display: none;
-}
-
-.sidebar-settings-btn:hover {
-  color: var(--accent-color);
-  background-color: rgba(255, 255, 255, 0.05);
-  transform: rotate(30deg) scale(1.05);
-  transform-origin: center center;
-}
-
-.minimize-btn:hover {
-  color: var(--accent-color);
-  background-color: rgba(255, 255, 255, 0.05);
-  transform: scale(1.05);
 }
 
 .sidebar-settings-btn:active, .minimize-btn:active {

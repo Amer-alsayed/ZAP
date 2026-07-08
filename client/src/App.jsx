@@ -1786,6 +1786,8 @@ export default function App() {
                 onLogout={handleLogout}
                 isMinimized={isAppMinimized}
                 onToggleMinimize={() => setSidebarMinimized(!sidebarMinimized)}
+                showSettings={showSettings}
+                showRecents={showRecents}
             onShowSettings={() => {
               if (window.history.state !== 'settings') {
                 window.history.pushState('settings', '');

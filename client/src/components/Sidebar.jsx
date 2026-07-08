@@ -178,7 +178,7 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
   );
 };
 
-export default function Sidebar({ currentUser, contacts, activeContact, setActiveContact, addContact, onLogout, onShowSettings, onShowRecents, isMinimized, onToggleMinimize }) {
+export default function Sidebar({ currentUser, contacts, activeContact, setActiveContact, addContact, onLogout, onShowSettings, onShowRecents, isMinimized, onToggleMinimize, showSettings = false, showRecents = false }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState(null);
   const [searchError, setSearchError] = useState('');
@@ -370,10 +370,10 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
       </div>
 
       <div className="sidebar-footer">
-        <button className="sidebar-settings-btn" title="Settings" onClick={onShowSettings}>
+        <button className={`sidebar-settings-btn ${showSettings ? 'active' : ''}`} title="Settings" onClick={onShowSettings}>
           <Settings size={20} />
         </button>
-        <button className="sidebar-calls-btn" title="Recent Calls" onClick={onShowRecents}>
+        <button className={`sidebar-calls-btn ${showRecents ? 'active' : ''}`} title="Recent Calls" onClick={onShowRecents}>
           <Phone size={20} />
         </button>
         <button className="minimize-btn" onClick={onToggleMinimize} title={isMinimized ? "Expand Sidebar" : "Minimize Sidebar"}>
