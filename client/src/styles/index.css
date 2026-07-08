@@ -64,6 +64,7 @@ body {
   color: var(--text-primary);
   overflow: hidden;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   display: flex;
   justify-content: center;
@@ -395,6 +396,7 @@ button {
   display: flex;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background-color: var(--bg-main);
   overflow: hidden;
   position: relative;
@@ -1539,6 +1541,7 @@ button {
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background-color: rgba(10, 12, 18, 0.95);
   display: flex;
   flex-direction: column;
@@ -1607,6 +1610,7 @@ button {
 .call-overlay.pip-mode {
   position: fixed !important;
   top: calc(100vh - 180px - 24px) !important;
+  top: calc(100dvh - 180px - 24px) !important;
   left: calc(100vw - 280px - 24px) !important;
   right: auto !important;
   bottom: auto !important;
@@ -3430,6 +3434,7 @@ button {
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background: rgba(11, 13, 19, 0.6);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
