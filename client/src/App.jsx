@@ -669,6 +669,18 @@ export default function App() {
           publicIdentityKey: publicKeys.publicIdentityKey,
           publicSigningKey: publicKeys.publicSigningKey
         };
+
+        // Dynamically fetch and update online status for the newly discovered contact
+        const socket = getSocket();
+        if (socket && socket.connected) {
+          emitGetUserStatus(publicKeys.username)
+            .then(res => {
+              if (res) {
+                updateContactProfileAndStatus(publicKeys.username, res.status, res.displayName, res.avatarIcon);
+              }
+            })
+            .catch(e => console.error('Failed to fetch status for dynamic contact:', e));
+        }
       } catch (err) {
         console.error('Could not fetch public keys for unknown sender:', chatPartner, err);
         return;
