@@ -102,7 +102,12 @@ export default function Login({ onAuthSuccess }) {
           <p>Anonymous End-to-End Encrypted Chat</p>
         </div>
 
-        {error && <div className="auth-error">{error}</div>}
+        <div className={`auth-error-container ${error ? 'visible' : ''}`}>
+          <div className="auth-error">
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <span>{error}</span>
+          </div>
+        </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="form-group">
@@ -139,13 +144,13 @@ export default function Login({ onAuthSuccess }) {
             </div>
           </div>
 
-          {isRegister && (
+          <div className={`warning-box-container ${isRegister ? 'visible' : ''}`}>
             <div className="warning-box">
               <AlertTriangle size={16} style={{ float: 'left', marginRight: '8px', marginTop: '2px' }} />
               <strong>Warning:</strong> Chatra uses Zero-Knowledge encryption. 
               If you lose your password, your private key and chat history CANNOT be recovered.
             </div>
-          )}
+          </div>
 
           <button className="auth-btn" type="submit" disabled={loading}>
             {loading ? 'Processing Cryptography...' : isRegister ? 'Create Anonymous Account' : 'Secure Login'}
