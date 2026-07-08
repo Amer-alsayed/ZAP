@@ -136,9 +136,12 @@ button {
   height: 100%;
   background: radial-gradient(circle at 50% 50%, #151828 0%, #080a10 100%);
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 24px 16px;
   animation: appLaunchFade 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
+  box-sizing: border-box;
 }
 
 .auth-wrapper::before {
@@ -2156,6 +2159,49 @@ button {
     max-width: calc(100% - 32px) !important;
     min-width: 0 !important;
     width: 100% !important;
+  }
+
+  /* Compact Auth Card adjustments for Mobile Phones (especially when keyboard is active) */
+  @media (max-width: 480px) {
+    .auth-card {
+      padding: 24px 20px !important;
+      border-radius: 20px !important;
+      max-width: calc(100% - 8px) !important;
+      margin: 8px auto !important;
+    }
+    .auth-logo {
+      margin-bottom: 20px !important;
+      gap: 4px !important;
+    }
+    .auth-logo svg {
+      width: 32px !important;
+      height: 32px !important;
+    }
+    .auth-logo h1 {
+      font-size: 26px !important;
+    }
+    .auth-logo p {
+      font-size: 13px !important;
+    }
+    .auth-form {
+      gap: 16px !important;
+    }
+    .form-group {
+      gap: 6px !important;
+    }
+    .form-group label {
+      font-size: 11px !important;
+    }
+    .input-container {
+      height: 44px !important;
+    }
+    .auth-btn {
+      height: 44px !important;
+      margin-top: 6px !important;
+    }
+    .auth-toggle {
+      margin-top: 10px !important;
+    }
   }
 }
 
