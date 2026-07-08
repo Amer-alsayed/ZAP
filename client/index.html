@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="description" content="Chatra is a completely anonymous, secure, and end-to-end encrypted real-time chat application supporting text, calling, and file sharing." />
     <title>Chatra</title>
     <style>
@@ -13,8 +13,12 @@
         margin: 0;
         padding: 0;
         width: 100%;
-        height: 100%;
+        height: 100vh;
+        height: 100dvh;
         overflow: hidden;
+        position: fixed;
+        left: 0;
+        top: 0;
       }
       
       .app-preloader {
