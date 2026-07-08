@@ -2193,10 +2193,15 @@ button {
     margin-right: 2px !important;
   }
 
+  .incoming-call-pill-container {
+    width: calc(100% - 32px) !important;
+    max-width: 380px !important;
+  }
+
   .incoming-call-pill {
-    max-width: calc(100% - 32px) !important;
-    min-width: 0 !important;
     width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
   }
 
   /* Compact Auth Card adjustments for Mobile Phones (especially when keyboard is active) */
