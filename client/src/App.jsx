@@ -311,6 +311,26 @@ export default function App() {
     // Connect WebSocket
     const socket = connectSocket(currentUser.token);
 
+    socket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      if (err.message && err.message.includes('database reset')) {
+        localStorage.removeItem('session_enc_key');
+        localStorage.removeItem('chatra_username');
+        localStorage.removeItem('chatra_token');
+        localStorage.removeItem('chatra_encrypted_private_keys');
+        localStorage.removeItem('chatra_public_identity_key');
+        localStorage.removeItem('chatra_public_signing_key');
+        localStorage.removeItem('chatra_display_name');
+        localStorage.removeItem('chatra_avatar_icon');
+        setCurrentUser(null);
+        setContacts([]);
+        setActiveContact(null);
+        setShowSettings(false);
+        sharedSecrets.current = {};
+        alert('Your session has expired because the server database was reset. Please register/login again.');
+      }
+    });
+
     const syncOfflineMessages = async () => {
       if (!currentUser) return;
       const list = contactsRef.current;
