@@ -90,30 +90,53 @@ export const socketHandler = (io) => {
       }
     }
 
-    // Automatically mark all Bob's offline messages as delivered (status 1) and notify senders
-    const markOfflineMessagesAsDelivered = async () => {
+    // Automatically retrieve Bob's offline messages, deliver them, and notify senders
+    const deliverOfflineMessages = async () => {
       try {
-        const senders = await dbAll(
-          `SELECT DISTINCT sender FROM messages WHERE recipient = ? AND delivered = 0`,
+        // 1. Fetch all pending offline messages
+        const offlineMessages = await dbAll(
+          `SELECT id, sender, recipient, ciphertext, iv, signature, timestamp, delivered
+           FROM messages
+           WHERE LOWER(recipient) = LOWER(?) AND delivered = 0
+           ORDER BY timestamp ASC`,
           [username]
         );
 
-        for (const row of senders) {
-          const sender = row.sender;
-          // Update DB: 1 = delivered
-          await dbRun(
-            `UPDATE messages SET delivered = 1
-             WHERE sender = ? AND recipient = ? AND delivered = 0`,
-            [sender, username]
-          );
-          // Notify sender (case-insensitive room)
-          io.to(sender.toLowerCase()).emit('messages-delivered', { recipient: username });
+        if (offlineMessages.length > 0) {
+          console.log(`[OFFLINE MESSAGES] Delivering ${offlineMessages.length} offline messages to: ${username}`);
+          
+          // 2. Emit each offline message to the user's socket
+          for (const msg of offlineMessages) {
+            socket.emit('receive-message', {
+              id: msg.id,
+              sender: msg.sender,
+              recipient: msg.recipient,
+              ciphertext: msg.ciphertext,
+              iv: msg.iv,
+              signature: msg.signature,
+              delivered: 1, // marked as delivered
+              timestamp: msg.timestamp
+            });
+          }
+
+          // 3. Find unique senders to update status and notify them
+          const senders = [...new Set(offlineMessages.map(m => m.sender))];
+          for (const sender of senders) {
+            // Update DB: 1 = delivered
+            await dbRun(
+              `UPDATE messages SET delivered = 1
+               WHERE LOWER(sender) = LOWER(?) AND LOWER(recipient) = LOWER(?) AND delivered = 0`,
+              [sender, username]
+            );
+            // Notify sender
+            io.to(sender.toLowerCase()).emit('messages-delivered', { recipient: username });
+          }
         }
       } catch (error) {
-        console.error('Error marking offline messages as delivered:', error);
+        console.error('Error delivering offline messages:', error);
       }
     };
-    markOfflineMessagesAsDelivered();
+    deliverOfflineMessages();
 
     // Handle online status check with profile info
     socket.on('get-user-status', async (targetUsername, callback) => {
