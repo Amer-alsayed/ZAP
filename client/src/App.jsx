@@ -1549,11 +1549,20 @@ export default function App() {
     }
 
     try {
-      // 1. Request high-resolution and low-latency screen capture constraints
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: getScreenShareConstraints(),
-        audio: false
-      });
+      // 1. Request screen capture. Try with ideal constraints first, fallback to true if it fails (e.g. on Android/strict browsers)
+      let screenStream;
+      try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: getScreenShareConstraints(),
+          audio: false
+        });
+      } catch (err) {
+        console.warn("Screen share failed with ideal constraints, trying simple video:true fallback", err);
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: false
+        });
+      }
       const screenTrack = screenStream.getVideoTracks()[0];
       
       // 2. Set content hint to 'detail' for maximum text sharpness

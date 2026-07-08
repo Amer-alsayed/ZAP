@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Phone, PhoneOff, Video, Mic, MicOff, VideoOff, Volume2, ShieldCheck, Minimize2, Maximize2, Monitor, MonitorOff } from 'lucide-react';
+import { Phone, PhoneOff, Video, Mic, MicOff, VideoOff, Volume2, ShieldCheck, Minimize2, Maximize2, Monitor, MonitorOff, Maximize, Minimize } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 
 export default function CallWindow({ 
@@ -33,6 +33,35 @@ export default function CallWindow({
   const [renderState, setRenderState] = useState(callState);
   const [isClosing, setIsClosing] = useState(false);
   const closeTimerRef = useRef(null);
+  
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const overlayRef = useRef(null);
+
+  const toggleBrowserFullscreen = (e) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    const element = overlayRef.current;
+    if (!element) return;
+
+    if (!document.fullscreenElement) {
+      element.requestFullscreen?.()
+        .then(() => setIsFullscreen(true))
+        .catch((err) => console.error("Error entering fullscreen:", err));
+    } else {
+      document.exitFullscreen?.()
+        .then(() => setIsFullscreen(false))
+        .catch((err) => console.error("Error exiting fullscreen:", err));
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   const resetControlsTimer = () => {
     setShowControls(true);
@@ -308,7 +337,8 @@ export default function CallWindow({
 
   return (
     <div 
-      className={`call-overlay ${isClosing ? 'closing' : ''} ${isCallMinimized ? 'pip-mode' : ''} ${!showControls ? 'controls-hidden' : ''}`}
+      ref={overlayRef}
+      className={`call-overlay ${isClosing ? 'closing' : ''} ${isCallMinimized ? 'pip-mode' : ''} ${!showControls ? 'controls-hidden' : ''} ${isFullscreen ? 'browser-fullscreen' : ''}`}
       style={pipStyle}
       onMouseDown={handleMouseDown}
       onTouchStart={(e) => {
@@ -416,6 +446,16 @@ export default function CallWindow({
                   {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
                 </button>
                 
+                
+                <button 
+                  className={`call-btn mute ${isFullscreen ? 'active' : ''}`} 
+                  onClick={toggleBrowserFullscreen}
+                  style={{ width: '40px', height: '40px' }}
+                  title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Mode"}
+                >
+                  {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+                </button>
+
                 {isCallMinimized ? (
                   <button 
                     className="call-btn maximize" 

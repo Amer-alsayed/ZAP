@@ -4187,3 +4187,32 @@ button {
   pointer-events: none !important;
   transform: scale(0.95) !important;
 }
+
+/* Browser Fullscreen overlay modifications */
+.call-overlay.browser-fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  background-color: #000000 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  transform: none !important;
+}
+
+.call-overlay.browser-fullscreen .video-grid {
+  border-radius: 0 !important;
+  background-color: #000000 !important;
+}
+
+.call-overlay.browser-fullscreen .remote-video {
+  object-fit: contain !important; /* Immersive viewing, no crop */
+  background-color: #000000 !important;
+}
+
+.call-overlay.browser-fullscreen .video-call-controls {
+  bottom: 40px !important; /* Extra bottom breathing room in fullscreen */
+}
