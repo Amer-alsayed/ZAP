@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Shield, User, Lock, KeyRound, AlertTriangle } from 'lucide-react';
 import { deriveKeysFromPassword, generateKeyPairs, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys } from '../services/crypto';
 import { registerUser, loginUser } from '../services/api';
@@ -9,6 +9,21 @@ export default function Login({ onAuthSuccess }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Automatically blur focused inputs when keyboard closes on mobile, ensuring logo restores
+  useEffect(() => {
+    const handleResize = () => {
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT')) {
+        const vv = window.visualViewport;
+        if (vv && vv.height >= window.innerHeight * 0.9) {
+          document.activeElement.blur();
+        }
+      }
+    };
+
+    window.visualViewport?.addEventListener('resize', handleResize);
+    return () => window.visualViewport?.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
