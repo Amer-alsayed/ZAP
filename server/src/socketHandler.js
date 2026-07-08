@@ -1,3 +1,4 @@
+// Triggering nodemon reload
 import jwt from 'jsonwebtoken';
 import { dbRun, dbAll, dbGet } from './db.js';
 
@@ -43,7 +44,7 @@ const removeUserSocket = (username, socketId) => {
 
 export const socketHandler = (io) => {
   // Socket.io JWT Authentication Middleware
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) {
       return next(new Error('Authentication error: Token missing'));
@@ -51,6 +52,14 @@ export const socketHandler = (io) => {
 
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
+      
+      // Verify user exists in database (prevents session mismatch after database resets)
+      const userExists = await dbGet('SELECT 1 FROM users WHERE LOWER(username) = LOWER(?)', [decoded.username]);
+      if (!userExists) {
+        console.error(`Socket authentication failed: User "${decoded.username}" not found in database (database reset).`);
+        return next(new Error('Authentication error: User not found (database reset)'));
+      }
+
       socket.user = decoded; // Contains id and username
       next();
     } catch (err) {
@@ -342,11 +351,17 @@ export const socketHandler = (io) => {
 
     // Call Media Update (e.g. voice to video upgrade, screen sharing status)
     socket.on('call-media-update', (data) => {
-      const { to, mediaType, screenSharing } = data;
+      const { to, mediaType, screenSharing, cameraOff, muted } = data;
       const from = socket.user.username;
 
       if (isUserOnline(to)) {
-        io.to(to.toLowerCase()).emit('call-media-updated', { from, mediaType, screenSharing });
+        io.to(to.toLowerCase()).emit('call-media-updated', { 
+          from, 
+          mediaType, 
+          screenSharing, 
+          cameraOff, 
+          muted 
+        });
       }
     });
 
