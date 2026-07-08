@@ -76,13 +76,23 @@ export default function CallWindow({
   };
 
   const handleOverlayClick = (e) => {
-    if (!showControls) {
-      e.preventDefault();
-      e.stopPropagation();
+    // Ignore click triggers on active control buttons
+    if (e.target.closest('button')) {
       resetControlsTimer();
       return;
     }
-    resetControlsTimer();
+
+    if (showControls) {
+      // Hide immediately
+      setShowControls(false);
+      if (controlsTimerRef.current) {
+        clearTimeout(controlsTimerRef.current);
+        controlsTimerRef.current = null;
+      }
+    } else {
+      // Show immediately and start inactivity auto-hide timer
+      resetControlsTimer();
+    }
   };
 
   // Dragging coordinates state for picture-in-picture window
@@ -159,6 +169,7 @@ export default function CallWindow({
   // Bind media streams to video elements
   useEffect(() => {
     if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = null;
       localVideoRef.current.srcObject = localStream;
       localVideoRef.current.play().catch(e => console.log("local play error:", e));
     }
@@ -166,6 +177,7 @@ export default function CallWindow({
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = null;
       remoteVideoRef.current.srcObject = remoteStream;
       remoteVideoRef.current.play().catch(e => console.log("remote play error:", e));
     }
@@ -173,6 +185,7 @@ export default function CallWindow({
 
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
+      remoteAudioRef.current.srcObject = null;
       remoteAudioRef.current.srcObject = remoteStream;
       remoteAudioRef.current.play().catch(e => console.log("remote audio play error:", e));
     }
