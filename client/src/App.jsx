@@ -290,6 +290,9 @@ export default function App() {
 
   // Sync active contact messages
   const activeContactRef = useRef(null);
+  const showSettingsRef = useRef(false);
+  const showRecentsRef = useRef(false);
+
   useEffect(() => {
     activeContactRef.current = activeContact;
     if (activeContact) {
@@ -300,6 +303,26 @@ export default function App() {
       ));
     }
   }, [activeContact]);
+
+  useEffect(() => {
+    showSettingsRef.current = showSettings;
+  }, [showSettings]);
+
+  useEffect(() => {
+    showRecentsRef.current = showRecents;
+  }, [showRecents]);
+
+  // Handle native back gestures
+  useEffect(() => {
+    const handlePopState = (e) => {
+      if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
+        handleBackToMenu(true);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
 
   // ==========================================
@@ -893,6 +916,9 @@ export default function App() {
   };
 
   const handleSelectContact = async (contact) => {
+    if (window.history.state !== 'chat') {
+      window.history.pushState('chat', '');
+    }
     setShowSettings(false); // Instantly exit settings mode
     setShowRecents(false);  // Instantly exit recents mode
     // 1. Instantly display active contact screen with cached messages to avoid blank page delays
@@ -1714,7 +1740,10 @@ export default function App() {
     }
   };
 
-  const handleBackToMenu = () => {
+  const handleBackToMenu = (isFromPopState = false) => {
+    if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings' || window.history.state === 'recents')) {
+      window.history.back();
+    }
     setIsNavigatingBack(true);
     setTimeout(() => {
       setActiveContact(null);
@@ -1758,11 +1787,17 @@ export default function App() {
                 isMinimized={isAppMinimized}
                 onToggleMinimize={() => setSidebarMinimized(!sidebarMinimized)}
             onShowSettings={() => {
+              if (window.history.state !== 'settings') {
+                window.history.pushState('settings', '');
+              }
               setActiveContact(null);
               setShowSettings(true);
               setShowRecents(false);
             }}
             onShowRecents={() => {
+              if (window.history.state !== 'recents') {
+                window.history.pushState('recents', '');
+              }
               setActiveContact(null);
               setShowSettings(false);
               setShowRecents(true);
@@ -1775,6 +1810,9 @@ export default function App() {
               onInitiateCall={handleInitiateCall}
               onSelectContact={handleSelectContact}
               onShowSettings={() => {
+                if (window.history.state !== 'settings') {
+                  window.history.pushState('settings', '');
+                }
                 setActiveContact(null);
                 setShowSettings(true);
                 setShowRecents(false);
