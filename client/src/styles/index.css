@@ -1964,6 +1964,7 @@ button {
   box-shadow: var(--shadow-lg);
   border: 2px solid rgba(255, 255, 255, 0.2);
   z-index: 10;
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .local-video {
@@ -1987,6 +1988,7 @@ button {
   border-radius: 30px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 20;
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .call-timer {
@@ -4171,4 +4173,17 @@ button {
 
 .calls-group:first-child .recents-group-header {
   padding-top: 12px;
+}
+
+/* Call overlay controls auto-hide animation styling */
+.call-overlay.controls-hidden .video-call-controls {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translate3d(-50%, 20px, 0) !important;
+}
+
+.call-overlay.controls-hidden .local-video-container {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: scale(0.95) !important;
 }

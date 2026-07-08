@@ -28,10 +28,33 @@ export default function CallWindow({
   const remoteAudioRef = useRef(null);
   const [callDuration, setCallDuration] = useState(0);
   const [isCallMinimized, setIsCallMinimized] = useState(false);
-
+  const [showControls, setShowControls] = useState(true);
+  const controlsTimerRef = useRef(null);
   const [renderState, setRenderState] = useState(callState);
   const [isClosing, setIsClosing] = useState(false);
   const closeTimerRef = useRef(null);
+
+  const resetControlsTimer = () => {
+    setShowControls(true);
+    if (controlsTimerRef.current) {
+      clearTimeout(controlsTimerRef.current);
+    }
+    controlsTimerRef.current = setTimeout(() => {
+      if (renderState === 'connected' && !isCallMinimized && mediaType === 'video') {
+        setShowControls(false);
+      }
+    }, 3500);
+  };
+
+  const handleOverlayClick = (e) => {
+    if (!showControls) {
+      e.preventDefault();
+      e.stopPropagation();
+      resetControlsTimer();
+      return;
+    }
+    resetControlsTimer();
+  };
 
   // Dragging coordinates state for picture-in-picture window
   const [pipPosition, setPipPosition] = useState({ x: 0, y: 0 });
@@ -73,7 +96,25 @@ export default function CallWindow({
       setPipPosition({ x: 0, y: 0 });
     }
   }, [isCallMinimized]);
+  // Reset controls timer when call status or minimization toggles
+  useEffect(() => {
+    if (renderState === 'connected' && !isCallMinimized && mediaType === 'video') {
+      resetControlsTimer();
+    } else {
+      setShowControls(true);
+      if (controlsTimerRef.current) {
+        clearTimeout(controlsTimerRef.current);
+      }
+    }
+  }, [renderState, isCallMinimized, mediaType]);
 
+  useEffect(() => {
+    return () => {
+      if (controlsTimerRef.current) {
+        clearTimeout(controlsTimerRef.current);
+      }
+    };
+  }, []);
   useEffect(() => {
     return () => {
       if (closeTimerRef.current) {
@@ -267,10 +308,15 @@ export default function CallWindow({
 
   return (
     <div 
-      className={`call-overlay ${isClosing ? 'closing' : ''} ${isCallMinimized ? 'pip-mode' : ''}`}
+      className={`call-overlay ${isClosing ? 'closing' : ''} ${isCallMinimized ? 'pip-mode' : ''} ${!showControls ? 'controls-hidden' : ''}`}
       style={pipStyle}
       onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
+      onTouchStart={(e) => {
+        handleTouchStart(e);
+        resetControlsTimer();
+      }}
+      onMouseMove={resetControlsTimer}
+      onClick={handleOverlayClick}
     >
 
       {(renderState === 'calling' || renderState === 'ringing') && (
