@@ -228,11 +228,28 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('chatra_sidebar_minimized', sidebarMinimized);
   }, [sidebarMinimized]);
+  const lightboxRef = useRef(null);
   useEffect(() => {
+    lightboxRef.current = lightboxImageSrc;
     if (lightboxImageSrc) {
       setActiveLightboxSrc(lightboxImageSrc);
     }
   }, [lightboxImageSrc]);
+
+  const handleOpenLightbox = (src) => {
+    setLightboxImageSrc(src);
+    if (window.history.state !== 'lightbox') {
+      window.history.pushState('lightbox', '');
+    }
+  };
+
+  const handleCloseLightbox = () => {
+    if (window.history.state === 'lightbox') {
+      window.history.back();
+    } else {
+      setLightboxImageSrc(null);
+    }
+  };
 
   const peerConnectionRef = useRef(null);
   const pendingOfferRef = useRef(null);
@@ -315,7 +332,9 @@ export default function App() {
   // Handle native back gestures
   useEffect(() => {
     const handlePopState = (e) => {
-      if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
+      if (lightboxRef.current) {
+        setLightboxImageSrc(null);
+      } else if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
         handleBackToMenu(true);
       }
     };
@@ -1846,7 +1865,7 @@ export default function App() {
                 onBack={handleBackToMenu}
                 isNavigatingBack={isNavigatingBack}
                 markMessageAsReadLocal={markMessageAsReadLocal}
-                onImageClick={setLightboxImageSrc}
+                onImageClick={handleOpenLightbox}
                 onVerifyContact={handleVerifyContact}
                 onSaveContact={handleSaveContact}
                 onBlockContact={handleBlockContact}
@@ -1883,9 +1902,9 @@ export default function App() {
           {/* Fullscreen Image Lightbox Modal */}
           <div 
             className={`image-lightbox-overlay ${lightboxImageSrc ? 'visible' : ''}`} 
-            onClick={() => setLightboxImageSrc(null)}
+            onClick={handleCloseLightbox}
           >
-            <button className="lightbox-close-btn" onClick={() => setLightboxImageSrc(null)}>
+            <button className="lightbox-close-btn" onClick={handleCloseLightbox}>
               <X size={24} />
             </button>
             {activeLightboxSrc && (
