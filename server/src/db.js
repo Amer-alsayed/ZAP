@@ -1,54 +1,121 @@
 import sqlite3 from 'sqlite3';
+import pg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../chatra.db');
 
-// Connect to SQLite database
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Error connecting to database:', err.message);
-  } else {
-    console.log(`Connected to the SQLite database at: ${dbPath}`);
-  }
-});
+const isPostgres = !!process.env.DATABASE_URL;
+let db = null;
+let pgPool = null;
 
-// Helper functions to wrap sqlite3 callbacks in Promises
+if (isPostgres) {
+  console.log('PostgreSQL DATABASE_URL detected. Connecting to Cloud Database...');
+  pgPool = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+} else {
+  const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../chatra.db');
+  db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      console.error('Error connecting to SQLite database:', err.message);
+    } else {
+      console.log(`Connected to the SQLite database at: ${dbPath}`);
+    }
+  });
+}
+
+// Helper functions to wrap database queries in Promises
 export const dbRun = (query, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.run(query, params, function (err) {
-      if (err) {
+  if (isPostgres) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        let sql = query
+          .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'SERIAL PRIMARY KEY')
+          .replace(/DATETIME DEFAULT CURRENT_TIMESTAMP/g, 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+        
+        // Append RETURNING id if it's an INSERT query and doesn't have it
+        if (sql.trim().toUpperCase().startsWith('INSERT') && !sql.toUpperCase().includes('RETURNING')) {
+          sql += ' RETURNING id';
+        }
+        
+        // Replace ? with $1, $2...
+        let index = 1;
+        sql = sql.replace(/\?/g, () => `$${index++}`);
+
+        const res = await pgPool.query(sql, params);
+        resolve({
+          id: res.rows[0]?.id || null,
+          changes: res.rowCount
+        });
+      } catch (err) {
         reject(err);
-      } else {
-        resolve({ id: this.lastID, changes: this.changes });
       }
     });
-  });
+  } else {
+    return new Promise((resolve, reject) => {
+      db.run(query, params, function (err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ id: this.lastID, changes: this.changes });
+        }
+      });
+    });
+  }
 };
 
 export const dbGet = (query, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.get(query, params, (err, row) => {
-      if (err) {
+  if (isPostgres) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        let index = 1;
+        const sql = query.replace(/\?/g, () => `$${index++}`);
+        const res = await pgPool.query(sql, params);
+        resolve(res.rows[0] || null);
+      } catch (err) {
         reject(err);
-      } else {
-        resolve(row);
       }
     });
-  });
+  } else {
+    return new Promise((resolve, reject) => {
+      db.get(query, params, (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
 };
 
 export const dbAll = (query, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.all(query, params, (err, rows) => {
-      if (err) {
+  if (isPostgres) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        let index = 1;
+        const sql = query.replace(/\?/g, () => `$${index++}`);
+        const res = await pgPool.query(sql, params);
+        resolve(res.rows);
+      } catch (err) {
         reject(err);
-      } else {
-        resolve(rows);
       }
     });
-  });
+  } else {
+    return new Promise((resolve, reject) => {
+      db.all(query, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+  }
 };
 
 // Initialize database tables
