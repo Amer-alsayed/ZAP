@@ -41,6 +41,7 @@
   font-family: var(--font-primary);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Custom Scrollbar */
@@ -2117,7 +2118,7 @@ button {
   }
 
   .recents-header .segmented-control {
-    position: static !important;
+    position: relative !important;
     transform: none !important;
   }
 
