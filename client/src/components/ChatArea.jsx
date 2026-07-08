@@ -256,7 +256,9 @@ export default function ChatArea({
   onVerifyContact,
   onSaveContact,
   onBlockContact,
-  onOpenSafetyModal
+  onOpenSafetyModal,
+  replyingTo,
+  setReplyingTo
 }) {
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -284,8 +286,6 @@ export default function ChatArea({
   const typingTimeoutRef = useRef(null);
   const isTypingRef = useRef(false);
   const prevContactRef = useRef(activeContact.username);
-
-  const [replyingTo, setReplyingTo] = useState(null); // { id, sender, text }
   const [justReceivedId, setJustReceivedId] = useState(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const isScrolledUpRef = useRef(false);

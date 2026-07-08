@@ -209,6 +209,21 @@ export default function App() {
   const [remoteCameraOff, setRemoteCameraOff] = useState(false);
   const [remoteMuted, setRemoteMuted] = useState(false);
 
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const isCallMinimizedRef = useRef(false);
+  const replyingToRef = useRef(null);
+
+  useEffect(() => {
+    isCallMinimizedRef.current = isCallMinimized;
+  }, [isCallMinimized]);
+
+  useEffect(() => {
+    replyingToRef.current = replyingTo;
+  }, [replyingTo]);
+
   const dummyTrackRef = useRef(null);
   const originalVideoTrackRef = useRef(null);
 
@@ -335,6 +350,12 @@ export default function App() {
     const handlePopState = (e) => {
       if (lightboxRef.current) {
         setLightboxImageSrc(null);
+      } else if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else if (callStateRef.current === 'connected' && !isCallMinimizedRef.current) {
+        setIsCallMinimized(true);
+      } else if (replyingToRef.current) {
+        setReplyingTo(null);
       } else if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
         handleBackToMenu(true);
       }
@@ -343,6 +364,42 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Sync document level fullscreen events with state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  // Push history state 'reply' when message reply mode is active
+  useEffect(() => {
+    if (replyingTo) {
+      if (window.history.state !== 'reply') {
+        window.history.pushState('reply', '');
+      }
+    } else {
+      if (window.history.state === 'reply') {
+        window.history.back();
+      }
+    }
+  }, [replyingTo]);
+
+  // Push history state 'call-maximized' when active call window is maximized or fullscreened
+  useEffect(() => {
+    const isMaximizedCallActive = callState === 'connected' && !isCallMinimized;
+    if (isMaximizedCallActive || isFullscreen) {
+      if (window.history.state !== 'call-maximized') {
+        window.history.pushState('call-maximized', '');
+      }
+    } else {
+      if (window.history.state === 'call-maximized') {
+        window.history.back();
+      }
+    }
+  }, [callState, isCallMinimized, isFullscreen]);
 
 
   // ==========================================
@@ -1936,6 +1993,8 @@ export default function App() {
                 onSaveContact={handleSaveContact}
                 onBlockContact={handleBlockContact}
                 onOpenSafetyModal={() => setShowSafetyModal(true)}
+                replyingTo={replyingTo}
+                setReplyingTo={setReplyingTo}
               />
             )}
           </div>
@@ -1964,6 +2023,8 @@ export default function App() {
             onToggleMute={handleToggleMute}
             onToggleCamera={handleToggleCamera}
             onToggleScreenShare={handleToggleScreenShare}
+            isCallMinimized={isCallMinimized}
+            setIsCallMinimized={setIsCallMinimized}
           />
 
           {/* Fullscreen Image Lightbox Modal */}
