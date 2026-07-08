@@ -2194,7 +2194,7 @@ button {
       overflow: hidden;
       transition: max-height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.25s ease, margin-bottom 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
-    .auth-card:focus-within .auth-logo {
+    .auth-card.inputs-focused .auth-logo {
       max-height: 0 !important;
       opacity: 0 !important;
       margin-bottom: 0 !important;

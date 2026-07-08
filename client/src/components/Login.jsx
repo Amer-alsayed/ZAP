@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Shield, User, Lock, KeyRound, AlertTriangle } from 'lucide-react';
 import { deriveKeysFromPassword, generateKeyPairs, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys } from '../services/crypto';
 import { registerUser, loginUser } from '../services/api';
@@ -9,20 +9,49 @@ export default function Login({ onAuthSuccess }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Track input focus state with delay to prevent switching focus flickering
+  const [isFocused, setIsFocused] = useState(false);
+  const focusTimeout = useRef(null);
+  const isKeyboardOpen = useRef(false);
 
-  // Automatically blur focused inputs when keyboard closes on mobile, ensuring logo restores
+  const handleFocus = () => {
+    if (focusTimeout.current) {
+      clearTimeout(focusTimeout.current);
+      focusTimeout.current = null;
+    }
+    setIsFocused(true);
+  };
+
+  const handleBlur = () => {
+    focusTimeout.current = setTimeout(() => {
+      setIsFocused(false);
+    }, 150); // 150ms buffer to switch focus smoothly without logo flicker
+  };
+
+  // Safe keyboard close detector (blurs inputs only when viewport expands after keyboard was open)
   useEffect(() => {
     const handleResize = () => {
-      if (document.activeElement && (document.activeElement.tagName === 'INPUT')) {
-        const vv = window.visualViewport;
-        if (vv && vv.height >= window.innerHeight * 0.9) {
+      const vv = window.visualViewport;
+      if (!vv) return;
+
+      if (vv.height < window.innerHeight * 0.8) {
+        // Keyboard is fully open
+        isKeyboardOpen.current = true;
+      } else if (isKeyboardOpen.current && vv.height >= window.innerHeight * 0.95) {
+        // Keyboard was open and is now closed
+        isKeyboardOpen.current = false;
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT')) {
           document.activeElement.blur();
         }
       }
     };
 
     window.visualViewport?.addEventListener('resize', handleResize);
-    return () => window.visualViewport?.removeEventListener('resize', handleResize);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      if (focusTimeout.current) clearTimeout(focusTimeout.current);
+    };
   }, []);
 
   const handleSubmit = async (e) => {
@@ -110,7 +139,7 @@ export default function Login({ onAuthSuccess }) {
 
   return (
     <div className="auth-wrapper">
-      <div className="auth-card glass">
+      <div className={`auth-card glass ${isFocused ? 'inputs-focused' : ''}`}>
         <div className="auth-logo">
           <Shield size={44} strokeWidth={1.5} />
           <h1>Chatra</h1>
@@ -135,6 +164,8 @@ export default function Login({ onAuthSuccess }) {
                 placeholder="Enter unique username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
                 required
                 disabled={loading}
                 autoComplete="username"
@@ -152,6 +183,8 @@ export default function Login({ onAuthSuccess }) {
                 placeholder="Enter strong password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
                 required
                 disabled={loading}
                 autoComplete="current-password"
