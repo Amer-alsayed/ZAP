@@ -354,10 +354,7 @@ export default function CallWindow({
       className={`call-overlay ${isClosing ? 'closing' : ''} ${isCallMinimized ? 'pip-mode' : ''} ${!showControls ? 'controls-hidden' : ''} ${isFullscreen ? 'browser-fullscreen' : ''}`}
       style={pipStyle}
       onMouseDown={handleMouseDown}
-      onTouchStart={(e) => {
-        handleTouchStart(e);
-        resetControlsTimer();
-      }}
+      onTouchStart={handleTouchStart}
       onMouseMove={resetControlsTimer}
       onClick={handleOverlayClick}
     >

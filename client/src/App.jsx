@@ -1419,16 +1419,47 @@ export default function App() {
     cleanupCall();
   };
 
-  const handleToggleMute = () => {
-    setIsMuted(prev => {
-      const next = !prev;
-      if (localStreamRef.current) {
+  const handleToggleMute = async () => {
+    const nextMute = !isMuted;
+    setIsMuted(nextMute);
+
+    if (localStreamRef.current) {
+      if (nextMute) {
+        // Mute: Stop and release microphone tracks to turn off green dot privacy indicator
         localStreamRef.current.getAudioTracks().forEach(track => {
-          track.enabled = !next;
+          track.stop();
+          localStreamRef.current.removeTrack(track);
         });
+
+        if (peerConnectionRef.current) {
+          const senders = peerConnectionRef.current.getSenders();
+          const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+          if (audioSender) {
+            await audioSender.replaceTrack(null);
+          }
+        }
+      } else {
+        // Unmute: Re-request audio track access from the browser
+        try {
+          const newMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const newAudioTrack = newMicStream.getAudioTracks()[0];
+          if (newAudioTrack) {
+            localStreamRef.current.addTrack(newAudioTrack);
+
+            if (peerConnectionRef.current) {
+              const senders = peerConnectionRef.current.getSenders();
+              const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+              if (audioSender) {
+                await audioSender.replaceTrack(newAudioTrack);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Failed to re-initialize microphone on unmute:", err);
+          setIsMuted(true);
+        }
       }
-      return next;
-    });
+    }
   };
 
   const handleToggleCamera = async () => {
@@ -1543,6 +1574,11 @@ export default function App() {
     const stream = localStreamRef.current;
     if (!stream || !peerConnectionRef.current) return;
 
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      alert("Screen sharing is not supported by your current browser/device (requires iOS 13+ Safari, Android Chrome 119+, or a desktop browser, served over a secure HTTPS connection).");
+      return;
+    }
+
     if (isScreenSharing) {
       await handleStopScreenShare();
       return;
@@ -1608,6 +1644,8 @@ export default function App() {
       };
     } catch (err) {
       console.error("Screen sharing activation failed:", err);
+      alert("Failed to start screen sharing: " + (err.message || err.toString()));
+      setIsScreenSharing(false);
     }
   };
 
