@@ -288,17 +288,21 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
       <div className="contacts-header">Conversations</div>
       <div className="contacts-list-container">
         {contacts.length === 0 ? (
-          <div className="no-contacts">
-            <MessageSquare size={36} strokeWidth={1} style={{ marginBottom: '8px', color: 'var(--text-subtle)' }} />
-            <p>No active chats.</p>
-            <p style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '4px' }}>Search a username above to start a secure chat.</p>
-          </div>
+          !isMinimized ? (
+            <div className="no-contacts">
+              <MessageSquare size={36} strokeWidth={1} style={{ marginBottom: '8px', color: 'var(--text-subtle)' }} />
+              <p>No active chats.</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '4px' }}>Search a username above to start a secure chat.</p>
+            </div>
+          ) : null
         ) : filteredContacts.length === 0 ? (
-          <div className="no-contacts">
-            <Search size={36} strokeWidth={1} style={{ marginBottom: '8px', color: 'var(--text-subtle)' }} />
-            <p>No matches found.</p>
-            <p style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '4px' }}>No active conversations match "{searchQuery}".</p>
-          </div>
+          !isMinimized ? (
+            <div className="no-contacts">
+              <Search size={36} strokeWidth={1} style={{ marginBottom: '8px', color: 'var(--text-subtle)' }} />
+              <p>No matches found.</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '4px' }}>No active conversations match "{searchQuery}".</p>
+            </div>
+          ) : null
         ) : (
           filteredContacts.map((contact) => {
             const isSelected = activeContact?.username === contact.username;
