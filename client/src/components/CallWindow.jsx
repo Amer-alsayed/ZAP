@@ -447,14 +447,16 @@ export default function CallWindow({
                   {isCameraOff ? <VideoOff size={18} /> : <Video size={18} />}
                 </button>
 
-                <button 
-                  className={`call-btn mute ${isScreenSharing ? 'active' : ''}`} 
-                  onClick={onToggleScreenShare}
-                  style={{ width: '40px', height: '40px' }}
-                  title={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
-                >
-                  {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
-                </button>
+                {!!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && (
+                  <button 
+                    className={`call-btn mute ${isScreenSharing ? 'active' : ''}`} 
+                    onClick={onToggleScreenShare}
+                    style={{ width: '40px', height: '40px' }}
+                    title={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
+                  >
+                    {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
+                  </button>
+                )}
                 
                 
                 <button 
