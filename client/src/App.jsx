@@ -1478,59 +1478,29 @@ export default function App() {
     cleanupCall();
   };
 
-  const handleToggleMute = async () => {
-    const nextMute = !isMuted;
-    setIsMuted(nextMute);
-
-    if (localStreamRef.current) {
-      if (nextMute) {
-        // Mute: Stop and release microphone tracks to turn off green dot privacy indicator
+  const handleToggleMute = () => {
+    setIsMuted(prev => {
+      const nextMute = !prev;
+      if (localStreamRef.current) {
         localStreamRef.current.getAudioTracks().forEach(track => {
-          track.stop();
-          localStreamRef.current.removeTrack(track);
+          track.enabled = !nextMute;
         });
-
-        if (peerConnectionRef.current) {
-          const senders = peerConnectionRef.current.getSenders();
-          const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
-          if (audioSender) {
-            await audioSender.replaceTrack(null);
-          }
-        }
-      } else {
-        // Unmute: Re-request audio track access from the browser
-        try {
-          const newMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          const newAudioTrack = newMicStream.getAudioTracks()[0];
-          if (newAudioTrack) {
-            localStreamRef.current.addTrack(newAudioTrack);
-
-            if (peerConnectionRef.current) {
-              const senders = peerConnectionRef.current.getSenders();
-              const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
-              if (audioSender) {
-                await audioSender.replaceTrack(newAudioTrack);
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Failed to re-initialize microphone on unmute:", err);
-          setIsMuted(true);
-        }
       }
-    }
 
-    // Notify partner of our mute state change so they reload remoteAudio Ref
-    const socket = getSocket();
-    if (socket && callPartyRef.current) {
-      socket.emit('call-media-update', { 
-        to: callPartyRef.current, 
-        mediaType: callMediaTypeRef.current, 
-        screenSharing: isScreenSharing,
-        cameraOff: isCameraOff,
-        muted: nextMute
-      });
-    }
+      // Notify partner of our mute state change so they reload remoteAudio Ref
+      const socket = getSocket();
+      if (socket && callPartyRef.current) {
+        socket.emit('call-media-update', { 
+          to: callPartyRef.current, 
+          mediaType: callMediaTypeRef.current, 
+          screenSharing: isScreenSharing,
+          cameraOff: isCameraOff,
+          muted: nextMute
+        });
+      }
+
+      return nextMute;
+    });
   };
 
   const handleToggleCamera = async () => {
