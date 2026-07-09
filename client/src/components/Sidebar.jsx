@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Phone, PhoneOff, Video, VideoOff, Mic, Image, FileText, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { searchUser } from '../services/api';
 import { emitGetUserStatus } from '../services/socket';
@@ -184,6 +184,46 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
   const [searchError, setSearchError] = useState('');
   const [loadingSearch, setLoadingSearch] = useState(false);
 
+  const listRef = useRef(null);
+  const positionsRef = useRef(new Map());
+
+  useLayoutEffect(() => {
+    if (!listRef.current) return;
+    
+    const children = listRef.current.children;
+    for (let child of children) {
+      const key = child.dataset.key;
+      if (!key) continue;
+      
+      const oldRect = positionsRef.current.get(key);
+      const newRect = child.getBoundingClientRect();
+      
+      if (oldRect) {
+        const deltaX = oldRect.left - newRect.left;
+        const deltaY = oldRect.top - newRect.top;
+        
+        if (deltaX !== 0 || deltaY !== 0) {
+          child.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+          child.style.transition = 'none';
+          
+          requestAnimationFrame(() => {
+            child.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+            child.style.transform = 'translate3d(0, 0, 0)';
+          });
+        }
+      }
+    }
+    
+    const newPositions = new Map();
+    for (let child of children) {
+      const key = child.dataset.key;
+      if (key) {
+        newPositions.set(key, child.getBoundingClientRect());
+      }
+    }
+    positionsRef.current = newPositions;
+  });
+
   // Auto-clear search results/errors when search input is cleared
   useEffect(() => {
     if (searchQuery.trim() === '') {
@@ -226,14 +266,24 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
     setSearchQuery('');
   };
 
-  const filteredContacts = contacts.filter(contact => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return true;
-    return (
-      (contact.username || '').toLowerCase().includes(query) ||
-      (contact.displayName || '').toLowerCase().includes(query)
-    );
-  });
+  const filteredContacts = [...contacts]
+    .sort((a, b) => {
+      const aLastMsg = a.messages && a.messages.length > 0 ? a.messages[a.messages.length - 1] : null;
+      const bLastMsg = b.messages && b.messages.length > 0 ? b.messages[b.messages.length - 1] : null;
+      
+      const aTime = aLastMsg ? new Date(aLastMsg.timestamp).getTime() : 0;
+      const bTime = bLastMsg ? new Date(bLastMsg.timestamp).getTime() : 0;
+      
+      return bTime - aTime; // Newest messages at the top
+    })
+    .filter(contact => {
+      const query = searchQuery.trim().toLowerCase();
+      if (!query) return true;
+      return (
+        (contact.username || '').toLowerCase().includes(query) ||
+        (contact.displayName || '').toLowerCase().includes(query)
+      );
+    });
 
   return (
     <div className="sidebar glass">
@@ -304,71 +354,74 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
             </div>
           ) : null
         ) : (
-          filteredContacts.map((contact) => {
-            const isSelected = activeContact?.username === contact.username;
-            const lastMsg = contact.messages && contact.messages.length > 0 
-              ? contact.messages[contact.messages.length - 1]
-              : null;
+          <div ref={listRef} className="contacts-list">
+            {filteredContacts.map((contact) => {
+              const isSelected = activeContact?.username === contact.username;
+              const lastMsg = contact.messages && contact.messages.length > 0 
+                ? contact.messages[contact.messages.length - 1]
+                : null;
 
-            return (
-              <div
-                key={contact.username}
-                className={`contact-item ${isSelected ? 'active' : ''} ${contact.isTyping ? 'typing' : ''}`}
-                onClick={() => {
-                  setActiveContact(contact);
-                  setSearchQuery('');
-                  if (document.activeElement && typeof document.activeElement.blur === 'function') {
-                    document.activeElement.blur();
-                  }
-                }}
-              >
-                <div className="contact-avatar-container">
-                  {renderAvatar(contact.username, contact.displayName, contact.avatarIcon)}
-                  <div className={`status-dot ${contact.status === 'online' ? 'online' : 'offline'}`} />
-                  {isMinimized && contact.unreadCount > 0 && (
-                    <span key={contact.unreadCount} className="unread-badge minimized-badge">{contact.unreadCount}</span>
-                  )}
-                </div>
-                <div className="contact-info">
-                  <div className="contact-name-row">
-                    <span className="contact-name" style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {contact.displayName || contact.username}
-                      </span>
-                      {contact.isVerified && <ShieldCheck size={14} style={{ color: 'var(--accent-color)', flexShrink: 0 }} title="E2EE Verified Identity" />}
-                    </span>
-                    {lastMsg && (
-                      <span className="last-msg-time">
-                        {new Date(lastMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+              return (
+                <div
+                  key={contact.username}
+                  data-key={contact.username}
+                  className={`contact-item ${isSelected ? 'active' : ''} ${contact.isTyping ? 'typing' : ''}`}
+                  onClick={() => {
+                    setActiveContact(contact);
+                    setSearchQuery('');
+                    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                      document.activeElement.blur();
+                    }
+                  }}
+                >
+                  <div className="contact-avatar-container">
+                    {renderAvatar(contact.username, contact.displayName, contact.avatarIcon)}
+                    <div className={`status-dot ${contact.status === 'online' ? 'online' : 'offline'}`} />
+                    {isMinimized && contact.unreadCount > 0 && (
+                      <span key={contact.unreadCount} className="unread-badge minimized-badge">{contact.unreadCount}</span>
                     )}
                   </div>
-                  {contact.displayName && (
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '-2px', marginBottom: '2px', fontFamily: 'monospace' }}>
-                      @{contact.username}
+                  <div className="contact-info">
+                    <div className="contact-name-row">
+                      <span className="contact-name" style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {contact.displayName || contact.username}
+                        </span>
+                        {contact.isVerified && <ShieldCheck size={14} style={{ color: 'var(--accent-color)', flexShrink: 0 }} title="E2EE Verified Identity" />}
+                      </span>
+                      {lastMsg && (
+                        <span className="last-msg-time">
+                          {new Date(lastMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <div className="contact-preview-row">
-                    <div style={{
-                      flex: 1,
-                      minWidth: 0,
-                      color: contact.isTyping ? 'var(--text-link)' : 'var(--text-muted)',
-                      fontWeight: contact.isTyping ? '500' : 'normal',
-                      fontSize: '13px'
-                    }}>
-                      {contact.isTyping 
-                        ? 'typing...'
-                        : renderLastMessagePreview(lastMsg, currentUser)
-                      }
-                    </div>
-                    {contact.unreadCount > 0 && (
-                      <span key={contact.unreadCount} className="unread-badge">{contact.unreadCount}</span>
+                    {contact.displayName && (
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '-2px', marginBottom: '2px', fontFamily: 'monospace' }}>
+                        @{contact.username}
+                      </div>
                     )}
+                    <div className="contact-preview-row">
+                      <div style={{
+                        flex: 1,
+                        minWidth: 0,
+                        color: contact.isTyping ? 'var(--text-link)' : 'var(--text-muted)',
+                        fontWeight: contact.isTyping ? '500' : 'normal',
+                        fontSize: '13px'
+                      }}>
+                        {contact.isTyping 
+                          ? 'typing...'
+                          : renderLastMessagePreview(lastMsg, currentUser)
+                        }
+                      </div>
+                      {contact.unreadCount > 0 && (
+                        <span key={contact.unreadCount} className="unread-badge">{contact.unreadCount}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
 
