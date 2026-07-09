@@ -802,8 +802,27 @@ export default function ChatArea({
   // ==========================================
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1
+        }
+      });
+
+      // Select the best supported mimeType for high quality audio recording
+      let options = { audioBitsPerSecond: 128000 };
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        options.mimeType = 'audio/webm;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+        options.mimeType = 'audio/ogg;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        options.mimeType = 'audio/mp4';
+      }
+
+      mediaRecorderRef.current = new MediaRecorder(stream, options);
       audioChunksRef.current = [];
 
       mediaRecorderRef.current.ondataavailable = (event) => {
@@ -813,7 +832,7 @@ export default function ChatArea({
       };
 
       mediaRecorderRef.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current.mimeType || 'audio/webm' });
         
         // Stop all track streams
         stream.getTracks().forEach(track => track.stop());
@@ -881,7 +900,8 @@ export default function ChatArea({
       const encryptedBase64 = bufferToBase64(encryptedAudioBuffer);
 
       // 5. Upload encrypted audio to server
-      const { fileUrl } = await uploadEncryptedFile('voice-note.webm', encryptedBase64, currentUserToken);
+      const extension = audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const { fileUrl } = await uploadEncryptedFile(`voice-note.${extension}`, encryptedBase64, currentUserToken);
 
       // 6. Export session key to JWK
       const audioKeyJwk = await window.crypto.subtle.exportKey('jwk', audioKey);
@@ -893,7 +913,7 @@ export default function ChatArea({
           url: fileUrl,
           name: 'Voice Note',
           size: audioBlob.size,
-          mimeType: 'audio/webm',
+          mimeType: audioBlob.type || 'audio/webm',
           keyJwk: audioKeyJwk,
           iv: bufferToBase64(iv),
           duration: recordingDurationRef.current

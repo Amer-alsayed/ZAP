@@ -275,7 +275,24 @@ export default function App() {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' }
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelay',
+        credential: 'openrelay'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelay',
+        credential: 'openrelay'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelay',
+        credential: 'openrelay'
+      }
     ]
   };
 
@@ -1196,11 +1213,27 @@ export default function App() {
         startVideoBitrate = 500;
       }
 
-      // Force Opus parameters
-      let modified = sdp.replace(
-        /a=fmtp:\d+ apt=\d+/g,
-        `$&;stereo=${isStereo};sprop-stereo=${isStereo};maxaveragebitrate=${audioBitrate};cbr=1;useinbandfec=1`
-      );
+      // Find the payload type of Opus and force high quality voice params on its fmtp line
+      const opusMatch = sdp.match(/a=rtpmap:(\d+) opus\/48000\/2/i);
+      let modified = sdp;
+      if (opusMatch) {
+        const opusPayloadType = opusMatch[1];
+        const fmtpRegex = new RegExp(`(a=fmtp:${opusPayloadType} [^\r\n]*)`, 'i');
+        if (modified.match(fmtpRegex)) {
+          // Edit existing fmtp line to set optimal parameters
+          modified = modified.replace(
+            fmtpRegex,
+            `$1;stereo=${isStereo};sprop-stereo=${isStereo};maxaveragebitrate=${audioBitrate};cbr=1;useinbandfec=1;minptime=10;ptime=10`
+          );
+        } else {
+          // If no fmtp line exists for Opus, append one right after the rtpmap line
+          const rtpmapRegex = new RegExp(`(a=rtpmap:${opusPayloadType} opus\\/48000\\/2[^\r\n]*)`, 'i');
+          modified = modified.replace(
+            rtpmapRegex,
+            `$1\r\na=fmtp:${opusPayloadType} stereo=${isStereo};sprop-stereo=${isStereo};maxaveragebitrate=${audioBitrate};cbr=1;useinbandfec=1;minptime=10;ptime=10`
+          );
+        }
+      }
       
       // Force higher starting bitrates for video streams in SDP
       if (modified.includes('m=video')) {
@@ -1258,6 +1291,17 @@ export default function App() {
     } catch (e) {
       console.warn("Failed to set RtpSender parameters:", e);
     }
+  };
+
+  const getAudioConstraints = () => {
+    return {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      channelCount: 1, // Optimize mono channel for low latency and high quality voice WebRTC
+      sampleRate: 48000, // 48kHz studio audio
+      latency: { ideal: 0.005, max: 0.02 } // 5ms low-latency target
+    };
   };
 
   const getVideoConstraints = () => {
@@ -1343,14 +1387,14 @@ export default function App() {
       let stream;
       if (media === 'video') {
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: getAudioConstraints(),
           video: getVideoConstraints()
         });
         dummyTrackRef.current = null;
       } else {
         // Voice call: get audio track and append dummy canvas video track
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: getAudioConstraints(),
           video: false
         });
         const dummyTrack = createDummyVideoTrack();
@@ -1405,13 +1449,13 @@ export default function App() {
       let stream;
       if (callMediaType === 'video') {
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: getAudioConstraints(),
           video: getVideoConstraints()
         });
         dummyTrackRef.current = null;
       } else {
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: getAudioConstraints(),
           video: false
         });
         const dummyTrack = createDummyVideoTrack();
