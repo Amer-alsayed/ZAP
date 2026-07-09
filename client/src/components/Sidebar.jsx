@@ -186,30 +186,42 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
 
   const listRef = useRef(null);
   const positionsRef = useRef(new Map());
+  const prevOrderRef = useRef([]);
 
   useLayoutEffect(() => {
     if (!listRef.current) return;
     
+    // Get current order of usernames in list
+    const currentOrder = filteredContacts.map(c => c.username);
+    
+    // Only run reordering animations if the contact list order changed (not length shifts or content size changes)
+    const isOrderChanged = prevOrderRef.current.length > 0 && 
+      prevOrderRef.current.length === currentOrder.length && 
+      prevOrderRef.current.some((username, index) => username !== currentOrder[index]);
+
     const children = listRef.current.children;
-    for (let child of children) {
-      const key = child.dataset.key;
-      if (!key) continue;
-      
-      const oldRect = positionsRef.current.get(key);
-      const newRect = child.getBoundingClientRect();
-      
-      if (oldRect) {
-        const deltaX = oldRect.left - newRect.left;
-        const deltaY = oldRect.top - newRect.top;
+
+    if (isOrderChanged) {
+      for (let child of children) {
+        const key = child.dataset.key;
+        if (!key) continue;
         
-        if (deltaX !== 0 || deltaY !== 0) {
-          child.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
-          child.style.transition = 'none';
+        const oldRect = positionsRef.current.get(key);
+        const newRect = child.getBoundingClientRect();
+        
+        if (oldRect) {
+          const deltaX = oldRect.left - newRect.left;
+          const deltaY = oldRect.top - newRect.top;
           
-          requestAnimationFrame(() => {
-            child.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
-            child.style.transform = 'translate3d(0, 0, 0)';
-          });
+          if (deltaX !== 0 || deltaY !== 0) {
+            child.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+            child.style.transition = 'none';
+            
+            requestAnimationFrame(() => {
+              child.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+              child.style.transform = 'translate3d(0, 0, 0)';
+            });
+          }
         }
       }
     }
@@ -222,6 +234,7 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
       }
     }
     positionsRef.current = newPositions;
+    prevOrderRef.current = currentOrder;
   });
 
   // Auto-clear search results/errors when search input is cleared
