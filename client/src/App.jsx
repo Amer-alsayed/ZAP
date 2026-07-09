@@ -367,14 +367,26 @@ export default function App() {
     const handlePopState = (e) => {
       if (lightboxRef.current) {
         setLightboxImageSrc(null);
-      } else if (document.fullscreenElement) {
+      }
+      
+      if (document.fullscreenElement) {
         document.exitFullscreen();
-      } else if (callStateRef.current === 'connected' && !isCallMinimizedRef.current) {
+      }
+      
+      if (callStateRef.current === 'connected' && !isCallMinimizedRef.current) {
         setIsCallMinimized(true);
-      } else if (replyingToRef.current) {
+      }
+      
+      if (replyingToRef.current) {
         setReplyingTo(null);
-      } else if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
-        handleBackToMenu(true);
+      }
+
+      // Only close the active chat session and return to sidebar if we popped back past 'chat' state!
+      const currentState = window.history.state;
+      if (currentState !== 'chat' && currentState !== 'reply' && currentState !== 'lightbox' && currentState !== 'call-maximized') {
+        if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
+          handleBackToMenu(true);
+        }
       }
     };
 
