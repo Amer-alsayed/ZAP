@@ -15,8 +15,7 @@ const DEFAULT_DEV_SECRET = 'super-secure-chatra-secret-key-12345';
 
 if (!jwtSecret) {
   if (IS_PROD) {
-    console.error('FATAL: process.env.JWT_SECRET is required in production mode!');
-    process.exit(1);
+    console.warn('WARNING: process.env.JWT_SECRET is missing in production mode! Falling back to default secret. Please configure JWT_SECRET in environment variables.');
   }
   jwtSecret = DEFAULT_DEV_SECRET;
 }
