@@ -30,7 +30,7 @@ Designed to run **100% free** on Render + Neon PostgreSQL.
 ### 1. Installation
 Clone the repository and install all dependencies:
 ```bash
-git clone https://github.com/your-username/Chatra.git
+git clone https://github.com/Amer-alsayed/Chatra.git
 cd Chatra
 npm run install:all
 ```
