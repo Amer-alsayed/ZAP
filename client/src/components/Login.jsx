@@ -29,7 +29,7 @@ export default function Login({ onAuthSuccess }) {
     }, 150); // 150ms buffer to switch focus smoothly without logo flicker
   };
 
-  // Safe keyboard close detector (blurs inputs only when viewport expands after keyboard was open)
+  // Safe keyboard close detector
   useEffect(() => {
     const handleResize = () => {
       const vv = window.visualViewport;
@@ -56,13 +56,27 @@ export default function Login({ onAuthSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username || !password) return;
+    const cleanUsername = username.trim();
+    if (!cleanUsername || !password) {
+      setError('Please enter a valid username and password');
+      return;
+    }
+
+    if (cleanUsername.length < 3 || cleanUsername.length > 20) {
+      setError('Username must be 3-20 characters long');
+      return;
+    }
+
+    if (isRegister && password.length < 6) {
+      setError('Password must be at least 6 characters long for security');
+      return;
+    }
     
     setLoading(true);
     setError('');
 
     try {
-      const { loginHash, encryptionKey } = await deriveKeysFromPassword(password, username);
+      const { loginHash, encryptionKey } = await deriveKeysFromPassword(password, cleanUsername);
 
       if (isRegister) {
         // 1. Generate new identity and signing key pairs
@@ -81,18 +95,27 @@ export default function Login({ onAuthSuccess }) {
 
         // 4. Send registration request to server
         const data = await registerUser(
-          username,
+          cleanUsername,
           loginHash,
           publicIdentityKey,
           publicSigningKey,
           backup
         );
 
-        // 5. Store derived key in localStorage
-        // We export it to raw bytes and encode to base64 to store it
+        // 5. Store derived key in localStorage safely
         const rawKey = await window.crypto.subtle.exportKey('raw', encryptionKey);
-        const base64Key = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
-        localStorage.setItem('session_enc_key', base64Key);
+        const bytes = new Uint8Array(rawKey);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64Key = btoa(binary);
+        
+        try {
+          localStorage.setItem('session_enc_key', base64Key);
+        } catch (e) {
+          console.warn('LocalStorage quota restricted session_enc_key persist');
+        }
 
         onAuthSuccess({
           username: data.user.username,
@@ -107,12 +130,22 @@ export default function Login({ onAuthSuccess }) {
         });
       } else {
         // Login flow
-        const data = await loginUser(username, loginHash);
+        const data = await loginUser(cleanUsername, loginHash);
 
         // Re-import the backup key
         const rawKey = await window.crypto.subtle.exportKey('raw', encryptionKey);
-        const base64Key = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
-        localStorage.setItem('session_enc_key', base64Key);
+        const bytes = new Uint8Array(rawKey);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64Key = btoa(binary);
+
+        try {
+          localStorage.setItem('session_enc_key', base64Key);
+        } catch (e) {
+          console.warn('LocalStorage quota restricted session_enc_key persist');
+        }
 
         // Decrypt the returned private keys
         const decryptedKeys = await decryptRestoredPrivateKeys(data.user.encryptedPrivateKeys, encryptionKey);

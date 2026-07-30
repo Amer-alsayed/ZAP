@@ -33,8 +33,15 @@ const getSafetyNumber = (keyA, keyB) => {
 };
 
 // ==========================================
-// Date Separator Helpers
+// Date & Time Formatting Helpers
 // ==========================================
+const formatMessageTime = (timestamp) => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
 const shouldShowDateSeparator = (messages, index) => {
   if (index === 0) return true;
   const prevDate = new Date(messages[index - 1].timestamp);
@@ -147,7 +154,7 @@ const MessageList = React.memo(({
                       <span className="system-call-duration">({formatCallDuration(callData.duration)})</span>
                     )}
                     <span className="system-call-time">
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatMessageTime(msg.timestamp)}
                     </span>
                   </div>
                 </div>
@@ -210,7 +217,7 @@ const MessageList = React.memo(({
               </div>
               <div className="message-meta">
                 <span>
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatMessageTime(msg.timestamp)}
                 </span>
                 {isSent && (
                   <span className="message-status-ticks" title={msg.status === 2 ? "Read" : msg.status === 1 ? "Delivered" : "Sent"}>
@@ -281,6 +288,7 @@ export default function ChatArea({
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const [audioProgress, setAudioProgress] = useState({}); // msgId -> percentage
   const activeAudioRef = useRef(null);
+  const activeAudioUrlRef = useRef(null);
   
   // Debounce typing status triggers
   const typingTimeoutRef = useRef(null);
@@ -331,10 +339,26 @@ export default function ChatArea({
     setIsScrolledUp(false);
     isScrolledUpRef.current = false;
 
-    // Unmount cleanup: immediately stop typing if the user closes/leaves the chat
+    // Unmount cleanup: stop active recording, revoke audio object URLs, and notify offline typing
     return () => {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stream?.getTracks().forEach(t => t.stop());
+          mediaRecorderRef.current.stop();
+        } catch (e) {}
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+        if (activeAudioUrlRef.current) {
+          URL.revokeObjectURL(activeAudioUrlRef.current);
+          activeAudioUrlRef.current = null;
+        }
       }
       const currentSocket = getSocket();
       if (currentSocket && currentSocket.connected && isTypingRef.current && prevContactRef.current) {
@@ -623,6 +647,8 @@ export default function ChatArea({
     }
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
+    // If sharedSecret is not yet cached, parent handleSendMessage will derive it on-the-fly
+
     const captionText = inputText.trim();
     const replyContext = replyingTo ? { 
       id: replyingTo.id, 
@@ -641,7 +667,6 @@ export default function ChatArea({
 
     if (selectedFile) {
       // Send message with file attachment
-      if (!sharedSecret) return;
       setUploading(true);
       const fileToUpload = selectedFile;
       setSelectedFile(null); // Clear selected file immediately
@@ -649,8 +674,9 @@ export default function ChatArea({
       try {
         // 1. Read file as ArrayBuffer
         const reader = new FileReader();
-        const fileBufferPromise = new Promise((resolve) => {
+        const fileBufferPromise = new Promise((resolve, reject) => {
           reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = () => reject(new Error('Failed to read file contents from device'));
         });
         reader.readAsArrayBuffer(fileToUpload);
         const fileBuffer = await fileBufferPromise;
@@ -712,7 +738,9 @@ export default function ChatArea({
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      if ((inputText && inputText.trim().length > 0) || selectedFile) {
+        handleSendMessage();
+      }
     }
   };
 
@@ -762,6 +790,9 @@ export default function ChatArea({
     try {
       // 1. Fetch the encrypted file from server
       const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file (${response.status})`);
+      }
       const encryptedBuffer = await response.arrayBuffer();
 
       // 2. Re-import the session key
@@ -951,9 +982,13 @@ export default function ChatArea({
       return;
     }
 
-    // Pause any other active audio
+    // Pause any other active audio and revoke its object URL
     if (activeAudioRef.current) {
       activeAudioRef.current.pause();
+      if (activeAudioUrlRef.current) {
+        URL.revokeObjectURL(activeAudioUrlRef.current);
+        activeAudioUrlRef.current = null;
+      }
     }
 
     try {
@@ -961,6 +996,9 @@ export default function ChatArea({
 
       // 1. Fetch and decrypt the audio blob
       const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch audio (${response.status})`);
+      }
       const encryptedBuffer = await response.arrayBuffer();
 
       const audioKey = await window.crypto.subtle.importKey(
@@ -980,6 +1018,7 @@ export default function ChatArea({
 
       const blob = new Blob([decryptedBuffer], { type: 'audio/webm' });
       const localUrl = URL.createObjectURL(blob);
+      activeAudioUrlRef.current = localUrl;
 
       // 2. Play audio
       const audio = new Audio(localUrl);
@@ -994,7 +1033,10 @@ export default function ChatArea({
       audio.onended = () => {
         setPlayingAudioId(null);
         setAudioProgress(prev => ({ ...prev, [msgId]: 0 }));
-        URL.revokeObjectURL(localUrl);
+        if (activeAudioUrlRef.current === localUrl) {
+          URL.revokeObjectURL(localUrl);
+          activeAudioUrlRef.current = null;
+        }
       };
 
       audio.playbackRate = playbackRate;
@@ -1484,17 +1526,24 @@ export default function ChatArea({
           </button>
         </div>
         
-        {/* Attachment preview bar */}
-        <div className={`attachment-preview-bar ${selectedFile ? 'glass visible' : ''}`}>
-          {activeFileInfo && (
-            <div className="attachment-info">
-              {activeFileInfo.type?.startsWith('image/') ? <Image size={18} /> : <FileText size={18} />}
-              <span>{activeFileInfo.name} ({(activeFileInfo.size / 1024).toFixed(1)} KB)</span>
+        {/* Attachment preview / uploading progress bar */}
+        <div className={`attachment-preview-bar ${(selectedFile || uploading) ? 'glass visible' : ''}`}>
+          {uploading ? (
+            <div className="attachment-info" style={{ color: 'var(--accent-color)' }}>
+              <Shield size={18} className="shield-shimmer" />
+              <span>Encrypting & uploading attachment...</span>
             </div>
-          )}
-          <button className="remove-attachment-btn" onClick={() => setSelectedFile(null)}>
-            <X size={18} />
-          </button>
+          ) : activeFileInfo ? (
+            <>
+              <div className="attachment-info">
+                {activeFileInfo.type?.startsWith('image/') ? <Image size={18} /> : <FileText size={18} />}
+                <span>{activeFileInfo.name} ({(activeFileInfo.size / 1024).toFixed(1)} KB)</span>
+              </div>
+              <button className="remove-attachment-btn" onClick={() => setSelectedFile(null)}>
+                <X size={18} />
+              </button>
+            </>
+          ) : null}
         </div>
 
         {/* Input container */}
@@ -1577,18 +1626,27 @@ export default function ChatArea({
 // ==========================================
 // Helper component: Decrypted image loader
 // ==========================================
+// ==========================================
+// Helper component: Decrypted image loader
+// ==========================================
 function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
   const [imgSrc, setImgSrc] = useState(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const objectUrlRef = useRef(null);
 
   useEffect(() => {
     let active = true;
-    let localUrl = null;
 
     const loadAndDecrypt = async () => {
       try {
         const response = await fetch(fileMetadata.url);
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error('Media file expired or no longer on server');
+          }
+          throw new Error(`Failed to fetch image (${response.status})`);
+        }
         const encryptedBuffer = await response.arrayBuffer();
 
         const fileSessionKey = await window.crypto.subtle.importKey(
@@ -1608,11 +1666,11 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
 
         if (!active) return;
         const blob = new Blob([decryptedBuffer], { type: fileMetadata.mimeType });
-        localUrl = URL.createObjectURL(blob);
+        const localUrl = URL.createObjectURL(blob);
+        objectUrlRef.current = localUrl;
         setImgSrc(localUrl);
       } catch (err) {
-        console.error(err);
-        if (active) setError(true);
+        if (active) setError(err.message || 'Media loading failed');
       }
     };
 
@@ -1620,11 +1678,14 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
 
     return () => {
       active = false;
-      if (localUrl) URL.revokeObjectURL(localUrl);
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
     };
   }, [fileMetadata]);
 
-  if (error) return <span style={{ color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={14} /> Image Decryption Failed</span>;
+  if (error) return <span style={{ color: 'var(--text-muted, #a0aec0)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}><AlertTriangle size={14} style={{ color: '#e53e3e' }} /> {error}</span>;
 
   return (
     <div className="image-loader-container">
@@ -1664,14 +1725,17 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
 function VideoPreviewLoader({ fileMetadata }) {
   const [videoSrc, setVideoSrc] = useState(null);
   const [error, setError] = useState(false);
+  const objectUrlRef = useRef(null);
 
   useEffect(() => {
     let active = true;
-    let localUrl = null;
 
     const loadAndDecrypt = async () => {
       try {
         const response = await fetch(fileMetadata.url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch video (${response.status})`);
+        }
         const encryptedBuffer = await response.arrayBuffer();
 
         const fileSessionKey = await window.crypto.subtle.importKey(
@@ -1691,7 +1755,8 @@ function VideoPreviewLoader({ fileMetadata }) {
 
         if (!active) return;
         const blob = new Blob([decryptedBuffer], { type: fileMetadata.mimeType });
-        localUrl = URL.createObjectURL(blob);
+        const localUrl = URL.createObjectURL(blob);
+        objectUrlRef.current = localUrl;
         setVideoSrc(localUrl);
       } catch (err) {
         console.error(err);
@@ -1703,7 +1768,10 @@ function VideoPreviewLoader({ fileMetadata }) {
 
     return () => {
       active = false;
-      if (localUrl) URL.revokeObjectURL(localUrl);
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
     };
   }, [fileMetadata]);
 

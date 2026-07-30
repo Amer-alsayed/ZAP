@@ -1,6 +1,26 @@
 const BASE_URL = '';
 
 /**
+ * Helper to safely parse JSON response and provide meaningful error messages on HTTP errors or non-JSON returns.
+ */
+const parseJsonResponse = async (response, fallbackErrorMessage) => {
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (e) {
+    if (!response.ok) {
+      throw new Error(`${fallbackErrorMessage} (Server returned ${response.status} ${response.statusText || 'Error'})`);
+    }
+    throw new Error('Invalid JSON response format received from server');
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.error || `${fallbackErrorMessage} (${response.status})`);
+  }
+  return data;
+};
+
+/**
  * Register a new user anonymously.
  */
 export const registerUser = async (username, loginHash, publicIdentityKey, publicSigningKey, encryptedPrivateKeys) => {
@@ -16,11 +36,7 @@ export const registerUser = async (username, loginHash, publicIdentityKey, publi
     })
   });
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Registration failed');
-  }
-  return data;
+  return parseJsonResponse(response, 'Registration failed');
 };
 
 /**
@@ -33,11 +49,7 @@ export const loginUser = async (username, loginHash) => {
     body: JSON.stringify({ username, loginHash })
   });
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Login failed');
-  }
-  return data;
+  return parseJsonResponse(response, 'Login failed');
 };
 
 /**
@@ -52,11 +64,7 @@ export const searchUser = async (username, token) => {
     }
   });
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'User not found');
-  }
-  return data;
+  return parseJsonResponse(response, 'User not found');
 };
 
 /**
@@ -76,11 +84,7 @@ export const uploadEncryptedFile = async (filename, fileDataBase64, token) => {
     body: JSON.stringify({ filename, fileData: fileDataBase64 })
   });
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'File upload failed');
-  }
-  return data;
+  return parseJsonResponse(response, 'File upload failed');
 };
 
 export { BASE_URL };

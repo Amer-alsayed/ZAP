@@ -15,7 +15,7 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
         if (msg.mediaType === 'call') {
           try {
             const callData = JSON.parse(msg.text);
-            const isSentByMe = msg.sender.toLowerCase() === currentUser.username.toLowerCase();
+            const isSentByMe = msg.sender?.toLowerCase() === currentUser?.username?.toLowerCase();
             callLogs.push({
               id: msg.id || msg.timestamp,
               timestamp: msg.timestamp,
@@ -34,8 +34,12 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
     }
   });
 
-  // Sort logs by newest first (handles both Unix timestamps and ISO string dates)
-  callLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  // Sort logs by newest first with NaN protection
+  callLogs.sort((a, b) => {
+    const tA = (a.timestamp && !isNaN(new Date(a.timestamp).getTime())) ? new Date(a.timestamp).getTime() : 0;
+    const tB = (b.timestamp && !isNaN(new Date(b.timestamp).getTime())) ? new Date(b.timestamp).getTime() : 0;
+    return tB - tA;
+  });
 
   // Filter based on active tab
   const filteredCalls = callLogs.filter(log => {
@@ -58,7 +62,7 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
     let position = 0;
     let velocity = 0;
     const tension = 0.08; // Stiffness of the spring
-    const damping = 0.48;  // Critically damped friction coefficient (prevents oscillating back and forth)
+    const damping = 0.48;  // Critically damped friction coefficient
     let rafId = null;
 
     // Reset translations
@@ -68,7 +72,6 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
     const updatePhysics = () => {
       if (isDragging) return;
 
-      // Physics equations: Force = -k*x (pullback) - c*v (damping)
       const force = -tension * position;
       const friction = -damping * velocity;
       const acceleration = force + friction;
@@ -76,17 +79,14 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
       velocity += acceleration;
       position += velocity;
 
-      // Clamp position visual bounds to protect UI layout
       const maxVisualOverscroll = 85;
       if (Math.abs(position) > maxVisualOverscroll) {
         position = Math.sign(position) * maxVisualOverscroll;
-        velocity = 0; // Absorb momentum on hitting boundary wall
+        velocity = 0;
       }
 
-      // Apply GPU-accelerated translation
       wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
 
-      // Loop frame-by-frame until spring settles
       if (Math.abs(position) > 0.05 || Math.abs(velocity) > 0.05) {
         rafId = requestAnimationFrame(updatePhysics);
       } else {
@@ -100,7 +100,6 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
     const handleTouchStart = (e) => {
       if (e.touches.length !== 1) return;
       
-      // Stop spring loop instantly when finger touches the screen mid-bounce
       if (rafId) {
         cancelAnimationFrame(rafId);
         rafId = null;
@@ -123,7 +122,6 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
       const atTop = scrollTop <= 0;
       const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
 
-      // Touch drag resistance is non-linear (y^0.75) for a natural stretch feel
       if (atTop && deltaY > 0) {
         if (e.cancelable) e.preventDefault();
         position = Math.sign(deltaY) * Math.pow(Math.abs(deltaY), 0.75);
@@ -133,7 +131,6 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
         position = Math.sign(deltaY) * Math.pow(Math.abs(deltaY), 0.75);
         wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
       } else {
-        // Shift baseline if returning to normal scrolling boundaries
         startY = currentY;
         position = 0;
         wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
@@ -161,10 +158,8 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
       if ((atTop && e.deltaY < 0) || (atBottom && e.deltaY > 0)) {
         if (e.cancelable) e.preventDefault();
 
-        // INJECT kinetic momentum into velocity only (never modify position directly!).
         velocity -= e.deltaY * 0.045;
 
-        // Start the physics animation loop if it is idle
         if (!rafId) {
           rafId = requestAnimationFrame(updatePhysics);
         }
@@ -188,7 +183,9 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
   }, [activeTab, filteredCalls.length]);
 
   const formatCallTimeOnly = (timestamp) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -201,7 +198,10 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
 
   // Group headers: Today, Yesterday, Weekday, or specific Calendar Date
   const getGroupTitle = (timestamp) => {
+    if (!timestamp) return 'Earlier';
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Earlier';
+
     const today = new Date();
     const yesterday = new Date();
     yesterday.setDate(today.getDate() - 1);
@@ -296,15 +296,15 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
                         {/* Clickable Area: Opens conversation */}
                         <div className="recents-row-clickable" onClick={() => onSelectContact(log.contact)}>
                           <div className="recents-avatar">
-                            {renderAvatar(log.contact.username, log.contact.displayName, log.contact.avatarIcon)}
+                            {renderAvatar(log.contact?.username, log.contact?.displayName, log.contact?.avatarIcon)}
                           </div>
                           
                           <div className="recents-details">
                             <div className="recents-name-row">
                               <span className={`recents-name ${isMissed ? 'missed-red' : ''}`}>
-                                {log.contact.displayName || log.contact.username}
+                                {log.contact?.displayName || log.contact?.username || 'Unknown'}
                               </span>
-                              {log.contact.isVerified && (
+                              {log.contact?.isVerified && (
                                 <ShieldCheck size={13} style={{ color: 'var(--success-color)', flexShrink: 0 }} />
                               )}
                             </div>
@@ -339,7 +339,7 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
                             <button 
                               className="recents-icon-btn call" 
                               title={`Call back ${log.callType}`}
-                              onClick={() => onInitiateCall(log.callType, log.contact.username)}
+                              onClick={() => onInitiateCall(log.callType, log.contact?.username)}
                             >
                               {log.callType === 'video' ? <Video size={16} /> : <Phone size={16} />}
                             </button>

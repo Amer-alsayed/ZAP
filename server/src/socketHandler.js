@@ -1,14 +1,29 @@
-// Triggering nodemon reload
 import jwt from 'jsonwebtoken';
 import { dbRun, dbAll, dbGet } from './db.js';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secure-chatra-secret-key-12345';
+import config from './config.js';
+import logger from './logger.js';
 
 // Map to track active sockets by username: username (lowercase) -> Set(socketId)
 const onlineUsers = new Map();
 
 // Map to track active call sessions: callerUsername (lowercase) -> session details
 const activeCalls = new Map();
+
+// Call session TTL (expire stale calling sessions older than 2 minutes)
+const CALL_SESSION_TTL_MS = 2 * 60 * 1000;
+
+// Periodic cleanup interval for stale call sessions (unref'd to avoid blocking graceful process shutdown)
+const cleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [callerKey, session] of activeCalls.entries()) {
+    if (now - session.timestamp > CALL_SESSION_TTL_MS && session.status !== 'connected') {
+      logger.info(`Cleaning up stale call session for caller: ${session.caller}`);
+      activeCalls.delete(callerKey);
+    }
+  }
+}, 60 * 1000);
+
+cleanupInterval.unref();
 
 // Helper: Check if a user has any active WebSocket connection
 const isUserOnline = (username) => {
@@ -51,30 +66,44 @@ export const socketHandler = (io) => {
     }
 
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
       
-      // Verify user exists in database (prevents session mismatch after database resets)
+      // Verify user exists in database
       const userExists = await dbGet('SELECT 1 FROM users WHERE LOWER(username) = LOWER(?)', [decoded.username]);
       if (!userExists) {
-        console.error(`Socket authentication failed: User "${decoded.username}" not found in database (database reset).`);
-        return next(new Error('Authentication error: User not found (database reset)'));
+        logger.warn(`Socket auth failed: User "${decoded.username}" not found in DB.`);
+        return next(new Error('Authentication error: User not found'));
       }
 
       socket.user = decoded; // Contains id and username
       next();
     } catch (err) {
-      console.error('Socket authentication failed:', err.message);
+      logger.debug('Socket authentication failed:', { error: err.message });
       next(new Error('Authentication error: Invalid token'));
     }
   });
 
   io.on('connection', (socket) => {
     const username = socket.user.username;
-    console.log(`User connected: ${username} (Socket ID: ${socket.id})`);
+    logger.info(`User connected: ${username} (Socket ID: ${socket.id})`);
     
     // Track online user socket
     const wentOnline = addUserSocket(username, socket.id);
     socket.join(username.toLowerCase()); // Case-insensitive room name subscription
+
+    // Per-socket event rate limiting (max 60 event packets per second per connection)
+    let eventCount = 0;
+    const resetTimer = setInterval(() => { eventCount = 0; }, 1000);
+    resetTimer.unref();
+
+    socket.use((packet, next) => {
+      eventCount++;
+      if (eventCount > 60) {
+        logger.warn(`Rate limit exceeded on socket ${socket.id} (user: ${username}). Throttling excess packet.`);
+        return; // Throttle excess packets cleanly without disconnecting the client socket
+      }
+      next();
+    });
 
     // Broadcast online status to others only if they just connected their first tab
     if (wentOnline) {
@@ -83,26 +112,21 @@ export const socketHandler = (io) => {
 
     // Check if there is a pending call session for this newly connected user
     for (const [callerKey, session] of activeCalls.entries()) {
-      console.log(`[CALL DEBUG] Checking pending session: callerKey=${callerKey}, caller=${session.caller}, recipient=${session.recipient}, status=${session.status}, newly connected user=${username}`);
       if (session.recipient.toLowerCase() === username.toLowerCase() && session.status !== 'connected') {
-        console.log(`[CALL DEBUG] Matching pending session found! Relaying call offer to recipient: ${username}`);
-        // Relay call offer to newly connected recipient
+        logger.info(`Relaying pending call offer to newly connected user: ${username}`);
         socket.emit('call-made', {
           offer: session.offer,
           from: session.caller,
           mediaType: session.mediaType
         });
         session.status = 'ringing';
-        // Notify the caller that the call is now ringing!
-        console.log(`[CALL DEBUG] Emitting call-ringing to caller room: ${session.caller.toLowerCase()}`);
         io.to(session.caller.toLowerCase()).emit('call-ringing', { from: username });
       }
     }
 
-    // Automatically retrieve Bob's offline messages, deliver them, and notify senders
+    // Automatically retrieve offline messages, deliver them, and notify senders
     const deliverOfflineMessages = async () => {
       try {
-        // 1. Fetch all pending offline messages
         const offlineMessages = await dbAll(
           `SELECT id, sender, recipient, ciphertext, iv, signature, timestamp, delivered
            FROM messages
@@ -112,9 +136,16 @@ export const socketHandler = (io) => {
         );
 
         if (offlineMessages.length > 0) {
-          console.log(`[OFFLINE MESSAGES] Delivering ${offlineMessages.length} offline messages to: ${username}`);
+          logger.info(`Delivering ${offlineMessages.length} offline messages to: ${username}`);
           
-          // 2. Emit each offline message to the user's socket
+          // Atomically mark messages as delivered FIRST to prevent multi-socket duplicate delivery
+          const messageIds = offlineMessages.map(m => m.id);
+          const placeholders = messageIds.map(() => '?').join(',');
+          await dbRun(
+            `UPDATE messages SET delivered = 1 WHERE id IN (${placeholders}) AND delivered = 0`,
+            messageIds
+          );
+
           for (const msg of offlineMessages) {
             socket.emit('receive-message', {
               id: msg.id,
@@ -123,86 +154,120 @@ export const socketHandler = (io) => {
               ciphertext: msg.ciphertext,
               iv: msg.iv,
               signature: msg.signature,
-              delivered: 1, // marked as delivered
+              delivered: 1,
               timestamp: msg.timestamp
             });
           }
 
-          // 3. Find unique senders to update status and notify them
           const senders = [...new Set(offlineMessages.map(m => m.sender))];
           for (const sender of senders) {
-            // Update DB: 1 = delivered
-            await dbRun(
-              `UPDATE messages SET delivered = 1
-               WHERE LOWER(sender) = LOWER(?) AND LOWER(recipient) = LOWER(?) AND delivered = 0`,
-              [sender, username]
-            );
-            // Notify sender
             io.to(sender.toLowerCase()).emit('messages-delivered', { recipient: username });
           }
         }
       } catch (error) {
-        console.error('Error delivering offline messages:', error);
+        logger.error('Error delivering offline messages:', error);
       }
     };
     deliverOfflineMessages();
 
     // Handle online status check with profile info
     socket.on('get-user-status', async (targetUsername, callback) => {
-      const isOnline = isUserOnline(targetUsername);
       try {
+        if (!targetUsername || typeof targetUsername !== 'string' || targetUsername.length > 50) {
+          if (typeof callback === 'function') callback({ error: 'Invalid username' });
+          return;
+        }
+        const isOnline = isUserOnline(targetUsername);
         const user = await dbGet('SELECT display_name, avatar_icon FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
-        callback({ 
-          username: targetUsername, 
-          status: isOnline ? 'online' : 'offline',
-          displayName: user ? user.display_name : null,
-          avatarIcon: user ? user.avatar_icon : null
-        });
+        if (typeof callback === 'function') {
+          callback({ 
+            username: targetUsername, 
+            status: isOnline ? 'online' : 'offline',
+            displayName: user ? user.display_name : null,
+            avatarIcon: user ? user.avatar_icon : null
+          });
+        }
       } catch (err) {
-        console.error('Error fetching user status profile info:', err);
-        callback({ username: targetUsername, status: isOnline ? 'online' : 'offline' });
+        logger.error('Error fetching user status profile info:', err);
+        if (typeof callback === 'function') {
+          callback({ username: targetUsername, status: isUserOnline(targetUsername) ? 'online' : 'offline' });
+        }
       }
     });
 
     // Handle profile updates (display name, avatar icon color/emoji)
     socket.on('update-profile', async (data, callback) => {
-      const { displayName, avatarIcon } = data;
-      const username = socket.user.username;
-
       try {
+        const { displayName, avatarIcon } = data || {};
+        const username = socket.user.username;
+
+        // Security payload validation
+        if (displayName && (typeof displayName !== 'string' || displayName.length > 50)) {
+          if (typeof callback === 'function') callback({ error: 'Invalid display name' });
+          return;
+        }
+        if (avatarIcon && (typeof avatarIcon !== 'string' || avatarIcon.length > 1024 * 1024)) {
+          if (typeof callback === 'function') callback({ error: 'Avatar payload exceeds 1MB limit' });
+          return;
+        }
+
         await dbRun(
           'UPDATE users SET display_name = ?, avatar_icon = ? WHERE LOWER(username) = LOWER(?)',
           [displayName || null, avatarIcon || null, username]
         );
 
-        if (callback) callback({ success: true });
+        if (typeof callback === 'function') callback({ success: true });
 
-        // Broadcast profile change in real-time to all online users
         socket.broadcast.emit('user-profile-updated', {
           username,
           displayName: displayName || null,
           avatarIcon: avatarIcon || null
         });
       } catch (err) {
-        console.error('Error updating user profile:', err);
-        if (callback) callback({ error: 'Failed to update profile' });
+        logger.error('Error updating user profile:', err);
+        if (typeof callback === 'function') callback({ error: 'Failed to update profile' });
       }
     });
 
+    // Per-socket message anti-spam rate limiter (sliding window: max 5 messages per 2 seconds)
+    const msgTimestamps = [];
+    const MAX_MSG_BURST = 5;
+    const MSG_WINDOW_MS = 2000;
+
     // Handle real-time messaging
     socket.on('send-message', async (data, callback) => {
-      const { recipient, ciphertext, iv, signature } = data;
-      const sender = socket.user.username;
-
-      if (!recipient || !ciphertext || !iv || !signature) {
-        return callback({ error: 'Invalid message payload' });
-      }
-
       try {
+        const { recipient, ciphertext, iv, signature } = data || {};
+        const sender = socket.user.username;
+
+        // Anti-bot message frequency check
+        const now = Date.now();
+        while (msgTimestamps.length > 0 && now - msgTimestamps[0] > MSG_WINDOW_MS) {
+          msgTimestamps.shift();
+        }
+
+        if (msgTimestamps.length >= MAX_MSG_BURST) {
+          if (typeof callback === 'function') {
+            callback({ error: 'You are sending messages too fast. Please slow down.' });
+          }
+          return;
+        }
+
+        if (
+          !recipient || typeof recipient !== 'string' || recipient.length > 50 ||
+          !ciphertext || typeof ciphertext !== 'string' || ciphertext.length > 500000 ||
+          !iv || typeof iv !== 'string' || iv.length > 100 ||
+          !signature || typeof signature !== 'string' || signature.length > 1000
+        ) {
+          if (typeof callback === 'function') callback({ error: 'Invalid message payload' });
+          return;
+        }
+
+        msgTimestamps.push(now);
+
         const isOnline = isUserOnline(recipient);
         const status = isOnline ? 1 : 0; // 0 = sent, 1 = delivered
 
-        // Save encrypted message to database
         const result = await dbRun(
           `INSERT INTO messages (sender, recipient, ciphertext, iv, signature, delivered)
            VALUES (?, ?, ?, ?, ?, ?)`,
@@ -217,183 +282,216 @@ export const socketHandler = (io) => {
           ciphertext,
           iv,
           signature,
-          delivered: status, // include status in websocket payload
+          delivered: status,
           timestamp: new Date().toISOString()
         };
 
-        // If recipient is online, deliver immediately (route using lowercase username room name)
         if (isOnline) {
           io.to(recipient.toLowerCase()).emit('receive-message', msgPayload);
         }
 
-        // Acknowledge receipt to the sender with status
-        callback({ success: true, messageId, timestamp: msgPayload.timestamp, status });
+        if (typeof callback === 'function') {
+          callback({ success: true, messageId, timestamp: msgPayload.timestamp, status });
+        }
       } catch (error) {
-        console.error('Error sending message:', error);
-        callback({ error: 'Failed to send message' });
+        logger.error('Error sending message:', error);
+        if (typeof callback === 'function') callback({ error: 'Failed to send message' });
       }
     });
 
-    // Fetch conversation history
+    // Fetch conversation history (with optional pagination support)
     socket.on('get-chat-history', async (data, callback) => {
-      const { withUser } = data;
-      const currentUser = socket.user.username;
-
-      if (!withUser) {
-        return callback({ error: 'withUser parameter is required' });
-      }
-
       try {
-        const messages = await dbAll(
-          `SELECT id, sender, recipient, ciphertext, iv, signature, timestamp, delivered
-           FROM messages
-           WHERE (sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)
-           ORDER BY timestamp ASC`,
-          [currentUser, withUser, withUser, currentUser]
-        );
+        const { withUser, limit, beforeId } = data || {};
+        const currentUser = socket.user.username;
 
-        callback({ success: true, messages });
+        if (!withUser || typeof withUser !== 'string' || withUser.length > 50) {
+          if (typeof callback === 'function') callback({ error: 'withUser parameter is required and must be valid' });
+          return;
+        }
+
+        let query = `
+          SELECT id, sender, recipient, ciphertext, iv, signature, timestamp, delivered
+          FROM messages
+          WHERE (LOWER(sender) = LOWER(?) AND LOWER(recipient) = LOWER(?))
+             OR (LOWER(sender) = LOWER(?) AND LOWER(recipient) = LOWER(?))
+        `;
+        const params = [currentUser, withUser, withUser, currentUser];
+
+        if (beforeId) {
+          query += ` AND id < ?`;
+          params.push(beforeId);
+        }
+
+        query += ` ORDER BY timestamp ASC`;
+
+        const parsedLimit = parseInt(limit, 10);
+        const safeLimit = (!isNaN(parsedLimit) && parsedLimit > 0) ? Math.min(parsedLimit, 500) : 500;
+        query += ` LIMIT ?`;
+        params.push(safeLimit);
+
+        const messages = await dbAll(query, params);
+
+        if (typeof callback === 'function') {
+          callback({ success: true, messages });
+        }
       } catch (error) {
-        console.error('Error fetching chat history:', error);
-        callback({ error: 'Failed to fetch chat history' });
+        logger.error('Error fetching chat history:', error);
+        if (typeof callback === 'function') callback({ error: 'Failed to fetch chat history' });
       }
     });
 
     // Mark messages as read (status 2) and notify sender
     socket.on('mark-as-read', async (data) => {
-      const { sender } = data;
-      const recipient = socket.user.username;
-
-      if (!sender) return;
-
       try {
-        // Update DB: 2 = read
+        const { sender } = data || {};
+        const recipient = socket.user.username;
+
+        if (!sender) return;
+
         await dbRun(
           `UPDATE messages SET delivered = 2
-           WHERE sender = ? AND recipient = ? AND delivered < 2`,
+           WHERE LOWER(sender) = LOWER(?) AND LOWER(recipient) = LOWER(?) AND delivered < 2`,
           [sender, recipient]
         );
-        // Notify the sender that the recipient read their messages
+        
         io.to(sender.toLowerCase()).emit('messages-read', { reader: recipient });
       } catch (error) {
-        console.error('Error updating read status:', error);
+        logger.error('Error updating read status:', error);
       }
     });
 
-    // ==========================================
     // WebRTC Signaling Handlers (Voice/Video)
-    // ==========================================
-
-    // Initiate Call
     socket.on('call-user', (data) => {
-      const { to, offer, mediaType } = data;
-      const from = socket.user.username;
+      try {
+        const { to, offer, mediaType } = data || {};
+        const from = socket.user.username;
 
-      // Save call session
-      activeCalls.set(from.toLowerCase(), {
-        caller: from,
-        recipient: to,
-        mediaType,
-        offer,
-        status: 'calling',
-        timestamp: Date.now()
-      });
+        if (!to || typeof to !== 'string' || !offer) return;
 
-      if (isUserOnline(to)) {
-        // Recipient is online, relay call immediately and mark status as 'ringing'
-        io.to(to.toLowerCase()).emit('call-made', {
+        activeCalls.set(from.toLowerCase(), {
+          caller: from,
+          recipient: to,
+          mediaType,
           offer,
-          from,
-          mediaType
+          status: 'calling',
+          timestamp: Date.now()
         });
-        const session = activeCalls.get(from.toLowerCase());
-        if (session) {
-          session.status = 'ringing';
+
+        if (isUserOnline(to)) {
+          io.to(to.toLowerCase()).emit('call-made', {
+            offer,
+            from,
+            mediaType
+          });
+          const session = activeCalls.get(from.toLowerCase());
+          if (session) {
+            session.status = 'ringing';
+          }
+          socket.emit('call-ringing', { from: to });
         }
-        socket.emit('call-ringing', { from: to });
-      } else {
-        // Recipient is offline. Do NOT error! Just let the call stand in 'calling' state.
-        // The client will display "Calling..." until the recipient connects or caller cancels.
+      } catch (err) {
+        logger.error('Error in call-user event:', err);
       }
     });
 
-    // Answer Call
     socket.on('make-answer', (data) => {
-      const { to, answer } = data;
-      const from = socket.user.username;
+      try {
+        const { to, answer } = data || {};
+        const from = socket.user.username;
 
-      // Find call session where caller is 'to' and recipient is 'from'
-      const session = activeCalls.get(to.toLowerCase());
-      if (session) {
-        session.status = 'connected';
-      }
+        if (!to || !answer) return;
 
-      if (isUserOnline(to)) {
-        io.to(to.toLowerCase()).emit('answer-made', {
-          answer,
-          from
-        });
+        const session = activeCalls.get(to.toLowerCase());
+        if (session) {
+          session.status = 'connected';
+        }
+
+        if (isUserOnline(to)) {
+          io.to(to.toLowerCase()).emit('answer-made', {
+            answer,
+            from
+          });
+        }
+      } catch (err) {
+        logger.error('Error in make-answer event:', err);
       }
     });
 
-    // ICE Candidate relay
     socket.on('ice-candidate', (data) => {
-      const { to, candidate } = data;
-      const from = socket.user.username;
+      try {
+        const { to, candidate } = data || {};
+        const from = socket.user.username;
 
-      if (isUserOnline(to)) {
-        io.to(to.toLowerCase()).emit('ice-candidate-relay', {
-          candidate,
-          from
-        });
+        if (!to || !candidate) return;
+
+        if (isUserOnline(to)) {
+          io.to(to.toLowerCase()).emit('ice-candidate-relay', {
+            candidate,
+            from
+          });
+        }
+      } catch (err) {
+        logger.error('Error in ice-candidate event:', err);
       }
     });
 
-    // Call Media Update (e.g. voice to video upgrade, screen sharing status)
     socket.on('call-media-update', (data) => {
-      const { to, mediaType, screenSharing, cameraOff, muted } = data;
-      const from = socket.user.username;
+      try {
+        const { to, mediaType, screenSharing, cameraOff, muted } = data || {};
+        const from = socket.user.username;
 
-      if (isUserOnline(to)) {
-        io.to(to.toLowerCase()).emit('call-media-updated', { 
-          from, 
-          mediaType, 
-          screenSharing, 
-          cameraOff, 
-          muted 
-        });
+        if (!to) return;
+
+        if (isUserOnline(to)) {
+          io.to(to.toLowerCase()).emit('call-media-updated', { 
+            from, 
+            mediaType, 
+            screenSharing, 
+            cameraOff, 
+            muted 
+          });
+        }
+      } catch (err) {
+        logger.error('Error in call-media-update event:', err);
       }
     });
 
-    // Hang up Call
     socket.on('hang-up', (data) => {
-      const { to, reason } = data;
-      const from = socket.user.username;
+      try {
+        const { to, reason } = data || {};
+        const from = socket.user.username;
 
-      // Remove call session
-      activeCalls.delete(from.toLowerCase());
-      activeCalls.delete(to.toLowerCase());
+        activeCalls.delete(from.toLowerCase());
+        if (to) {
+          activeCalls.delete(to.toLowerCase());
+        }
 
-      if (isUserOnline(to)) {
-        io.to(to.toLowerCase()).emit('call-ended', { from, reason });
+        if (to && isUserOnline(to)) {
+          io.to(to.toLowerCase()).emit('call-ended', { from, reason });
+        }
+      } catch (err) {
+        logger.error('Error in hang-up event:', err);
       }
     });
 
-    // Typing status relay
     socket.on('typing', (data) => {
-      const { recipient, isTyping } = data;
-      const sender = socket.user.username;
+      try {
+        const { recipient, isTyping } = data || {};
+        const sender = socket.user.username;
 
-      if (isUserOnline(recipient)) {
-        io.to(recipient.toLowerCase()).emit('user-typing', { username: sender, isTyping });
+        if (recipient && typeof recipient === 'string' && recipient.length <= 50 && isUserOnline(recipient)) {
+          io.to(recipient.toLowerCase()).emit('user-typing', { username: sender, isTyping: Boolean(isTyping) });
+        }
+      } catch (err) {
+        logger.error('Error in typing event:', err);
       }
     });
 
-    // Client disconnected
     socket.on('disconnect', () => {
-      console.log(`User disconnected: ${username} (Socket ID: ${socket.id})`);
+      clearInterval(resetTimer);
+      logger.info(`User disconnected: ${username} (Socket ID: ${socket.id})`);
       
-      // Clean up any call sessions involving the disconnected user
       for (const [callerKey, session] of activeCalls.entries()) {
         if (session.caller.toLowerCase() === username.toLowerCase() || session.recipient.toLowerCase() === username.toLowerCase()) {
           const partner = session.caller.toLowerCase() === username.toLowerCase() ? session.recipient : session.caller;

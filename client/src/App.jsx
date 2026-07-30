@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ShieldAlert, X, ShieldCheck } from 'lucide-react';
+import { ShieldAlert, X, ShieldCheck, WifiOff, RefreshCw } from 'lucide-react';
 
 // ==========================================
 // E2EE Safety Fingerprint Helper (Synchronous Hash)
@@ -252,6 +252,23 @@ export default function App() {
     }
   }, [lightboxImageSrc]);
 
+  // Network & Socket Connectivity tracking state
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isSocketConnected, setIsSocketConnected] = useState(true);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   const handleOpenLightbox = (src) => {
     setLightboxImageSrc(src);
     if (window.history.state !== 'lightbox') {
@@ -259,11 +276,13 @@ export default function App() {
     }
   };
 
-  const handleCloseLightbox = () => {
+  const handleCloseLightbox = (e) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
+    setLightboxImageSrc(null);
     if (window.history.state === 'lightbox') {
-      window.history.back();
-    } else {
-      setLightboxImageSrc(null);
+      window.history.replaceState(activeContactRef.current ? 'chat' : null, '');
     }
   };
 
@@ -278,6 +297,10 @@ export default function App() {
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
       { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'stun:stun.services.mozilla.com:3478' },
+      { urls: 'stun:stun.nextcloud.com:443' },
       {
         urls: 'turn:openrelay.metered.ca:80',
         username: 'openrelay',
@@ -334,7 +357,11 @@ export default function App() {
           uniqueContacts.push(contact);
         }
       }
-      localStorage.setItem(`contacts_${currentUser.username}`, JSON.stringify(uniqueContacts));
+      try {
+        localStorage.setItem(`contacts_${currentUser.username}`, JSON.stringify(uniqueContacts));
+      } catch (err) {
+        console.warn('LocalStorage quota exceeded while persisting chat history:', err.message);
+      }
     }
   }, [contacts, currentUser]);
 
@@ -513,18 +540,25 @@ export default function App() {
     };
 
     const handleConnect = () => {
-        contactsRef.current.forEach(async (c) => {
-          try {
-            const res = await emitGetUserStatus(c.username);
-            updateContactProfileAndStatus(c.username, res.status, res.displayName, res.avatarIcon);
-          } catch (e) {
+      setIsSocketConnected(true);
+      contactsRef.current.forEach(async (c) => {
+        try {
+          const res = await emitGetUserStatus(c.username);
+          updateContactProfileAndStatus(c.username, res.status, res.displayName, res.avatarIcon);
+        } catch (e) {
           console.error('Failed to fetch status for contact:', c.username, e);
         }
       });
       syncOfflineMessages();
     };
 
+    const handleDisconnect = () => {
+      setIsSocketConnected(false);
+    };
+
     socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleDisconnect);
     if (socket.connected) {
       handleConnect();
     }
@@ -636,9 +670,25 @@ export default function App() {
     socket.on('answer-made', async ({ answer, from }) => {
       console.log(`Received call answer from ${from}`);
       if (peerConnectionRef.current) {
-        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-        callStartTime.current = Date.now();
-        setCallState('connected');
+        try {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+          
+          // Flush any ICE candidates queued before remoteDescription was set
+          while (iceCandidatesQueue.current.length > 0) {
+            const cand = iceCandidatesQueue.current.shift();
+            try {
+              await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (e) {
+              console.error('Error adding queued ICE candidate on caller:', e);
+            }
+          }
+
+          callStartTime.current = Date.now();
+          setCallState('connected');
+        } catch (err) {
+          console.error('Error setting remote description from answer:', err);
+          cleanupCall(true, 'Connection failed');
+        }
       }
     });
 
@@ -678,6 +728,8 @@ export default function App() {
       unsubscribeFromUserStatus(handleStatusChange);
       unsubscribeFromProfileUpdates(handleProfileUpdate);
       socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleDisconnect);
       socket.off('user-typing');
       socket.off('messages-delivered');
       socket.off('messages-read');
@@ -736,6 +788,13 @@ export default function App() {
     return secret;
   };
 
+  // Pre-derive E2EE session key in background as soon as activeContact is selected
+  useEffect(() => {
+    if (activeContact && currentUser?.keys?.privateIdentityKey && activeContact.publicIdentityKey) {
+      getSharedSecret(activeContact).catch(err => console.error('Key pre-derivation error:', err));
+    }
+  }, [activeContact, currentUser]);
+
   // ==========================================
   // E2EE Sending Messaging Flow
   // ==========================================
@@ -774,7 +833,7 @@ export default function App() {
       appendMessageToContact(recipient, localMsg);
     } catch (err) {
       console.error('E2EE encryption/sending failed:', err);
-      alert('Failed to send encrypted message.');
+      alert(`Failed to send message: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -890,7 +949,7 @@ export default function App() {
       if (exists) {
         return prev.map(c => {
           if (c.username.toLowerCase() === contactName.toLowerCase()) {
-            if (c.messages.some(m => m.id === msg.id)) return c;
+            if (msg.id && c.messages.some(m => m.id === msg.id)) return c;
 
             const isCurrentActive = activeContactRef.current?.username.toLowerCase() === contactName.toLowerCase();
             return {
@@ -1140,8 +1199,13 @@ export default function App() {
   // Helper: Block/Delete contact
   const handleBlockContact = (username) => {
     if (window.confirm(`Delete conversation and remove @${username}?`)) {
+      if (username) {
+        delete sharedSecrets.current[username.toLowerCase()];
+      }
       setContacts(prev => prev.filter(c => c.username.toLowerCase() !== username.toLowerCase()));
-      setActiveContact(null);
+      if (activeContactRef.current?.username.toLowerCase() === username.toLowerCase()) {
+        setActiveContact(null);
+      }
     }
   };
 
@@ -1175,6 +1239,15 @@ export default function App() {
             candidate: event.candidate
           });
         }
+      }
+    };
+
+    // Monitor WebRTC ICE Connection State
+    pc.oniceconnectionstatechange = () => {
+      console.log(`ICE Connection State: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+        console.warn('WebRTC ICE Connection state failed or closed. Cleaning up call.');
+        cleanupCall(true, 'Connection lost');
       }
     };
 
@@ -1748,12 +1821,17 @@ export default function App() {
 
   const handleStopScreenShare = async () => {
     const stream = localStreamRef.current;
-    if (!stream || !peerConnectionRef.current) return;
+    if (stream) {
+      const screenTrack = stream.getVideoTracks()[0];
+      if (screenTrack) {
+        screenTrack.stop();
+        stream.removeTrack(screenTrack);
+      }
+    }
 
-    const screenTrack = stream.getVideoTracks()[0];
-    if (screenTrack) {
-      screenTrack.stop();
-      stream.removeTrack(screenTrack);
+    if (!peerConnectionRef.current) {
+      setIsScreenSharing(false);
+      return;
     }
 
     let restoredTrack = originalVideoTrackRef.current;
@@ -1888,6 +1966,8 @@ export default function App() {
   // Secure sign out
   const handleLogout = () => {
     if (window.confirm("Sign out? Your keys are stored client-side. Make sure you know your password to log back in!")) {
+      cleanupCall();
+      disconnectSocket();
       localStorage.removeItem('session_enc_key');
       localStorage.removeItem('chatra_username');
       localStorage.removeItem('chatra_token');
@@ -1900,6 +1980,7 @@ export default function App() {
       setContacts([]);
       setActiveContact(null);
       setShowSettings(false);
+      setShowRecents(false);
       sharedSecrets.current = {};
     }
   };
@@ -1945,6 +2026,24 @@ export default function App() {
           const isAppMinimized = sidebarMinimized && !isMobileSize;
           return (
             <div className={`app-container ${((activeContact || showSettings || showRecents) && !isNavigatingBack) ? 'chat-active' : ''} ${isAppMinimized ? 'sidebar-minimized' : ''}`}>
+              
+              {/* Network & Server Connectivity Status Bar */}
+              {(!isOnline || !isSocketConnected) && (
+                <div className={`connectivity-banner ${!isOnline ? 'offline' : 'connecting'}`}>
+                  {!isOnline ? (
+                    <>
+                      <WifiOff size={16} />
+                      <span>No Internet Connection — Reconnecting when Wi-Fi is restored...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={16} className="spin-icon" />
+                      <span>Connecting to Chatra Server...</span>
+                    </>
+                  )}
+                </div>
+              )}
+
               <Sidebar
                 currentUser={currentUser}
                 contacts={contacts}
@@ -2062,7 +2161,7 @@ export default function App() {
               <X size={24} />
             </button>
             {activeLightboxSrc && (
-              <img src={activeLightboxSrc} className="lightbox-image" alt="Decrypted Preview" />
+              <img src={activeLightboxSrc} className="lightbox-image" alt="Decrypted Preview" onClick={(e) => e.stopPropagation()} />
             )}
           </div>
 

@@ -15,17 +15,25 @@ export const bufferToBase64 = (buffer) => {
 
 // Helper: Convert Base64 string to ArrayBuffer
 export const base64ToBuffer = (base64) => {
-  const binary = window.atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+  if (!base64 || typeof base64 !== 'string') {
+    return new ArrayBuffer(0);
   }
-  return bytes.buffer;
+  try {
+    const binary = window.atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+  } catch (e) {
+    console.error('Base64 decode failure:', e);
+    return new ArrayBuffer(0);
+  }
 };
 
 // Helper: Convert string to ArrayBuffer
 const stringToBuffer = (str) => {
-  return new TextEncoder().encode(str);
+  return new TextEncoder().encode(str || '');
 };
 
 // Helper: Convert ArrayBuffer to string
@@ -57,7 +65,7 @@ export const deriveKeysFromPassword = async (password, username) => {
     {
       name: 'PBKDF2',
       salt: salt,
-      iterations: 100000,
+      iterations: 600000,
       hash: 'SHA-256'
     },
     baseKey,
@@ -93,7 +101,7 @@ export const generateKeyPairs = async () => {
       name: 'ECDH',
       namedCurve: 'P-256'
     },
-    true, // extractable (necessary to export public key and encrypt/backup private key)
+    true, // extractable
     ['deriveKey', 'deriveBits']
   );
 
@@ -143,9 +151,26 @@ export const encryptAndBackupPrivateKeys = async (identityPrivateKey, signingPri
  * Decrypt private keys restored from the server using the user's password-derived key.
  */
 export const decryptRestoredPrivateKeys = async (encryptedBackup, backupKey) => {
-  const { ciphertext, iv } = encryptedBackup;
+  let backup = encryptedBackup;
+  if (typeof backup === 'string') {
+    try {
+      backup = JSON.parse(backup);
+    } catch (e) {
+      console.error('Failed to parse encrypted backup JSON:', e);
+    }
+  }
+
+  if (!backup || !backup.ciphertext || !backup.iv) {
+    throw new Error('Invalid or missing encrypted private key backup data.');
+  }
+
+  const { ciphertext, iv } = backup;
   const ciphertextBuffer = base64ToBuffer(ciphertext);
   const ivBuffer = base64ToBuffer(iv);
+
+  if (ciphertextBuffer.byteLength === 0 || ivBuffer.byteLength === 0) {
+    throw new Error('Malformed ciphertext or initialization vector in backup.');
+  }
 
   // Decrypt bundle
   const decryptedBuffer = await window.crypto.subtle.decrypt(
@@ -189,6 +214,10 @@ export const decryptRestoredPrivateKeys = async (encryptedBackup, backupKey) => 
  * Derive an AES-GCM shared key from our private key and their public key using ECDH.
  */
 export const deriveSharedSecret = async (ourPrivateKey, theirPublicKeyJwk) => {
+  if (!ourPrivateKey || !theirPublicKeyJwk) {
+    throw new Error('Missing private or public key for shared secret derivation.');
+  }
+
   // Import their public key from JWK format
   const theirPublicKey = await window.crypto.subtle.importKey(
     'jwk',
@@ -246,6 +275,10 @@ export const decryptMessage = async (ciphertext, sharedKey, ivBase64) => {
   const ciphertextBuffer = base64ToBuffer(ciphertext);
   const ivBuffer = base64ToBuffer(ivBase64);
 
+  if (ciphertextBuffer.byteLength === 0 || ivBuffer.byteLength === 0) {
+    throw new Error('Invalid Base64 payload or IV for message decryption.');
+  }
+
   const decryptedBuffer = await window.crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
@@ -262,6 +295,10 @@ export const decryptMessage = async (ciphertext, sharedKey, ivBase64) => {
  * Sign data using our private signing key.
  */
 export const signData = async (dataString, privateSigningKey) => {
+  if (!dataString || !privateSigningKey) {
+    return '';
+  }
+
   const dataBuffer = stringToBuffer(dataString);
 
   const signatureBuffer = await window.crypto.subtle.sign(
@@ -280,28 +317,41 @@ export const signData = async (dataString, privateSigningKey) => {
  * Verify data using their public signing key.
  */
 export const verifyDataSignature = async (dataString, signatureBase64, theirPublicKeyJwk) => {
-  const dataBuffer = stringToBuffer(dataString);
-  const signatureBuffer = base64ToBuffer(signatureBase64);
+  if (!dataString || !signatureBase64 || !theirPublicKeyJwk) {
+    return false;
+  }
 
-  // Import their public signing key from JWK format
-  const theirPublicKey = await window.crypto.subtle.importKey(
-    'jwk',
-    theirPublicKeyJwk,
-    {
-      name: 'ECDSA',
-      namedCurve: 'P-256'
-    },
-    true,
-    ['verify']
-  );
+  try {
+    const dataBuffer = stringToBuffer(dataString);
+    const signatureBuffer = base64ToBuffer(signatureBase64);
 
-  return await window.crypto.subtle.verify(
-    {
-      name: 'ECDSA',
-      hash: { name: 'SHA-256' }
-    },
-    theirPublicKey,
-    signatureBuffer,
-    dataBuffer
-  );
+    if (signatureBuffer.byteLength === 0) {
+      return false;
+    }
+
+    // Import their public signing key from JWK format
+    const theirPublicKey = await window.crypto.subtle.importKey(
+      'jwk',
+      theirPublicKeyJwk,
+      {
+        name: 'ECDSA',
+        namedCurve: 'P-256'
+      },
+      true,
+      ['verify']
+    );
+
+    return await window.crypto.subtle.verify(
+      {
+        name: 'ECDSA',
+        hash: { name: 'SHA-256' }
+      },
+      theirPublicKey,
+      signatureBuffer,
+      dataBuffer
+    );
+  } catch (e) {
+    console.error('Signature verification error:', e);
+    return false;
+  }
 };

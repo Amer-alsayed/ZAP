@@ -16,7 +16,10 @@ export const connectSocket = (token) => {
   socket = io(BASE_URL, {
     auth: { token },
     autoConnect: true,
-    reconnection: true
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
   });
 
   socket.on('connect', () => {
@@ -50,49 +53,82 @@ export const disconnectSocket = () => {
 export const getSocket = () => socket;
 
 /**
+ * Helper to wrap socket emit callback in a promise with connection waiting & timeout guard.
+ */
+const emitWithTimeout = (eventName, payload, timeoutMs = 15000) => {
+  return new Promise((resolve, reject) => {
+    if (!socket) {
+      return reject(new Error('Socket connection not initialized. Please refresh.'));
+    }
+
+    const checkAndEmit = () => {
+      let timer = setTimeout(() => {
+        timer = null;
+        reject(new Error('Request timed out. Please check server connection.'));
+      }, timeoutMs);
+
+      socket.emit(eventName, payload, (response) => {
+        if (!timer) return;
+        clearTimeout(timer);
+        
+        if (response && response.error) {
+          reject(new Error(response.error));
+        } else {
+          resolve(response);
+        }
+      });
+    };
+
+    if (socket.connected) {
+      checkAndEmit();
+    } else {
+      // If socket is currently connecting/reconnecting, wait up to 4 seconds for connection
+      const connectHandler = () => {
+        cleanup();
+        checkAndEmit();
+      };
+      const errorHandler = (err) => {
+        cleanup();
+        reject(new Error(`Socket connection error: ${err.message || 'Disconnected'}`));
+      };
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('Socket disconnected. Please check your network connection.'));
+      }, 4000);
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        socket.off('connect', connectHandler);
+        socket.off('connect_error', errorHandler);
+      };
+
+      socket.once('connect', connectHandler);
+      socket.once('connect_error', errorHandler);
+    }
+  });
+};
+
+/**
  * Send encrypted message payload to the server.
  */
 export const emitSendMessage = (recipient, ciphertext, iv, signature) => {
-  return new Promise((resolve, reject) => {
-    if (!socket) return reject(new Error('Socket not connected'));
-
-    socket.emit('send-message', { recipient, ciphertext, iv, signature }, (response) => {
-      if (response.error) {
-        reject(new Error(response.error));
-      } else {
-        resolve(response);
-      }
-    });
-  });
+  return emitWithTimeout('send-message', { recipient, ciphertext, iv, signature });
 };
 
 /**
  * Fetch chat history with a specific user.
  */
 export const emitGetChatHistory = (withUser) => {
-  return new Promise((resolve, reject) => {
-    if (!socket) return reject(new Error('Socket not connected'));
-
-    socket.emit('get-chat-history', { withUser }, (response) => {
-      if (response.error) {
-        reject(new Error(response.error));
-      } else {
-        resolve(response.messages);
-      }
-    });
-  });
+  return emitWithTimeout('get-chat-history', { withUser }).then(res => res.messages || []);
 };
 
 /**
  * Check user online/offline status.
  */
 export const emitGetUserStatus = (targetUsername) => {
-  return new Promise((resolve, reject) => {
-    if (!socket) return reject(new Error('Socket not connected'));
-
-    socket.emit('get-user-status', targetUsername, (response) => {
-      resolve(response); // Returns full response including status, displayName, and avatarIcon
-    });
+  return emitWithTimeout('get-user-status', targetUsername).catch(err => {
+    console.warn(`Failed to fetch status for ${targetUsername}:`, err.message);
+    return { username: targetUsername, status: 'offline' };
   });
 };
 
@@ -100,7 +136,7 @@ export const emitGetUserStatus = (targetUsername) => {
  * Mark all unread messages from a contact as read.
  */
 export const emitMarkAsRead = (sender) => {
-  if (socket) {
+  if (socket && socket.connected) {
     socket.emit('mark-as-read', { sender });
   }
 };
@@ -133,16 +169,7 @@ export const unsubscribeFromUserStatus = (callback) => {
  * Emit profile update (display name and custom avatar emoji/color).
  */
 export const emitUpdateProfile = (displayName, avatarIcon) => {
-  return new Promise((resolve, reject) => {
-    if (!socket) return reject(new Error('Socket not connected'));
-    socket.emit('update-profile', { displayName, avatarIcon }, (response) => {
-      if (response && response.error) {
-        reject(new Error(response.error));
-      } else {
-        resolve(response);
-      }
-    });
-  });
+  return emitWithTimeout('update-profile', { displayName, avatarIcon });
 };
 
 /**

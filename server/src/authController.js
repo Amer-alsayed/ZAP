@@ -1,8 +1,19 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { dbGet, dbRun } from './db.js';
+import config from './config.js';
+import logger from './logger.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secure-chatra-secret-key-12345';
+const safeJsonParse = (val) => {
+  if (!val) return null;
+  if (typeof val === 'object') return val;
+  try {
+    return JSON.parse(val);
+  } catch (e) {
+    logger.error('safeJsonParse error:', e);
+    return null;
+  }
+};
 
 export const register = async (req, res) => {
   const { username, loginHash, publicIdentityKey, publicSigningKey, encryptedPrivateKeys } = req.body;
@@ -17,8 +28,12 @@ export const register = async (req, res) => {
     return res.status(400).json({ error: 'Username must be 3-20 alphanumeric characters or underscores' });
   }
 
+  if (typeof loginHash !== 'string' || loginHash.length > 512) {
+    return res.status(400).json({ error: 'Invalid login authentication data format' });
+  }
+
   try {
-    // Check if user exists (case-insensitive check is safer)
+    // Check if user exists (case-insensitive check)
     const existingUser = await dbGet('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [username]);
     if (existingUser) {
       return res.status(400).json({ error: 'Username is already taken' });
@@ -32,11 +47,19 @@ export const register = async (req, res) => {
     const result = await dbRun(
       `INSERT INTO users (username, password_hash, public_identity_key, public_signing_key, encrypted_private_keys)
        VALUES (?, ?, ?, ?, ?)`,
-      [username, passwordHash, JSON.stringify(publicIdentityKey), JSON.stringify(publicSigningKey), JSON.stringify(encryptedPrivateKeys)]
+      [
+        username, 
+        passwordHash, 
+        typeof publicIdentityKey === 'string' ? publicIdentityKey : JSON.stringify(publicIdentityKey), 
+        typeof publicSigningKey === 'string' ? publicSigningKey : JSON.stringify(publicSigningKey), 
+        typeof encryptedPrivateKeys === 'string' ? encryptedPrivateKeys : JSON.stringify(encryptedPrivateKeys)
+      ]
     );
 
     // Create JWT Token
-    const token = jwt.sign({ id: result.id, username }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: result.id, username }, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+
+    logger.info(`User registered successfully: ${username}`);
 
     return res.status(201).json({
       message: 'User registered successfully',
@@ -48,7 +71,7 @@ export const register = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    logger.error('Registration error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -56,8 +79,8 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   const { username, loginHash } = req.body;
 
-  if (!username || !loginHash) {
-    return res.status(400).json({ error: 'Username and login password are required' });
+  if (!username || typeof username !== 'string' || username.length > 50 || !loginHash || typeof loginHash !== 'string' || loginHash.length > 512) {
+    return res.status(400).json({ error: 'Invalid username or password format' });
   }
 
   try {
@@ -74,50 +97,51 @@ export const login = async (req, res) => {
     }
 
     // Create JWT Token
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, username: user.username }, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+
+    logger.info(`Login successful: ${user.username}`);
 
     return res.status(200).json({
       message: 'Login successful',
       token,
       user: {
         username: user.username,
-        publicIdentityKey: JSON.parse(user.public_identity_key),
-        publicSigningKey: JSON.parse(user.public_signing_key),
-        encryptedPrivateKeys: JSON.parse(user.encrypted_private_keys)
+        publicIdentityKey: safeJsonParse(user.public_identity_key),
+        publicSigningKey: safeJsonParse(user.public_signing_key),
+        encryptedPrivateKeys: safeJsonParse(user.encrypted_private_keys)
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 export const searchUser = async (req, res) => {
   const { username } = req.query;
-  console.log('Search user request received. Query username:', username);
 
-  if (!username) {
-    return res.status(400).json({ error: 'Query parameter "username" is required' });
+  if (!username || typeof username !== 'string' || username.length > 50) {
+    return res.status(400).json({ error: 'Query parameter "username" is required and must be valid' });
   }
 
   const trimmedUsername = username.trim();
 
   try {
     const user = await dbGet('SELECT username, public_identity_key, public_signing_key, display_name, avatar_icon FROM users WHERE LOWER(username) = LOWER(?)', [trimmedUsername]);
-    console.log('Database user query result:', user);
+    
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     return res.status(200).json({
       username: user.username,
-      publicIdentityKey: JSON.parse(user.public_identity_key),
-      publicSigningKey: JSON.parse(user.public_signing_key),
+      publicIdentityKey: safeJsonParse(user.public_identity_key),
+      publicSigningKey: safeJsonParse(user.public_signing_key),
       displayName: user.display_name,
       avatarIcon: user.avatar_icon
     });
   } catch (error) {
-    console.error('Search user error:', error);
+    logger.error('Search user error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

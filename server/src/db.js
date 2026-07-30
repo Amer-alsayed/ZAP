@@ -1,60 +1,84 @@
 import sqlite3 from 'sqlite3';
 import pg from 'pg';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import config from './config.js';
+import logger from './logger.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const isPostgres = !!process.env.DATABASE_URL;
+const isPostgres = !!config.dbUrl;
 let db = null;
 let pgPool = null;
 
 if (isPostgres) {
-  console.log('PostgreSQL DATABASE_URL detected. Connecting to Cloud Database...');
+  logger.info('PostgreSQL DATABASE_URL detected. Connecting to Cloud Database...');
   pgPool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: config.dbUrl,
     ssl: {
       rejectUnauthorized: false
     }
   });
+
+  pgPool.on('error', (err) => {
+    logger.error('Unexpected error on idle PostgreSQL client:', err);
+  });
 } else {
-  const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../chatra.db');
-  db = new sqlite3.Database(dbPath, (err) => {
+  db = new sqlite3.Database(config.dbPath, (err) => {
     if (err) {
-      console.error('Error connecting to SQLite database:', err.message);
+      logger.error('Error connecting to SQLite database:', err);
     } else {
-      console.log(`Connected to the SQLite database at: ${dbPath}`);
+      logger.info(`Connected to SQLite database at: ${config.dbPath}`);
+      db.run('PRAGMA journal_mode = WAL;');
+      db.run('PRAGMA synchronous = NORMAL;');
+      db.configure('busyTimeout', 5000);
     }
   });
 }
 
-// Helper functions to wrap database queries in Promises
-export const dbRun = (query, params = []) => {
-  if (isPostgres) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        let sql = query
-          .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'SERIAL PRIMARY KEY')
-          .replace(/DATETIME DEFAULT CURRENT_TIMESTAMP/g, 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
-        
-        // Append RETURNING id if it's an INSERT query and doesn't have it
-        if (sql.trim().toUpperCase().startsWith('INSERT') && !sql.toUpperCase().includes('RETURNING')) {
-          sql += ' RETURNING id';
-        }
-        
-        // Replace ? with $1, $2...
-        let index = 1;
-        sql = sql.replace(/\?/g, () => `$${index++}`);
+/**
+ * Safely converts SQLite positional `?` placeholders to PostgreSQL `$1, $2` parameters,
+ * bypassing question marks contained within single-quoted string literals.
+ */
+function convertSqlPlaceholders(sql) {
+  let paramIndex = 1;
+  let inString = false;
+  let result = '';
 
-        const res = await pgPool.query(sql, params);
-        resolve({
-          id: res.rows[0]?.id || null,
-          changes: res.rowCount
-        });
-      } catch (err) {
-        reject(err);
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    if (char === "'") {
+      // Toggle string literal boundary (ignoring escaped quotes '')
+      if (inString && sql[i + 1] === "'") {
+        result += "''";
+        i++;
+        continue;
       }
-    });
+      inString = !inString;
+      result += char;
+    } else if (char === '?' && !inString) {
+      result += `$${paramIndex++}`;
+    } else {
+      result += char;
+    }
+  }
+
+  return result;
+}
+
+// Helper functions to wrap database queries in Promises
+export const dbRun = async (query, params = []) => {
+  if (isPostgres) {
+    let sql = query
+      .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'SERIAL PRIMARY KEY')
+      .replace(/DATETIME DEFAULT CURRENT_TIMESTAMP/g, 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+    
+    if (sql.trim().toUpperCase().startsWith('INSERT') && !sql.toUpperCase().includes('RETURNING')) {
+      sql += ' RETURNING id';
+    }
+    
+    sql = convertSqlPlaceholders(sql);
+    const res = await pgPool.query(sql, params);
+    return {
+      id: res.rows[0]?.id || null,
+      changes: res.rowCount
+    };
   } else {
     return new Promise((resolve, reject) => {
       db.run(query, params, function (err) {
@@ -68,18 +92,11 @@ export const dbRun = (query, params = []) => {
   }
 };
 
-export const dbGet = (query, params = []) => {
+export const dbGet = async (query, params = []) => {
   if (isPostgres) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        let index = 1;
-        const sql = query.replace(/\?/g, () => `$${index++}`);
-        const res = await pgPool.query(sql, params);
-        resolve(res.rows[0] || null);
-      } catch (err) {
-        reject(err);
-      }
-    });
+    const sql = convertSqlPlaceholders(query);
+    const res = await pgPool.query(sql, params);
+    return res.rows[0] || null;
   } else {
     return new Promise((resolve, reject) => {
       db.get(query, params, (err, row) => {
@@ -93,18 +110,11 @@ export const dbGet = (query, params = []) => {
   }
 };
 
-export const dbAll = (query, params = []) => {
+export const dbAll = async (query, params = []) => {
   if (isPostgres) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        let index = 1;
-        const sql = query.replace(/\?/g, () => `$${index++}`);
-        const res = await pgPool.query(sql, params);
-        resolve(res.rows);
-      } catch (err) {
-        reject(err);
-      }
-    });
+    const sql = convertSqlPlaceholders(query);
+    const res = await pgPool.query(sql, params);
+    return res.rows;
   } else {
     return new Promise((resolve, reject) => {
       db.all(query, params, (err, rows) => {
@@ -115,6 +125,19 @@ export const dbAll = (query, params = []) => {
         }
       });
     });
+  }
+};
+
+/**
+ * Health check probe for database connectivity
+ */
+export const dbPing = async () => {
+  try {
+    const res = await dbGet('SELECT 1 as alive');
+    return Boolean(res && (res.alive == 1 || res.alive === '1'));
+  } catch (err) {
+    logger.error('Database health ping failed:', err);
+    return false;
   }
 };
 
@@ -151,21 +174,26 @@ export const initDb = async () => {
     // Dynamic schema migrations: add display_name and avatar_icon if they do not exist
     try {
       await dbRun('ALTER TABLE users ADD COLUMN display_name TEXT');
-      console.log('Database migration: Added display_name column to users table.');
+      logger.info('Database migration: Added display_name column to users table.');
     } catch (e) {
       // Column already exists
     }
 
     try {
       await dbRun('ALTER TABLE users ADD COLUMN avatar_icon TEXT');
-      console.log('Database migration: Added avatar_icon column to users table.');
+      logger.info('Database migration: Added avatar_icon column to users table.');
     } catch (e) {
       // Column already exists
     }
 
-    console.log('Database tables initialized successfully.');
+    // Database indexes for high performance query resolution
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender, recipient)');
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_pending ON messages(recipient, delivered)');
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+
+    logger.info('Database tables and performance indexes initialized successfully.');
   } catch (error) {
-    console.error('Error initializing database tables:', error);
+    logger.error('Error initializing database tables:', error);
     process.exit(1);
   }
 };

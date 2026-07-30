@@ -136,6 +136,7 @@ export default function CallWindow({
       setPipPosition({ x: 0, y: 0 });
     }
   }, [isCallMinimized]);
+
   // Reset controls timer when call status or minimization toggles
   useEffect(() => {
     if (renderState === 'connected' && !isCallMinimized && mediaType === 'video') {
@@ -155,6 +156,7 @@ export default function CallWindow({
       }
     };
   }, []);
+
   useEffect(() => {
     return () => {
       if (closeTimerRef.current) {
@@ -212,7 +214,6 @@ export default function CallWindow({
     return `${mins.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`;
   };
 
-
   // Mouse Drag Event Handlers with viewport boundary constraints
   const handleMouseDown = (e) => {
     if (!isCallMinimized) return;
@@ -262,10 +263,10 @@ export default function CallWindow({
     document.removeEventListener('mouseup', handleMouseUp);
   };
 
-  // Touch Drag Event Handlers with viewport boundary constraints (for mobile/tablet support)
+  // Touch Drag Event Handlers with viewport boundary constraints
   const handleTouchStart = (e) => {
     if (!isCallMinimized) return;
-    if (e.target.closest('button')) return; // Ignore drag triggers on active buttons
+    if (e.target.closest('button')) return;
 
     isDraggingRef.current = true;
     dragStartRef.current = {
@@ -281,7 +282,7 @@ export default function CallWindow({
 
   const handleTouchMove = (e) => {
     if (!isDraggingRef.current) return;
-    e.preventDefault(); // Prevent page scroll during dragging
+    e.preventDefault();
     
     const dx = e.touches[0].clientX - dragStartRef.current.mouseX;
     const dy = e.touches[0].clientY - dragStartRef.current.mouseY;
@@ -312,18 +313,23 @@ export default function CallWindow({
 
   if (renderState === 'idle') return null;
 
+  const activeUsername = callContact?.username || callerName || 'Unknown';
+  const activeDisplayName = callContact?.displayName || activeUsername;
+  const activeAvatarIcon = callContact?.avatarIcon || null;
+  const isVerified = !!callContact?.isVerified;
+
   if (renderState === 'incoming') {
     return (
       <div className={`incoming-call-pill-container ${isClosing ? 'closing' : ''}`}>
         <div className="incoming-call-pill glass">
           <div className="incoming-pill-avatar">
-            {renderAvatar(callContact.username, callContact.displayName, callContact.avatarIcon, { width: '100%', height: '100%', borderRadius: '50%' })}
+            {renderAvatar(activeUsername, activeDisplayName, activeAvatarIcon, { width: '100%', height: '100%', borderRadius: '50%' })}
           </div>
           
           <div className="incoming-pill-info">
             <div className="incoming-pill-name">
-              <span>{callContact.displayName || callContact.username}</span>
-              {callContact.isVerified && <ShieldCheck size={12} style={{ color: 'var(--success-color)', marginLeft: '3px' }} />}
+              <span>{activeDisplayName}</span>
+              {isVerified && <ShieldCheck size={12} style={{ color: 'var(--success-color)', marginLeft: '3px' }} />}
             </div>
             <div className="incoming-pill-type">
               {mediaType === 'video' ? 'Incoming Video Call...' : 'Incoming Voice Call...'}
@@ -363,7 +369,7 @@ export default function CallWindow({
       {(renderState === 'calling' || renderState === 'ringing') && (
         <div className="call-card glass">
           <div className="call-avatar" style={{ overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'pulse-glow 2s infinite' }}>
-            {renderAvatar(callContact.username, callContact.displayName, callContact.avatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
+            {renderAvatar(activeUsername, activeDisplayName, activeAvatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
           </div>
           <div>
             <h2 style={{ fontSize: '22px', marginBottom: '8px' }}>
@@ -371,9 +377,9 @@ export default function CallWindow({
             </h2>
             <p style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
               <span>{renderState === 'calling' ? 'Calling' : 'Ringing'}</span>
-              <strong>{callContact.displayName || callContact.username}</strong>
-              {callContact.isVerified && <ShieldCheck size={14} style={{ color: 'var(--accent-color)' }} />}
-              <span>(@{callContact.username})...</span>
+              <strong>{activeDisplayName}</strong>
+              {isVerified && <ShieldCheck size={14} style={{ color: 'var(--accent-color)' }} />}
+              <span>(@{activeUsername})...</span>
             </p>
           </div>
           <div className="call-actions">
@@ -407,10 +413,10 @@ export default function CallWindow({
               ) : (
                 <div className="remote-video-avatar-container">
                   <div className="call-avatar" style={{ width: '100px', height: '100px', fontSize: '40px', border: '3px solid rgba(255,255,255,0.08)', animation: 'pulse-glow 2.5s infinite' }}>
-                    {renderAvatar(callContact.username, callContact.displayName, callContact.avatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
+                    {renderAvatar(activeUsername, activeDisplayName, activeAvatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
                   </div>
                   <span className="remote-avatar-label">
-                    {callContact.displayName || callContact.username}'s Camera is Off
+                    {activeDisplayName}'s Camera is Off
                   </span>
                 </div>
               )}
@@ -459,7 +465,6 @@ export default function CallWindow({
                   </button>
                 )}
                 
-                
                 <button 
                   className={`call-btn mute ${isFullscreen ? 'active' : ''}`} 
                   onClick={toggleBrowserFullscreen}
@@ -502,15 +507,15 @@ export default function CallWindow({
             // Voice call UI
             <div className="call-card glass">
               <div className="call-avatar" style={{ overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'pulse-glow 2s infinite' }}>
-                {renderAvatar(callContact.username, callContact.displayName, callContact.avatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
+                {renderAvatar(activeUsername, activeDisplayName, activeAvatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
               </div>
               <div>
                 <h2 style={{ fontSize: '22px', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                  {callContact.displayName || callContact.username}
-                  {callContact.isVerified && <ShieldCheck size={18} style={{ color: 'var(--accent-color)' }} />}
+                  {activeDisplayName}
+                  {isVerified && <ShieldCheck size={18} style={{ color: 'var(--accent-color)' }} />}
                 </h2>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '0', marginBottom: '12px', fontFamily: 'monospace' }}>
-                  @{callContact.username}
+                  @{activeUsername}
                 </p>
                 <p style={{ color: 'var(--success-color)', fontWeight: '500', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '14px' }}>
                   <Volume2 size={16} /> Secure E2EE Connection

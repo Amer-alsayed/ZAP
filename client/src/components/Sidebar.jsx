@@ -3,8 +3,15 @@ import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Ph
 import { searchUser } from '../services/api';
 import { emitGetUserStatus } from '../services/socket';
 
+const formatSidebarTime = (timestamp) => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
 export const renderAvatar = (username, displayName, avatarIcon, customSizeStyle = {}) => {
-  const displayInitials = (displayName || username).substring(0, 2).toUpperCase();
+  const displayInitials = (displayName || username || 'U').substring(0, 2).toUpperCase();
   
   let avatarColor = '#0a84ff'; // default accent blue
   let avatarEmoji = null;
@@ -82,7 +89,7 @@ export const renderAvatar = (username, displayName, avatarIcon, customSizeStyle 
 export const renderLastMessagePreview = (lastMsg, currentUser) => {
   if (!lastMsg) return 'No messages yet';
 
-  const isSentByMe = lastMsg.sender?.toLowerCase() === currentUser.username?.toLowerCase();
+  const isSentByMe = lastMsg.sender?.toLowerCase() === currentUser?.username?.toLowerCase();
 
   const renderTicks = () => {
     if (!isSentByMe) return null;
@@ -194,7 +201,7 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
     // Get current order of usernames in list
     const currentOrder = filteredContacts.map(c => c.username);
     
-    // Only run reordering animations if the contact list order changed (not length shifts or content size changes)
+    // Only run reordering animations if the contact list order changed
     const isOrderChanged = prevOrderRef.current.length > 0 && 
       prevOrderRef.current.length === currentOrder.length && 
       prevOrderRef.current.some((username, index) => username !== currentOrder[index]);
@@ -248,7 +255,13 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
   const handleSearch = async (e) => {
     e.preventDefault();
     const query = searchQuery.trim();
-    if (!query || query.toLowerCase() === currentUser.username.toLowerCase()) return;
+    if (!query) return;
+
+    if (query.toLowerCase() === currentUser?.username?.toLowerCase()) {
+      setSearchError('You cannot search or add your own username.');
+      setSearchResult(null);
+      return;
+    }
 
     setLoadingSearch(true);
     setSearchError('');
@@ -272,7 +285,7 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
       avatarIcon: searchResult.avatarIcon,
       publicIdentityKey: searchResult.publicIdentityKey,
       publicSigningKey: searchResult.publicSigningKey,
-      status: 'offline', // Will check dynamically
+      status: 'offline',
       unreadCount: 0
     });
     setSearchResult(null);
@@ -284,8 +297,8 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
       const aLastMsg = a.messages && a.messages.length > 0 ? a.messages[a.messages.length - 1] : null;
       const bLastMsg = b.messages && b.messages.length > 0 ? b.messages[b.messages.length - 1] : null;
       
-      const aTime = aLastMsg ? new Date(aLastMsg.timestamp).getTime() : 0;
-      const bTime = bLastMsg ? new Date(bLastMsg.timestamp).getTime() : 0;
+      const aTime = (aLastMsg && !isNaN(new Date(aLastMsg.timestamp).getTime())) ? new Date(aLastMsg.timestamp).getTime() : 0;
+      const bTime = (bLastMsg && !isNaN(new Date(bLastMsg.timestamp).getTime())) ? new Date(bLastMsg.timestamp).getTime() : 0;
       
       return bTime - aTime; // Newest messages at the top
     })
@@ -323,10 +336,10 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
           />
         </form>
 
-        {loadingSearch && <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center' }}>Searching...</div>}
+        {loadingSearch && <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '8px' }}>Searching...</div>}
         
         {searchError && (
-          <div style={{ fontSize: '13px', color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ fontSize: '13px', color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px' }}>
             <ShieldAlert size={14} /> {searchError}
           </div>
         )}
@@ -404,7 +417,7 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
                       </span>
                       {lastMsg && (
                         <span className="last-msg-time">
-                          {new Date(lastMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {formatSidebarTime(lastMsg.timestamp)}
                         </span>
                       )}
                     </div>
