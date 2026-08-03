@@ -34,7 +34,8 @@ export const config = {
   allowedOrigins,
   dbUrl: process.env.DATABASE_URL || null,
   dbPath: process.env.DATABASE_PATH || path.resolve(__dirname, '../../chatra.db'),
-  uploadsDir: path.resolve(__dirname, '../uploads')
+  uploadsDir: path.resolve(__dirname, '../uploads'),
+  mediaTtlHours: parseInt(process.env.MEDIA_TTL_HOURS || '168', 10)
 };
 
 export default config;

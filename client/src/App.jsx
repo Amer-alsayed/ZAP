@@ -23,10 +23,12 @@ const getSafetyNumber = (keyA, keyB) => {
 };
 
 import Login from './components/Login';
+import { clearMediaCache } from './services/mediaCache';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import CallWindow from './components/CallWindow';
 import SettingsView from './components/SettingsView';
+import { soundEngine } from './services/soundEffects';
 import Dashboard from './components/Dashboard';
 
 import { searchUser } from './services/api';
@@ -156,8 +158,20 @@ export default function App() {
   }, [contacts]);
 
   const [activeContact, setActiveContact] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showRecents, setShowRecents] = useState(false);
+  const [showSettings, setShowSettings] = useState(() => {
+    try {
+      return localStorage.getItem('chatra_active_view') === 'settings';
+    } catch (e) {
+      return false;
+    }
+  });
+  const [showRecents, setShowRecents] = useState(() => {
+    try {
+      return localStorage.getItem('chatra_active_view') === 'recents';
+    } catch (e) {
+      return false;
+    }
+  });
 
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
 
@@ -211,6 +225,24 @@ export default function App() {
 
   const [isCallMinimized, setIsCallMinimized] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
+
+  // Handle call sound effects for calling, incoming, connected, and idle states
+  useEffect(() => {
+    if (callState === 'calling' || callState === 'ringing') {
+      soundEngine.stopIncomingRingtone();
+      soundEngine.startOutgoingRingTone();
+    } else if (callState === 'incoming') {
+      soundEngine.stopOutgoingRingTone();
+      soundEngine.startIncomingRingtone();
+    } else if (callState === 'connected') {
+      soundEngine.stopOutgoingRingTone();
+      soundEngine.stopIncomingRingtone();
+      soundEngine.playCallConnected();
+    } else if (callState === 'idle') {
+      soundEngine.stopOutgoingRingTone();
+      soundEngine.stopIncomingRingtone();
+    }
+  }, [callState]);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const isCallMinimizedRef = useRef(false);
@@ -319,7 +351,7 @@ export default function App() {
     ]
   };
 
-  // Load contacts list on login
+  // Load contacts list on login & restore active chat state synchronously
   useEffect(() => {
     if (currentUser) {
       const stored = localStorage.getItem(`contacts_${currentUser.username}`);
@@ -340,6 +372,18 @@ export default function App() {
         // Reset online status on load
         const sanitized = uniqueContacts.map(c => ({ ...c, status: 'offline', messages: c.messages || [] }));
         setContacts(sanitized);
+
+        // Restore active chat synchronously in the exact same render tick
+        try {
+          const savedView = localStorage.getItem('chatra_active_view');
+          const savedContactName = localStorage.getItem('chatra_active_contact');
+          if (savedView === 'chat' && savedContactName) {
+            const target = sanitized.find(c => c.username.toLowerCase() === savedContactName.toLowerCase());
+            if (target) {
+              setActiveContact(target);
+            }
+          }
+        } catch (e) {}
       }
     }
   }, [currentUser]);
@@ -369,6 +413,8 @@ export default function App() {
   const activeContactRef = useRef(null);
   const showSettingsRef = useRef(false);
   const showRecentsRef = useRef(false);
+  const previousActiveContactRef = useRef(null);
+  const hasRestoredNavRef = useRef(false);
 
   useEffect(() => {
     activeContactRef.current = activeContact;
@@ -388,6 +434,8 @@ export default function App() {
   useEffect(() => {
     showRecentsRef.current = showRecents;
   }, [showRecents]);
+
+
 
   // Handle native back gestures
   useEffect(() => {
@@ -568,6 +616,7 @@ export default function App() {
       try {
         if (processAndAppendMessageRef.current) {
           await processAndAppendMessageRef.current(msg, false);
+          soundEngine.playMessageReceived();
         }
       } catch (err) {
         console.error('Failed to process incoming message:', err);
@@ -577,6 +626,9 @@ export default function App() {
 
     // Subscribe to online status changes
     const handleStatusChange = ({ username, status }) => {
+      if (status === 'online') {
+        soundEngine.playUserOnline();
+      }
       updateContactProfileAndStatus(username, status);
     };
     subscribeToUserStatus(handleStatusChange);
@@ -741,7 +793,7 @@ export default function App() {
       socket.off('call-error');
       disconnectSocket();
     };
-  }, [currentUser]);
+  }, [currentUser?.username, currentUser?.token]);
 
   const updateContactProfileAndStatus = (username, status, displayName = undefined, avatarIcon = undefined) => {
     setContacts(prev => prev.map(c => {
@@ -1085,11 +1137,20 @@ export default function App() {
     if (window.history.state !== 'chat') {
       window.history.pushState('chat', '');
     }
-    setShowSettings(false); // Instantly exit settings mode
-    setShowRecents(false);  // Instantly exit recents mode
+    setShowSettings(false);
+    setShowRecents(false);
+
     // 1. Instantly display active contact screen with cached messages to avoid blank page delays
     const cachedContact = contacts.find(c => c.username.toLowerCase() === contact.username.toLowerCase());
-    setActiveContact(cachedContact || contact);
+    const targetContact = cachedContact || contact;
+    setActiveContact(targetContact);
+
+    try {
+      localStorage.setItem('chatra_active_view', 'chat');
+      localStorage.setItem('chatra_active_contact', targetContact.username);
+    } catch (e) {
+      console.warn("Could not persist active contact navigation state:", e);
+    }
 
     try {
       // 2. Fetch conversation history from SQLite in the background
@@ -1955,6 +2016,10 @@ export default function App() {
     callStartTime.current = null;
     isCallInitiator.current = false;
     
+    soundEngine.stopOutgoingRingTone();
+    soundEngine.stopIncomingRingtone();
+    soundEngine.playCallEnded();
+    
     setIsMuted(false);
     setIsCameraOff(false);
     setIsScreenSharing(false);
@@ -1976,6 +2041,10 @@ export default function App() {
       localStorage.removeItem('chatra_public_signing_key');
       localStorage.removeItem('chatra_display_name');
       localStorage.removeItem('chatra_avatar_icon');
+      clearMediaCache();
+      localStorage.removeItem('chatra_active_view');
+      localStorage.removeItem('chatra_active_contact');
+      previousActiveContactRef.current = null;
       setCurrentUser(null);
       setContacts([]);
       setActiveContact(null);
@@ -1993,12 +2062,23 @@ export default function App() {
     if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings' || window.history.state === 'recents')) {
       window.history.back();
     }
+
+    // Context-aware back navigation: Return directly to active chat if Settings/Recents was opened from a chat
+    if (previousActiveContactRef.current && (showSettingsRef.current || showRecentsRef.current)) {
+      const prevContact = previousActiveContactRef.current;
+      previousActiveContactRef.current = null;
+      handleSelectContact(prevContact);
+      return;
+    }
+
     setIsNavigatingBack(true);
     setTimeout(() => {
       setActiveContact(null);
       setShowSettings(false);
       setShowRecents(false);
       setIsNavigatingBack(false);
+      localStorage.setItem('chatra_active_view', 'dashboard');
+      localStorage.removeItem('chatra_active_contact');
     }, 400); // Matches the 0.4s transform transition exactly!
   };
 
@@ -2059,17 +2139,36 @@ export default function App() {
               if (window.history.state !== 'settings') {
                 window.history.pushState('settings', '');
               }
-              setActiveContact(null);
-              setShowSettings(true);
+              if (activeContactRef.current) {
+                previousActiveContactRef.current = activeContactRef.current;
+              }
               setShowRecents(false);
+              setShowSettings(true);
+              try {
+                localStorage.setItem('chatra_active_view', 'settings');
+                localStorage.removeItem('chatra_active_contact');
+              } catch (e) {}
+              // Unmount ChatArea quietly underneath after SettingsView has faded in on top
+              if (activeContactRef.current) {
+                setTimeout(() => setActiveContact(null), 300);
+              }
             }}
             onShowRecents={() => {
               if (window.history.state !== 'recents') {
                 window.history.pushState('recents', '');
               }
-              setActiveContact(null);
+              if (activeContactRef.current) {
+                previousActiveContactRef.current = activeContactRef.current;
+              }
               setShowSettings(false);
               setShowRecents(true);
+              try {
+                localStorage.setItem('chatra_active_view', 'recents');
+                localStorage.removeItem('chatra_active_contact');
+              } catch (e) {}
+              if (activeContactRef.current) {
+                setTimeout(() => setActiveContact(null), 300);
+              }
             }}
           />
           <div className="main-content-pane">
@@ -2082,15 +2181,24 @@ export default function App() {
                 if (window.history.state !== 'settings') {
                   window.history.pushState('settings', '');
                 }
-                setActiveContact(null);
-                setShowSettings(true);
+                if (activeContactRef.current) {
+                  previousActiveContactRef.current = activeContactRef.current;
+                }
                 setShowRecents(false);
+                setShowSettings(true);
+                try {
+                  localStorage.setItem('chatra_active_view', 'settings');
+                  localStorage.removeItem('chatra_active_contact');
+                } catch (e) {}
+                if (activeContactRef.current) {
+                  setTimeout(() => setActiveContact(null), 300);
+                }
               }}
               onBack={handleBackToMenu}
               showBackButton={showRecents}
             />
 
-            {(showSettings || (isNavigatingBack && !activeContact)) && (
+            {(showSettings || (isNavigatingBack && !activeContact && !showRecents)) && (
               <SettingsView
                 currentUser={currentUser}
                 onBack={handleBackToMenu}
@@ -2098,6 +2206,19 @@ export default function App() {
                 isNavigatingBack={isNavigatingBack}
                 onProfileUpdate={(newProfile) => {
                   setCurrentUser(prev => prev ? { ...prev, ...newProfile } : null);
+                  // Apply updated call quality parameters dynamically if in an active call
+                  if (peerConnectionRef.current && callState === 'connected') {
+                    try {
+                      const senders = peerConnectionRef.current.getSenders();
+                      senders.forEach(sender => {
+                        if (sender && sender.track && sender.track.kind === 'video') {
+                          optimizeSenderParameters(sender, isScreenSharingRef.current);
+                        }
+                      });
+                    } catch (e) {
+                      console.warn("Failed to apply updated quality parameters live:", e);
+                    }
+                  }
                 }}
               />
             )}

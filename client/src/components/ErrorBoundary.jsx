@@ -48,9 +48,27 @@ export class ErrorBoundary extends React.Component {
             <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px', color: '#f1f5f9' }}>
               Application Encountered an Error
             </h2>
-            <p style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '24px', lineHeight: '1.5' }}>
+            <p style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '16px', lineHeight: '1.5' }}>
               Chatra encountered an unexpected error. Your encryption keys and messages remain safe.
             </p>
+            {this.state.error && (
+              <div style={{
+                marginBottom: '20px',
+                padding: '12px',
+                background: 'rgba(0, 0, 0, 0.4)',
+                borderRadius: '8px',
+                textAlign: 'left',
+                maxHeight: '100px',
+                overflowY: 'auto',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                color: '#f87171',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all'
+              }}>
+                {this.state.error.toString()}
+              </div>
+            )}
             <button
               onClick={this.handleReload}
               style={{

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Phone, PhoneOff, Video, Mic, MicOff, VideoOff, Volume2, ShieldCheck, Minimize2, Maximize2, Monitor, MonitorOff, Maximize, Minimize } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
+import { soundEngine } from '../services/soundEffects';
 
 export default function CallWindow({ 
   callState,         // 'idle' | 'calling' | 'incoming' | 'connected'
@@ -38,12 +39,63 @@ export default function CallWindow({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const overlayRef = useRef(null);
 
+  const [isSwapped, setIsSwapped] = useState(false);
+
+  // Auto-reset swap state when any screen sharing session starts/stops, or when call resets to idle
+  useEffect(() => {
+    setIsSwapped(false);
+  }, [isScreenSharing, remoteScreenSharing, callState]);
+
+  // Synchronous callback refs for 100% immediate stream attachment upon DOM insertion
+  const bindLocalVideo = (node) => {
+    localVideoRef.current = node;
+    if (node && localStream) {
+      if (node.srcObject !== localStream) {
+        node.srcObject = localStream;
+      }
+      node.play().catch(e => console.log("local play error:", e));
+    }
+  };
+
+  const bindRemoteVideo = (node) => {
+    remoteVideoRef.current = node;
+    if (node && remoteStream) {
+      if (node.srcObject !== remoteStream) {
+        node.srcObject = remoteStream;
+      }
+      node.play().catch(e => console.log("remote play error:", e));
+    }
+  };
+
+  // Bind media streams to video elements with guaranteed re-attachment on layout swap
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      localVideoRef.current.play().catch(e => console.log("local play error:", e));
+    }
+  }, [localStream, renderState, mediaType, isScreenSharing, isCameraOff, isSwapped]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+      remoteVideoRef.current.play().catch(e => console.log("remote play error:", e));
+    }
+  }, [remoteStream, renderState, mediaType, remoteScreenSharing, remoteCameraOff, isSwapped]);
+
   const toggleBrowserFullscreen = (e) => {
     if (e) {
       e.stopPropagation();
     }
     const element = overlayRef.current;
     if (!element) return;
+
+    if (isCallMinimized) {
+      setIsCallMinimized(false);
+    }
 
     if (!document.fullscreenElement) {
       element.requestFullscreen?.()
@@ -162,6 +214,7 @@ export default function CallWindow({
       if (closeTimerRef.current) {
         clearTimeout(closeTimerRef.current);
       }
+      document.body.classList.remove('dragging-pip');
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('touchmove', handleTouchMove);
@@ -169,22 +222,24 @@ export default function CallWindow({
     };
   }, []);
 
-  // Bind media streams to video elements
+  // Bind media streams to video elements with guaranteed re-attachment on layout swap
   useEffect(() => {
     if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = null;
-      localVideoRef.current.srcObject = localStream;
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
       localVideoRef.current.play().catch(e => console.log("local play error:", e));
     }
-  }, [localStream, renderState, mediaType, isScreenSharing, isCameraOff]);
+  }, [localStream, renderState, mediaType, isScreenSharing, isCameraOff, isSwapped]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = null;
-      remoteVideoRef.current.srcObject = remoteStream;
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
       remoteVideoRef.current.play().catch(e => console.log("remote play error:", e));
     }
-  }, [remoteStream, renderState, mediaType, remoteScreenSharing, remoteCameraOff]);
+  }, [remoteStream, renderState, mediaType, remoteScreenSharing, remoteCameraOff, isSwapped]);
 
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
@@ -219,6 +274,12 @@ export default function CallWindow({
     if (!isCallMinimized) return;
     if (e.target.closest('button')) return; // Ignore drag triggers on active buttons
 
+    e.preventDefault();
+    if (window.getSelection) {
+      window.getSelection().removeAllRanges();
+    }
+    document.body.classList.add('dragging-pip');
+
     isDraggingRef.current = true;
     dragStartRef.current = {
       mouseX: e.clientX,
@@ -245,11 +306,12 @@ export default function CallWindow({
     const defaultLeft = window.innerWidth - pipWidth - margin;
     const defaultTop = window.innerHeight - pipHeight - margin;
 
-    // Constraint limits (relative to default right: 24px, bottom: 24px)
-    const minX = -defaultLeft;
-    const maxX = margin;
-    const minY = -defaultTop;
-    const maxY = margin;
+    // Constraint limits (relative to default position at right: 24px, bottom: 24px)
+    // maxX = 0 and maxY = 0 prevents the PiP window from ever being pushed off-screen to the right or bottom
+    const minX = -defaultLeft + margin;
+    const maxX = 0;
+    const minY = -defaultTop + margin;
+    const maxY = 0;
 
     const targetX = Math.max(minX, Math.min(maxX, dragStartRef.current.pipX + dx));
     const targetY = Math.max(minY, Math.min(maxY, dragStartRef.current.pipY + dy));
@@ -259,6 +321,7 @@ export default function CallWindow({
 
   const handleMouseUp = () => {
     isDraggingRef.current = false;
+    document.body.classList.remove('dragging-pip');
     document.removeEventListener('mousemove', handleMouseMove);
     document.removeEventListener('mouseup', handleMouseUp);
   };
@@ -267,6 +330,12 @@ export default function CallWindow({
   const handleTouchStart = (e) => {
     if (!isCallMinimized) return;
     if (e.target.closest('button')) return;
+
+    e.preventDefault();
+    if (window.getSelection) {
+      window.getSelection().removeAllRanges();
+    }
+    document.body.classList.add('dragging-pip');
 
     isDraggingRef.current = true;
     dragStartRef.current = {
@@ -294,10 +363,10 @@ export default function CallWindow({
     const defaultLeft = window.innerWidth - pipWidth - margin;
     const defaultTop = window.innerHeight - pipHeight - margin;
 
-    const minX = -defaultLeft;
-    const maxX = margin;
-    const minY = -defaultTop;
-    const maxY = margin;
+    const minX = -defaultLeft + margin;
+    const maxX = 0;
+    const minY = -defaultTop + margin;
+    const maxY = 0;
 
     const targetX = Math.max(minX, Math.min(maxX, dragStartRef.current.pipX + dx));
     const targetY = Math.max(minY, Math.min(maxY, dragStartRef.current.pipY + dy));
@@ -307,6 +376,7 @@ export default function CallWindow({
 
   const handleTouchEnd = () => {
     isDraggingRef.current = false;
+    document.body.classList.remove('dragging-pip');
     document.removeEventListener('touchmove', handleTouchMove);
     document.removeEventListener('touchend', handleTouchEnd);
   };
@@ -403,43 +473,128 @@ export default function CallWindow({
         <>
           {mediaType === 'video' ? (
             <div className="video-grid">
-              {(!remoteCameraOff || remoteScreenSharing) ? (
-                <video 
-                  className={`remote-video ${remoteScreenSharing ? 'screen-sharing' : ''}`} 
-                  ref={remoteVideoRef} 
-                  autoPlay 
-                  playsInline 
-                />
-              ) : (
-                <div className="remote-video-avatar-container">
-                  <div className="call-avatar" style={{ width: '100px', height: '100px', fontSize: '40px', border: '3px solid rgba(255,255,255,0.08)', animation: 'pulse-glow 2.5s infinite' }}>
-                    {renderAvatar(activeUsername, activeDisplayName, activeAvatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
-                  </div>
-                  <span className="remote-avatar-label">
-                    {activeDisplayName}'s Camera is Off
-                  </span>
-                </div>
-              )}
-              
-              {(!isCameraOff || isScreenSharing) && (
-                <div className="local-video-container">
-                  <video 
-                    className="local-video" 
-                    ref={localVideoRef} 
-                    autoPlay 
-                    playsInline 
-                    muted 
-                  />
-                </div>
-              )}
+              {/* 
+                COMPREHENSIVE WEBRTC STREAM MATRIX:
+                - Default Main: Remote Screen Share > Local Screen Share > Remote Camera/Avatar.
+                - Thumbnail is rendered ONLY when the secondary stream has an active video track.
+                - Swap toggles between Main and Thumbnail streams seamlessly.
+              */}
+              {(() => {
+                const hasRemoteVideoTrack = !remoteCameraOff || remoteScreenSharing;
+                const hasLocalVideoTrack = !isCameraOff || isScreenSharing;
 
-              <div className="video-call-controls">
-                <span className="call-timer">{formatDuration(callDuration)}</span>
+                let defaultMain = 'remote';
+                if (remoteScreenSharing) {
+                  defaultMain = 'remote';
+                } else if (isScreenSharing) {
+                  defaultMain = 'local';
+                } else {
+                  defaultMain = 'remote';
+                }
+
+                const activeMainStream = isSwapped 
+                  ? (defaultMain === 'remote' ? 'local' : 'remote') 
+                  : defaultMain;
+
+                const activeThumbnailStream = activeMainStream === 'remote' ? 'local' : 'remote';
+
+                // Render thumbnail ONLY if the thumbnail stream has active video
+                const showThumbnail = !isCallMinimized && (
+                  activeThumbnailStream === 'remote' ? hasRemoteVideoTrack : hasLocalVideoTrack
+                );
+
+                return (
+                  <>
+                    {/* MAIN DISPLAY AREA */}
+                    {activeMainStream === 'remote' ? (
+                      hasRemoteVideoTrack ? (
+                        <video 
+                          className={`remote-video ${remoteScreenSharing ? 'screen-sharing' : ''}`} 
+                          ref={bindRemoteVideo} 
+                          autoPlay 
+                          playsInline 
+                        />
+                      ) : (
+                        <div className="remote-video-avatar-container">
+                          <div className="call-avatar" style={{ width: '100px', height: '100px', fontSize: '40px', border: '3px solid rgba(255,255,255,0.08)', animation: 'pulse-glow 2.5s infinite' }}>
+                            {renderAvatar(activeUsername, activeDisplayName, activeAvatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
+                          </div>
+                          <span className="remote-avatar-label">
+                            {activeDisplayName}'s Camera is Off
+                          </span>
+                        </div>
+                      )
+                    ) : (
+                      /* Main View: Local Stream */
+                      hasLocalVideoTrack ? (
+                        <video 
+                          className={`remote-video ${isScreenSharing ? 'screen-sharing local-screen-share' : 'local-screen-share'}`} 
+                          ref={bindLocalVideo} 
+                          autoPlay 
+                          playsInline 
+                          muted 
+                        />
+                      ) : (
+                        <div className="remote-video-avatar-container">
+                          <div className="call-avatar" style={{ width: '100px', height: '100px', fontSize: '40px', border: '3px solid rgba(255,255,255,0.08)', animation: 'pulse-glow 2.5s infinite' }}>
+                            {renderAvatar(activeUsername, activeDisplayName, activeAvatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
+                          </div>
+                          <span className="remote-avatar-label">
+                            Your Camera is Off
+                          </span>
+                        </div>
+                      )
+                    )}
+
+                    {/* THUMBNAIL AREA (Top-Right Clickable) */}
+                    {showThumbnail && (
+                      <div 
+                        className="local-video-container clickable-thumbnail" 
+                        onClick={() => setIsSwapped(prev => !prev)}
+                        title="Click to swap main view"
+                      >
+                        {activeThumbnailStream === 'local' ? (
+                          <>
+                            <video 
+                              className={isScreenSharing ? "local-video local-screen-share" : "local-video"} 
+                              ref={bindLocalVideo} 
+                              autoPlay 
+                              playsInline 
+                              muted 
+                            />
+                            <span className="thumbnail-badge">
+                              {isScreenSharing ? 'Your Screen (Swap)' : 'You (Swap)'}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <video 
+                              className={remoteScreenSharing ? "local-video screen-sharing" : "local-video"} 
+                              ref={bindRemoteVideo} 
+                              autoPlay 
+                              playsInline 
+                            />
+                            <span className="thumbnail-badge">
+                              {remoteScreenSharing ? `${activeDisplayName}'s Screen (Swap)` : `${activeDisplayName} (Swap)`}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* CONTROLS OVERLAY BAR */}
+              <div className={isCallMinimized ? "pip-video-call-controls" : "video-call-controls"}>
+                {!isCallMinimized && <span className="call-timer">{formatDuration(callDuration)}</span>}
                 
                 <button 
                   className={`call-btn mute ${isMuted ? 'active' : ''}`} 
-                  onClick={onToggleMute}
-                  style={{ width: '40px', height: '40px' }}
+                  onClick={() => {
+                    soundEngine.playToggleMute(!isMuted);
+                    onToggleMute();
+                  }}
                   title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
                 >
                   {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
@@ -447,8 +602,10 @@ export default function CallWindow({
                 
                 <button 
                   className={`call-btn mute ${isCameraOff ? 'active' : ''}`} 
-                  onClick={onToggleCamera}
-                  style={{ width: '40px', height: '40px' }}
+                  onClick={() => {
+                    soundEngine.playToggleMute(!isCameraOff);
+                    onToggleCamera();
+                  }}
                   title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
                 >
                   {isCameraOff ? <VideoOff size={18} /> : <Video size={18} />}
@@ -457,47 +614,56 @@ export default function CallWindow({
                 {!!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && (
                   <button 
                     className={`call-btn mute ${isScreenSharing ? 'active' : ''}`} 
-                    onClick={onToggleScreenShare}
-                    style={{ width: '40px', height: '40px' }}
+                    onClick={() => {
+                      soundEngine.playToggleMute(!isScreenSharing);
+                      onToggleScreenShare();
+                    }}
                     title={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
                   >
                     {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
                   </button>
                 )}
                 
-                <button 
-                  className={`call-btn mute ${isFullscreen ? 'active' : ''}`} 
-                  onClick={toggleBrowserFullscreen}
-                  style={{ width: '40px', height: '40px' }}
-                  title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Mode"}
-                >
-                  {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
-                </button>
+                {!isCallMinimized && (
+                  <button 
+                    className={`call-btn mute ${isFullscreen ? 'active' : ''}`} 
+                    onClick={toggleBrowserFullscreen}
+                    title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Mode"}
+                  >
+                    {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+                  </button>
+                )}
 
-                {isCallMinimized ? (
-                  <button 
-                    className="call-btn maximize" 
-                    onClick={() => setIsCallMinimized(false)}
-                    style={{ width: '40px', height: '40px' }}
-                    title="Maximize Call"
-                  >
-                    <Maximize2 size={18} />
-                  </button>
-                ) : (
-                  <button 
-                    className="call-btn minimize" 
-                    onClick={() => setIsCallMinimized(true)}
-                    style={{ width: '40px', height: '40px' }}
-                    title="Minimize Call"
-                  >
-                    <Minimize2 size={18} />
-                  </button>
+                {/* Hide PiP minimize button when in Browser Fullscreen mode to prevent UI conflict */}
+                {!isFullscreen && (
+                  isCallMinimized ? (
+                    <button 
+                      className="call-btn maximize" 
+                      onClick={() => {
+                        setIsCallMinimized(false);
+                        if (document.fullscreenElement) {
+                          document.exitFullscreen?.().catch(() => {});
+                        }
+                      }}
+                      title="Expand Call Window"
+                    >
+                      <Maximize2 size={18} />
+                    </button>
+                  ) : (
+                    <button 
+                      className="call-btn minimize" 
+                      onClick={() => setIsCallMinimized(true)}
+                      title="Minimize Call (PiP)"
+                    >
+                      <Minimize2 size={18} />
+                    </button>
+                  )
                 )}
                 
                 <button 
                   className="call-btn decline" 
                   onClick={onHangUp}
-                  style={{ width: '40px', height: '40px' }}
+                  title="End Call"
                 >
                   <PhoneOff size={18} />
                 </button>

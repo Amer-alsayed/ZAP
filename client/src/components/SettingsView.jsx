@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, User, Check, ShieldAlert, CheckCircle, LogOut, Camera } from 'lucide-react';
+import { ArrowLeft, User, Check, ShieldAlert, CheckCircle, LogOut, Camera, ChevronDown, ChevronUp, Play, Volume2 } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 import { emitUpdateProfile } from '../services/socket';
+import { soundEngine } from '../services/soundEffects';
 
 export default function SettingsView({ currentUser, onBack, onLogout, isNavigatingBack, onProfileUpdate }) {
   const settingsContainerRef = useRef(null);
@@ -33,6 +34,35 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
   const [callQuality, setCallQuality] = useState(() => {
     return localStorage.getItem('chatra_call_quality') || 'medium';
   });
+
+  const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(() => {
+    return localStorage.getItem('chatra_sound_effects') !== 'false';
+  });
+  const [soundVolume, setSoundVolume] = useState(() => {
+    const v = parseFloat(localStorage.getItem('chatra_sound_volume'));
+    return isNaN(v) ? 0.6 : v;
+  });
+
+  const [individualSounds, setIndividualSounds] = useState(() => ({
+    msg_sent: localStorage.getItem('chatra_sound_msg_sent') !== 'false',
+    msg_recv: localStorage.getItem('chatra_sound_msg_recv') !== 'false',
+    voice_rec: localStorage.getItem('chatra_sound_voice_rec') !== 'false',
+    call_dial: localStorage.getItem('chatra_sound_call_dial') !== 'false',
+    call_ring: localStorage.getItem('chatra_sound_call_ring') !== 'false',
+    call_connect: localStorage.getItem('chatra_sound_call_connect') !== 'false',
+    toggle_clicks: localStorage.getItem('chatra_sound_toggle_clicks') !== 'false',
+    user_online: localStorage.getItem('chatra_sound_user_online') !== 'false',
+  }));
+
+  const [showAdvancedSounds, setShowAdvancedSounds] = useState(false);
+
+  const toggleIndividualSound = (key) => {
+    setIndividualSounds(prev => {
+      const nextVal = !prev[key];
+      localStorage.setItem(`chatra_sound_${key}`, nextVal ? 'true' : 'false');
+      return { ...prev, [key]: nextVal };
+    });
+  };
 
   const fileInputRef = useRef(null);
 
@@ -477,6 +507,169 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                     </span>
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Sound Effects & Acoustics Settings */}
+            <div className="form-group" style={{ marginTop: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '8px' }}>Sound Effects & Acoustics</label>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-color)' }}>
+                      Audio Feedback & Ringtones
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Play subtle acoustic feedback for sent messages, calls, and incoming alerts.
+                    </div>
+                  </div>
+                  <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
+                    <input 
+                      type="checkbox" 
+                      checked={soundEffectsEnabled}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setSoundEffectsEnabled(val);
+                        localStorage.setItem('chatra_sound_effects', val ? 'true' : 'false');
+                      }}
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span style={{
+                      position: 'absolute',
+                      cursor: 'pointer',
+                      top: 0, left: 0, right: 0, bottom: 0,
+                      backgroundColor: soundEffectsEnabled ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.15)',
+                      transition: '.2s',
+                      borderRadius: '24px'
+                    }}>
+                      <span style={{
+                        position: 'absolute',
+                        content: '""',
+                        height: '18px',
+                        width: '18px',
+                        left: soundEffectsEnabled ? '22px' : '3px',
+                        bottom: '3px',
+                        backgroundColor: 'white',
+                        transition: '.2s',
+                        borderRadius: '50%'
+                      }} />
+                    </span>
+                  </label>
+                </div>
+
+                {soundEffectsEnabled && (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
+                        <span>Effects Volume</span>
+                        <span>{Math.round(soundVolume * 100)}%</span>
+                      </div>
+                      <input 
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={soundVolume}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          setSoundVolume(v);
+                          localStorage.setItem('chatra_sound_volume', v.toString());
+                        }}
+                        style={{ width: '100%', accentColor: 'var(--accent-color)', cursor: 'pointer' }}
+                      />
+                    </div>
+
+                    {/* Expandable Individual Sound Customization */}
+                    <div style={{ paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                      <button
+                        type="button"
+                        className="sound-accordion-toggle"
+                        onClick={() => setShowAdvancedSounds(!showAdvancedSounds)}
+                      >
+                        <span>Customize Individual Sounds ({Object.values(individualSounds || {}).filter(Boolean).length}/8 Active)</span>
+                        <ChevronDown size={16} className={`sound-accordion-chevron ${showAdvancedSounds ? 'expanded' : ''}`} />
+                      </button>
+
+                      <div className={`sound-accordion-wrapper ${showAdvancedSounds ? 'expanded' : ''}`}>
+                        <div className="sound-accordion-inner">
+                          {[
+                            { key: 'msg_sent', label: 'Message Sent Sound', desc: 'Warm ascending chime on dispatching messages', playFn: () => soundEngine.playMessageSent() },
+                            { key: 'msg_recv', label: 'Message Received Sound', desc: 'Gold-standard dual tone chime on incoming messages', playFn: () => soundEngine.playMessageReceived() },
+                            { key: 'voice_rec', label: 'Voice Recording Alerts', desc: 'Start and stop feedback chimes for voice notes', playFn: () => soundEngine.playVoiceRecordStart() },
+                            { key: 'call_dial', label: 'Outgoing Dialing Ringing', desc: 'Warm 900Hz low-pass filtered international ringback', playFn: () => { soundEngine.startOutgoingRingTone(); setTimeout(() => soundEngine.stopOutgoingRingTone(), 2000); } },
+                            { key: 'call_ring', label: 'Incoming Call Ringtone', desc: 'Melodic chime sequence loop for incoming call alerts', playFn: () => { soundEngine.startIncomingRingtone(); setTimeout(() => soundEngine.stopIncomingRingtone(), 2500); } },
+                            { key: 'call_connect', label: 'Call Connect & End Chimes', desc: 'Reassuring join triad and release chords', playFn: () => soundEngine.playCallConnected() },
+                            { key: 'toggle_clicks', label: 'Mute & Camera Toggle Clicks', desc: 'Clean micro-chimes on toggling microphone or camera', playFn: () => soundEngine.playToggleMute(false) },
+                            { key: 'user_online', label: 'Contact Online Notification', desc: 'Discreet soft chime when a contact comes online', playFn: () => soundEngine.playUserOnline() }
+                          ].map((item, idx) => (
+                            <div 
+                              key={item.key} 
+                              className="sound-item-card"
+                              style={{ animationDelay: `${idx * 30}ms` }}
+                            >
+                              <div style={{ flex: 1, paddingRight: '12px' }}>
+                                <div style={{ fontWeight: '500', fontSize: '12px', color: 'var(--text-color)' }}>
+                                  {item.label}
+                                </div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                  {item.desc}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <button
+                                  type="button"
+                                  className="sound-sample-btn"
+                                  onClick={item.playFn}
+                                  title="Sample Sound"
+                                >
+                                  <Play size={12} style={{ marginLeft: '1px' }} />
+                                </button>
+
+                                <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '36px', height: '20px', flexShrink: 0 }}>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={!!(individualSounds && individualSounds[item.key])}
+                                    onChange={() => toggleIndividualSound(item.key)}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                  />
+                                  <span style={{
+                                    position: 'absolute',
+                                    cursor: 'pointer',
+                                    top: 0, left: 0, right: 0, bottom: 0,
+                                    backgroundColor: (individualSounds && individualSounds[item.key]) ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.15)',
+                                    transition: '.2s',
+                                    borderRadius: '20px'
+                                  }}>
+                                    <span style={{
+                                      position: 'absolute',
+                                      content: '""',
+                                      height: '14px',
+                                      width: '14px',
+                                      left: (individualSounds && individualSounds[item.key]) ? '19px' : '3px',
+                                      bottom: '3px',
+                                      backgroundColor: 'white',
+                                      transition: '.2s',
+                                      borderRadius: '50%'
+                                    }} />
+                                  </span>
+                                </label>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

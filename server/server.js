@@ -57,8 +57,8 @@ if (!fs.existsSync(config.uploadsDir)) {
   fs.mkdirSync(config.uploadsDir, { recursive: true });
 }
 
-// Periodic background cleanup for uploaded files (automatically purges files older than 24 hours)
-const UPLOAD_FILE_TTL_MS = 24 * 60 * 60 * 1000;
+// Periodic background cleanup for uploaded files (configurable TTL, default 7 days)
+const UPLOAD_FILE_TTL_MS = (config.mediaTtlHours || 168) * 60 * 60 * 1000;
 const uploadCleanupInterval = setInterval(async () => {
   try {
     const files = await fs.promises.readdir(config.uploadsDir);

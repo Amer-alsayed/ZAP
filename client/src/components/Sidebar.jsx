@@ -452,7 +452,7 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
       </div>
 
       <div className="sidebar-footer">
-        <button className={`sidebar-settings-btn ${showSettings ? 'active' : ''}`} title="Settings" onClick={onShowSettings}>
+        <button className="sidebar-settings-btn" title="Settings" onClick={onShowSettings}>
           <Settings size={20} />
         </button>
         <button className={`sidebar-calls-btn ${showRecents ? 'active' : ''}`} title="Recent Calls" onClick={onShowRecents}>

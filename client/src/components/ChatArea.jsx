@@ -8,6 +8,8 @@ import { uploadEncryptedFile } from '../services/api';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
 import { getSocket } from '../services/socket';
 import { renderAvatar } from './Sidebar';
+import { loadOrFetchDecryptedMedia, setCachedMedia } from '../services/mediaCache';
+import { soundEngine } from '../services/soundEffects';
 
 // ==========================================
 // E2EE Safety Fingerprint Helper (Synchronous Hash)
@@ -702,6 +704,9 @@ export default function ChatArea({
         // 5. Upload encrypted file to server
         const { fileUrl } = await uploadEncryptedFile(fileToUpload.name, encryptedBase64, currentUserToken);
 
+        // Save original file blob in local IndexedDB so sender keeps media permanently
+        setCachedMedia(fileUrl, fileToUpload, fileToUpload.type || 'application/octet-stream');
+
         // 6. Export session key to JWK
         const fileSessionKeyJwk = await window.crypto.subtle.exportKey('jwk', fileSessionKey);
 
@@ -719,6 +724,7 @@ export default function ChatArea({
           },
           replyTo: replyContext
         });
+        soundEngine.playMessageSent();
       } catch (err) {
         console.error("Encryption/Upload failed:", err);
         alert("Failed to send encrypted file.");
@@ -732,6 +738,7 @@ export default function ChatArea({
         text: captionText,
         replyTo: replyContext
       });
+      soundEngine.playMessageSent();
     }
   };
 
@@ -785,46 +792,19 @@ export default function ChatArea({
   // E2EE File Download & Decrypt
   // ==========================================
   const downloadAndDecryptFile = useCallback(async (fileMetadata) => {
-    const { url, name, keyJwk, iv, mimeType } = fileMetadata;
-
     try {
-      // 1. Fetch the encrypted file from server
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch file (${response.status})`);
-      }
-      const encryptedBuffer = await response.arrayBuffer();
-
-      // 2. Re-import the session key
-      const fileSessionKey = await window.crypto.subtle.importKey(
-        'jwk',
-        keyJwk,
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['decrypt']
-      );
-
-      // 3. Decrypt the file data
-      const ivBuffer = base64ToBuffer(iv);
-      const decryptedBuffer = await window.crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: ivBuffer },
-        fileSessionKey,
-        encryptedBuffer
-      );
-
-      // 4. Create and trigger download
-      const blob = new Blob([decryptedBuffer], { type: mimeType });
+      const blob = await loadOrFetchDecryptedMedia(fileMetadata);
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = name;
+      link.download = fileMetadata.name || 'download';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error(err);
-      alert('Failed to decrypt and download file. Key may be invalid.');
+      alert(err.message || 'Failed to decrypt and download file.');
     }
   }, []);
 
@@ -876,6 +856,7 @@ export default function ChatArea({
       recordingDurationRef.current = 0;
       setRecordingDuration(0);
       mediaRecorderRef.current.start();
+      soundEngine.playVoiceRecordStart();
 
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration((prev) => {
@@ -894,6 +875,7 @@ export default function ChatArea({
     if (!mediaRecorderRef.current || isRecording === false) return;
     
     clearInterval(recordingTimerRef.current);
+    soundEngine.playVoiceRecordStop();
     
     if (!shouldSend) {
       mediaRecorderRef.current.onstop = null; // discard
@@ -934,6 +916,9 @@ export default function ChatArea({
       const extension = audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const { fileUrl } = await uploadEncryptedFile(`voice-note.${extension}`, encryptedBase64, currentUserToken);
 
+      // Save original voice blob in local IndexedDB so sender keeps voice note permanently
+      setCachedMedia(fileUrl, audioBlob, audioBlob.type || 'audio/webm');
+
       // 6. Export session key to JWK
       const audioKeyJwk = await window.crypto.subtle.exportKey('jwk', audioKey);
 
@@ -950,6 +935,7 @@ export default function ChatArea({
           duration: recordingDurationRef.current
         }
       });
+      soundEngine.playMessageSent();
     } catch (err) {
       console.error(err);
       alert('Failed to send encrypted voice note.');
@@ -992,31 +978,8 @@ export default function ChatArea({
     }
 
     try {
-      const { url, keyJwk, iv } = fileMetadata;
-
-      // 1. Fetch and decrypt the audio blob
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch audio (${response.status})`);
-      }
-      const encryptedBuffer = await response.arrayBuffer();
-
-      const audioKey = await window.crypto.subtle.importKey(
-        'jwk',
-        keyJwk,
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['decrypt']
-      );
-
-      const ivBuffer = base64ToBuffer(iv);
-      const decryptedBuffer = await window.crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: ivBuffer },
-        audioKey,
-        encryptedBuffer
-      );
-
-      const blob = new Blob([decryptedBuffer], { type: 'audio/webm' });
+      // 1. Get decrypted audio blob (from local IndexedDB cache or server fetch + cache)
+      const blob = await loadOrFetchDecryptedMedia(fileMetadata);
       const localUrl = URL.createObjectURL(blob);
       activeAudioUrlRef.current = localUrl;
 
@@ -1640,32 +1603,8 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
 
     const loadAndDecrypt = async () => {
       try {
-        const response = await fetch(fileMetadata.url);
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error('Media file expired or no longer on server');
-          }
-          throw new Error(`Failed to fetch image (${response.status})`);
-        }
-        const encryptedBuffer = await response.arrayBuffer();
-
-        const fileSessionKey = await window.crypto.subtle.importKey(
-          'jwk',
-          fileMetadata.keyJwk,
-          { name: 'AES-GCM', length: 256 },
-          true,
-          ['decrypt']
-        );
-
-        const ivBuffer = base64ToBuffer(fileMetadata.iv);
-        const decryptedBuffer = await window.crypto.subtle.decrypt(
-          { name: 'AES-GCM', iv: ivBuffer },
-          fileSessionKey,
-          encryptedBuffer
-        );
-
+        const blob = await loadOrFetchDecryptedMedia(fileMetadata);
         if (!active) return;
-        const blob = new Blob([decryptedBuffer], { type: fileMetadata.mimeType });
         const localUrl = URL.createObjectURL(blob);
         objectUrlRef.current = localUrl;
         setImgSrc(localUrl);
@@ -1732,29 +1671,8 @@ function VideoPreviewLoader({ fileMetadata }) {
 
     const loadAndDecrypt = async () => {
       try {
-        const response = await fetch(fileMetadata.url);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch video (${response.status})`);
-        }
-        const encryptedBuffer = await response.arrayBuffer();
-
-        const fileSessionKey = await window.crypto.subtle.importKey(
-          'jwk',
-          fileMetadata.keyJwk,
-          { name: 'AES-GCM', length: 256 },
-          true,
-          ['decrypt']
-        );
-
-        const ivBuffer = base64ToBuffer(fileMetadata.iv);
-        const decryptedBuffer = await window.crypto.subtle.decrypt(
-          { name: 'AES-GCM', iv: ivBuffer },
-          fileSessionKey,
-          encryptedBuffer
-        );
-
+        const blob = await loadOrFetchDecryptedMedia(fileMetadata);
         if (!active) return;
-        const blob = new Blob([decryptedBuffer], { type: fileMetadata.mimeType });
         const localUrl = URL.createObjectURL(blob);
         objectUrlRef.current = localUrl;
         setVideoSrc(localUrl);

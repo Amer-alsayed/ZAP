@@ -443,6 +443,10 @@ button {
   z-index: 5;
 }
 
+.main-content-pane .settings-view {
+  z-index: 6;
+}
+
 /* ==========================================
    SIDEBAR COMPONENT
    ========================================== */
@@ -1667,17 +1671,23 @@ button {
   flex-direction: column !important;
   justify-content: center !important;
   align-items: center !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 /* Video Call PiP Adjustments */
 .call-overlay.pip-mode .video-grid {
   width: 100% !important;
   height: 100% !important;
-  grid-template-columns: 1fr !important;
-  grid-template-rows: 1fr !important;
   position: relative !important;
-  gap: 0 !important;
+  margin: 0 !important;
   padding: 0 !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  overflow: hidden !important;
 }
 
 .call-overlay.pip-mode .remote-video {
@@ -1691,40 +1701,65 @@ button {
   display: none !important; /* Hide local user camera to fit PiP dimensions */
 }
 
-/* Mini control overlay on hover */
-.call-overlay.pip-mode .video-call-controls {
+/* Prevent text selection during PiP dragging */
+body.dragging-pip,
+body.dragging-pip * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  cursor: grabbing !important;
+}
+
+/* Standalone PiP Mode Control Overlay */
+.pip-video-call-controls {
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  background: rgba(0, 0, 0, 0.6) !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: rgba(10, 12, 18, 0.75) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
   opacity: 0 !important;
   display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 12px !important;
+  gap: 10px !important;
   transition: opacity 0.2s ease-in-out !important;
-  padding: 0 !important;
+  padding: 12px !important;
   margin: 0 !important;
   border-radius: 20px !important;
-  z-index: 10 !important;
+  z-index: 20 !important;
   transform: none !important;
+  pointer-events: auto !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
-.call-overlay.pip-mode:hover .video-call-controls {
+.call-overlay.pip-mode:hover .pip-video-call-controls {
   opacity: 1 !important;
 }
 
-.call-overlay.pip-mode .video-call-controls .call-btn {
-  width: 32px !important;
-  height: 32px !important;
+.pip-video-call-controls .call-btn {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
   border-radius: 50% !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
-.call-overlay.pip-mode .video-call-controls .call-btn svg {
-  width: 15px !important;
-  height: 15px !important;
+.pip-video-call-controls .call-btn svg {
+  width: 16px !important;
+  height: 16px !important;
 }
 
 .call-overlay.pip-mode .call-timer {
@@ -1916,6 +1951,11 @@ button {
   position: relative;
 }
 
+.remote-video-avatar-container.thumbnail-avatar {
+  background: #0c0e14;
+  gap: 0;
+}
+
 .remote-avatar-label {
   color: var(--text-muted);
   font-size: 14px;
@@ -1966,7 +2006,36 @@ button {
   box-shadow: var(--shadow-lg);
   border: 2px solid rgba(255, 255, 255, 0.2);
   z-index: 10;
-  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+
+.local-video-container.clickable-thumbnail {
+  cursor: pointer;
+}
+
+.local-video-container.clickable-thumbnail:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 2px var(--accent-color);
+}
+
+.thumbnail-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  color: white;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 6px;
+  border-radius: 6px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .local-video {
@@ -2870,8 +2939,13 @@ button {
   .sidebar-settings-btn:hover {
     color: var(--accent-color);
     background-color: rgba(255, 255, 255, 0.05);
-    transform: rotate(30deg) scale(1.05);
-    transform-origin: center center;
+    transform: scale(1.05);
+  }
+  .sidebar-settings-btn svg {
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .sidebar-settings-btn:hover svg {
+    transform: rotate(45deg);
   }
   .minimize-btn:hover {
     color: var(--accent-color);
@@ -2907,9 +2981,19 @@ button {
   background: radial-gradient(circle at 70% 30%, #11141D 0%, #0B0D13 100%);
   position: relative;
   z-index: 2;
-  /* Premium conversation loading animation */
-  animation: chatLogsFadeIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: settingsViewFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
+}
+
+@keyframes settingsViewFadeIn {
+  from {
+    opacity: 0.95;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .settings-view.navigating-back {
@@ -4177,14 +4261,20 @@ button {
   padding-top: 12px;
 }
 
-/* Call overlay controls auto-hide animation styling */
-.call-overlay.controls-hidden .video-call-controls {
+/* Un-mirror screen sharing video streams */
+.remote-video.local-screen-share,
+.local-video.local-screen-share {
+  transform: none !important;
+}
+
+/* Call overlay controls auto-hide animation styling (Full mode only) */
+.call-overlay:not(.pip-mode).controls-hidden .video-call-controls {
   opacity: 0 !important;
   pointer-events: none !important;
   transform: translate3d(-50%, 20px, 0) !important;
 }
 
-.call-overlay.controls-hidden .local-video-container {
+.call-overlay:not(.pip-mode).controls-hidden .local-video-container {
   opacity: 0 !important;
   pointer-events: none !important;
   transform: scale(0.95) !important;
@@ -4206,17 +4296,29 @@ button {
 }
 
 .call-overlay.browser-fullscreen .video-grid {
+  width: 100vw !important;
+  height: 100vh !important;
   border-radius: 0 !important;
   background-color: #000000 !important;
 }
 
 .call-overlay.browser-fullscreen .remote-video {
+  width: 100vw !important;
+  height: 100vh !important;
   object-fit: contain !important; /* Immersive viewing, no crop */
   background-color: #000000 !important;
 }
 
 .call-overlay.browser-fullscreen .video-call-controls {
-  bottom: 40px !important; /* Extra bottom breathing room in fullscreen */
+  bottom: 30px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+.call-overlay.browser-fullscreen.controls-hidden .video-call-controls {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translate3d(-50%, 30px, 0) !important;
 }
 
 /* ==========================================
@@ -4265,4 +4367,100 @@ button {
 @keyframes bannerSlideDown {
   from { transform: translateY(-100%); }
   to { transform: translateY(0); }
+}
+
+/* ==========================================
+   Sound Customization Accordion & Micro-Animations
+   ========================================== */
+.sound-accordion-toggle {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 4px;
+  border-radius: 8px;
+  transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease;
+}
+
+.sound-accordion-toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sound-accordion-chevron {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sound-accordion-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.sound-accordion-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.sound-accordion-wrapper.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.sound-accordion-inner {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.sound-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slideDownFade 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.sound-item-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sound-sample-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-color);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sound-sample-btn:hover {
+  background: var(--accent-color);
+  color: #ffffff;
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.3);
+}
+
+.sound-sample-btn:active {
+  transform: scale(0.92);
 }
