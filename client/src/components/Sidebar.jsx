@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Phone, PhoneOff, Video, VideoOff, Mic, Image, FileText, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { searchUser } from '../services/api';
 import { emitGetUserStatus } from '../services/socket';
@@ -292,24 +292,26 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
     setSearchQuery('');
   };
 
-  const filteredContacts = [...contacts]
-    .sort((a, b) => {
-      const aLastMsg = a.messages && a.messages.length > 0 ? a.messages[a.messages.length - 1] : null;
-      const bLastMsg = b.messages && b.messages.length > 0 ? b.messages[b.messages.length - 1] : null;
-      
-      const aTime = (aLastMsg && !isNaN(new Date(aLastMsg.timestamp).getTime())) ? new Date(aLastMsg.timestamp).getTime() : 0;
-      const bTime = (bLastMsg && !isNaN(new Date(bLastMsg.timestamp).getTime())) ? new Date(bLastMsg.timestamp).getTime() : 0;
-      
-      return bTime - aTime; // Newest messages at the top
-    })
-    .filter(contact => {
-      const query = searchQuery.trim().toLowerCase();
-      if (!query) return true;
-      return (
-        (contact.username || '').toLowerCase().includes(query) ||
-        (contact.displayName || '').toLowerCase().includes(query)
-      );
-    });
+  const filteredContacts = useMemo(() => {
+    return [...contacts]
+      .sort((a, b) => {
+        const aLastMsg = a.messages && a.messages.length > 0 ? a.messages[a.messages.length - 1] : null;
+        const bLastMsg = b.messages && b.messages.length > 0 ? b.messages[b.messages.length - 1] : null;
+
+        const aTime = (aLastMsg && !isNaN(new Date(aLastMsg.timestamp).getTime())) ? new Date(aLastMsg.timestamp).getTime() : 0;
+        const bTime = (bLastMsg && !isNaN(new Date(bLastMsg.timestamp).getTime())) ? new Date(bLastMsg.timestamp).getTime() : 0;
+
+        return bTime - aTime; // Newest messages at the top
+      })
+      .filter(contact => {
+        const query = searchQuery.trim().toLowerCase();
+        if (!query) return true;
+        return (
+          (contact.username || '').toLowerCase().includes(query) ||
+          (contact.displayName || '').toLowerCase().includes(query)
+        );
+      });
+  }, [contacts, searchQuery]);
 
   return (
     <div className="sidebar glass">

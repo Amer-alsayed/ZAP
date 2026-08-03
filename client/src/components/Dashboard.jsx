@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Phone, Video, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 
@@ -8,46 +8,51 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
   const recentsBounceWrapperRef = useRef(null);
 
   // Parse call logs from all contact messages
-  const callLogs = [];
-  contacts.forEach(contact => {
-    if (contact.messages) {
-      contact.messages.forEach(msg => {
-        if (msg.mediaType === 'call') {
-          try {
-            const callData = JSON.parse(msg.text);
-            const isSentByMe = msg.sender?.toLowerCase() === currentUser?.username?.toLowerCase();
-            callLogs.push({
-              id: msg.id || msg.timestamp,
-              timestamp: msg.timestamp,
-              sender: msg.sender,
-              callType: callData.callType || 'voice', // voice or video
-              status: callData.status || 'ended', // missed, connected, etc.
-              duration: callData.duration || 0,
-              isSentByMe,
-              contact
-            });
-          } catch (e) {
-            // fallback if not JSON
+  // Parse call logs from all contact messages
+  const callLogs = useMemo(() => {
+    const logs = [];
+    contacts.forEach(contact => {
+      if (contact.messages) {
+        contact.messages.forEach(msg => {
+          if (msg.mediaType === 'call') {
+            try {
+              const callData = JSON.parse(msg.text);
+              const isSentByMe = msg.sender?.toLowerCase() === currentUser?.username?.toLowerCase();
+              logs.push({
+                id: msg.id || msg.timestamp,
+                timestamp: msg.timestamp,
+                sender: msg.sender,
+                callType: callData.callType || 'voice', // voice or video
+                status: callData.status || 'ended', // missed, connected, etc.
+                duration: callData.duration || 0,
+                isSentByMe,
+                contact
+              });
+            } catch (e) {
+              // fallback if not JSON
+            }
           }
-        }
-      });
-    }
-  });
+        });
+      }
+    });
+    return logs;
+  }, [contacts, currentUser]);
 
   // Sort logs by newest first with NaN protection
-  callLogs.sort((a, b) => {
-    const tA = (a.timestamp && !isNaN(new Date(a.timestamp).getTime())) ? new Date(a.timestamp).getTime() : 0;
-    const tB = (b.timestamp && !isNaN(new Date(b.timestamp).getTime())) ? new Date(b.timestamp).getTime() : 0;
-    return tB - tA;
-  });
-
-  // Filter based on active tab
-  const filteredCalls = callLogs.filter(log => {
-    if (activeTab === 'missed') {
-      return (log.status === 'missed' || log.status === 'cancelled' || log.status === 'declined') && !log.isSentByMe;
-    }
-    return true;
-  });
+  const filteredCalls = useMemo(() => {
+    return [...callLogs]
+      .sort((a, b) => {
+        const tA = (a.timestamp && !isNaN(new Date(a.timestamp).getTime())) ? new Date(a.timestamp).getTime() : 0;
+        const tB = (b.timestamp && !isNaN(new Date(b.timestamp).getTime())) ? new Date(b.timestamp).getTime() : 0;
+        return tB - tA;
+      })
+      .filter(log => {
+        if (activeTab === 'missed') {
+          return (log.status === 'missed' || log.status === 'cancelled' || log.status === 'declined') && !log.isSentByMe;
+        }
+        return true;
+      });
+  }, [callLogs, activeTab]);
 
   // Hook for elastic overscroll bounce (rubber-banding)
   useEffect(() => {
@@ -227,15 +232,17 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
   };
 
   // Group call logs by day
-  const groupedCalls = {};
-  filteredCalls.forEach(log => {
-    const title = getGroupTitle(log.timestamp);
-    if (!groupedCalls[title]) {
-      groupedCalls[title] = [];
-    }
-    groupedCalls[title].push(log);
-  });
-
+  const groupedCalls = useMemo(() => {
+    const grouped = {};
+    filteredCalls.forEach(log => {
+      const title = getGroupTitle(log.timestamp);
+      if (!grouped[title]) {
+        grouped[title] = [];
+      }
+      grouped[title].push(log);
+    });
+    return grouped;
+  }, [filteredCalls]);
   return (
     <div className="recents-container">
       {/* FaceTime-style Top Header */}
