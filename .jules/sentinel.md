@@ -1,0 +1,4 @@
+## 2026-08-03 - [Critical] Missing JWT Secret Fallback in Production
+**Vulnerability:** In `server/src/config.js`, the application correctly verified `process.env.JWT_SECRET`, but if it was missing in production, it only logged a warning and fell back to the hardcoded `DEFAULT_DEV_SECRET`. This allowed a production application to boot and sign user JWTs using an insecure, known secret, rendering all authentication bypassable by forging JWTs.
+**Learning:** Hardcoded fallbacks intended for development ergonomics can become critical vulnerabilities if not explicitly restricted from production use. A missing secret in production should be a fatal boot error.
+**Prevention:** Use `process.exit(1)` and fatal log levels (e.g., `console.error` or `logger.error`) in production environments when critical security configuration like crypto keys, database credentials, or JWT secrets are missing. Do not fallback to development constants in production logic branches.

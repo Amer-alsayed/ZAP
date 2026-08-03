@@ -1,0 +1,7 @@
+🛡️ Sentinel: [CRITICAL] Fix insecure JWT secret fallback in production
+
+🚨 Severity: CRITICAL
+💡 Vulnerability: The server fell back to a hardcoded development JWT secret (DEFAULT_DEV_SECRET) if process.env.JWT_SECRET was missing in production mode. This allowed production apps to boot with a widely-known, predictable secret, completely breaking JWT validation and authentication (auth bypass / token forgery).
+🎯 Impact: An attacker could trivially sign arbitrary JWT tokens to impersonate any user on the platform by using the open-source dev secret.
+🔧 Fix: Updated server/src/config.js to log a CRITICAL error and immediately exit (process.exit(1)) if JWT_SECRET is missing in production. Also updated .jules/sentinel.md with this finding.
+✅ Verification: Start server with NODE_ENV=production node server.js and verify it instantly crashes with an error. Start it with NODE_ENV=production JWT_SECRET=foo node server.js and verify it starts normally.
