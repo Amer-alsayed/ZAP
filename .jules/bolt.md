@@ -1,0 +1,7 @@
+## 2024-08-03 - ChatArea MessageList Re-renders
+**Learning:** `MessageList` is a `React.memo` component, but it receives a `renderMessageContent` prop. The `renderMessageContent` is created with `useCallback` but has dependencies on `playingAudioId`, `audioProgress`, etc. Because `audioProgress` updates frequently (via `requestAnimationFrame` or `timeupdate` for audio playback), it causes `renderMessageContent` to get a new reference frequently, which breaks the `React.memo` of `MessageList`, causing the entire chat list to re-render constantly while a voice note plays.
+**Action:** Since `audioProgress` and `playingAudioId` are causing `MessageList` re-renders, the best approach is to pass these down directly and only have them affect the specific Voice Note components, OR avoid lifting that state so high in `ChatArea`. Instead of storing `audioProgress` in a large dictionary in `ChatArea`, it can be managed locally in a `VoiceNotePlayer` component. `playingAudioId` could be managed in a context or passed down, but separating the component is cleaner.
+
+## 2024-08-03 - Re-renders and Filtering Arrays
+**Learning:** `filteredContacts` in `Sidebar.jsx`, and `filteredCalls` & `groupedCalls` in `Dashboard.jsx`, are re-calculated on every render because they do not use `useMemo`. Both involve mapping, sorting, and filtering over arrays (contacts, logs) which can be expensive.
+**Action:** Use `useMemo` to cache these computations.
