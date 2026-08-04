@@ -26,9 +26,14 @@ if (!jwtSecret) {
 }
 
 // CORS Allowed Origins
+// In production, if CLIENT_ORIGIN is not explicitly set, allow all origins
+// (the client is served from the same server, so same-origin requests are safe).
+// For extra security, set CLIENT_ORIGIN in your Render environment variables.
 const allowedOrigins = process.env.CLIENT_ORIGIN
   ? process.env.CLIENT_ORIGIN.split(',').map((origin) => origin.trim())
-  : ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'];
+  : IS_PROD
+    ? null // null = allow all origins in production when not explicitly restricted
+    : ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'];
 
 export const config = {
   env: NODE_ENV,

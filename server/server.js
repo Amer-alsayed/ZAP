@@ -38,8 +38,14 @@ app.use('/api', generalLimiter);
 // Configurable CORS configuration
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, or same-origin) or matching allowed origins
-    if (!origin || config.allowedOrigins.includes(origin) || !config.isProd) {
+    // Allow requests with no origin (mobile apps, curl, same-origin requests)
+    if (!origin) return callback(null, true);
+    // Allow all origins when allowedOrigins is null (production without CLIENT_ORIGIN set)
+    if (!config.allowedOrigins) return callback(null, true);
+    // In development always allow
+    if (!config.isProd) return callback(null, true);
+    // Check against the explicit whitelist
+    if (config.allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(null, false);
