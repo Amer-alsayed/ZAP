@@ -1201,6 +1201,7 @@ button {
 }
 
 .chat-input-container {
+  position: relative !important;
   display: flex;
   align-items: center;
   min-height: 48px;
