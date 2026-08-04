@@ -252,7 +252,7 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
       <div className="recents-header">
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {showBackButton && (
-            <button className="back-btn" onClick={onBack} title="Back" style={{ marginRight: '8px' }}>
+            <button className="back-btn" onClick={onBack} title="Back" aria-label="Back to conversations" style={{ marginRight: '8px' }}>
               <ArrowLeft size={18} />
             </button>
           )}

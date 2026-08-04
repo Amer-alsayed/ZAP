@@ -454,13 +454,13 @@ const Sidebar = React.memo(function Sidebar({ currentUser, contacts, activeConta
       </div>
 
       <div className="sidebar-footer">
-        <button className="sidebar-settings-btn" title="Settings" onClick={onShowSettings}>
+        <button className="sidebar-settings-btn" title="Settings" aria-label="Settings" onClick={onShowSettings}>
           <Settings size={20} />
         </button>
-        <button className={`sidebar-calls-btn ${showRecents ? 'active' : ''}`} title="Recent Calls" onClick={onShowRecents}>
+        <button className={`sidebar-calls-btn ${showRecents ? 'active' : ''}`} title="Recent Calls" aria-label="Recent Calls" onClick={onShowRecents}>
           <Phone size={20} />
         </button>
-        <button className="minimize-btn" onClick={onToggleMinimize} title={isMinimized ? "Expand Sidebar" : "Minimize Sidebar"}>
+        <button className="minimize-btn" onClick={onToggleMinimize} title={isMinimized ? "Expand Sidebar" : "Minimize Sidebar"} aria-label={isMinimized ? "Expand Sidebar" : "Minimize Sidebar"}>
           {isMinimized ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
         </button>
       </div>

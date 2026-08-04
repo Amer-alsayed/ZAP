@@ -184,6 +184,7 @@ const MessageList = React.memo(({
                     <button 
                       className="msg-action-btn" 
                       title="Reply"
+                      aria-label="Reply to message"
                       onClick={() => {
                         setReplyingTo({
                           id: msg.id,
@@ -1252,6 +1253,7 @@ const ChatArea = React.memo(function ChatArea({
               className="file-download-btn" 
               onClick={() => downloadAndDecryptFile(file)}
               title="Download & Decrypt File"
+              aria-label="Download & Decrypt File"
             >
               <Download size={16} />
             </button>
@@ -1274,7 +1276,12 @@ const ChatArea = React.memo(function ChatArea({
 
       return (
         <div className="voice-note-player">
-          <button className="play-pause-btn" onClick={() => togglePlayAudio(msg.id, file)}>
+          <button 
+            className="play-pause-btn" 
+            onClick={() => togglePlayAudio(msg.id, file)}
+            title={isPlaying ? "Pause voice note" : "Play voice note"}
+            aria-label={isPlaying ? "Pause voice note" : "Play voice note"}
+          >
             {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" style={{ marginLeft: '2px' }} />}
           </button>
           <div 
@@ -1293,6 +1300,8 @@ const ChatArea = React.memo(function ChatArea({
             </span>
             <button 
               className="voice-speed-btn" 
+              title={`Playback speed ${playbackRate}x`}
+              aria-label={`Playback speed ${playbackRate}x`}
               onClick={(e) => {
                 e.stopPropagation();
                 const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
@@ -1376,7 +1385,7 @@ const ChatArea = React.memo(function ChatArea({
       {/* Header */}
       <div className="chat-header glass">
         <div className="chat-header-info">
-          <button className="back-btn" onClick={onBack} title="Back to menu">
+          <button className="back-btn" onClick={onBack} title="Back to menu" aria-label="Back to menu">
             <ArrowLeft size={18} />
           </button>
           {renderAvatar(activeContact.username, activeContact.displayName, activeContact.avatarIcon)}
@@ -1401,6 +1410,7 @@ const ChatArea = React.memo(function ChatArea({
             className={`header-action-btn ${activeContact.isVerified ? 'verified' : ''}`}
             onClick={onOpenSafetyModal}
             title="E2EE Verification & Safety"
+            aria-label="E2EE Verification & Safety"
             style={activeContact.isVerified ? { color: 'var(--accent-color)' } : {}}
           >
             <ShieldCheck size={20} />
@@ -1409,6 +1419,7 @@ const ChatArea = React.memo(function ChatArea({
             className="header-action-btn" 
             onClick={() => onInitiateCall('voice')}
             title="Secure Voice Call"
+            aria-label="Secure Voice Call"
           >
             <Phone size={20} />
           </button>
@@ -1416,6 +1427,7 @@ const ChatArea = React.memo(function ChatArea({
             className="header-action-btn" 
             onClick={() => onInitiateCall('video')}
             title="Secure Video Call"
+            aria-label="Secure Video Call"
           >
             <Video size={20} />
           </button>
@@ -1486,6 +1498,7 @@ const ChatArea = React.memo(function ChatArea({
           className={`scroll-to-bottom-btn glass ${(!isLastMessageVisible && !isInlineTypingVisible) ? 'visible' : ''} ${(activeContact.isTyping && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
           onClick={scrollToBottom} 
           title="Scroll to bottom"
+          aria-label="Scroll to bottom"
         >
           <div className="scroll-btn-content">
             <span className="typing-text-wrapper">
@@ -1521,7 +1534,7 @@ const ChatArea = React.memo(function ChatArea({
               </div>
             </div>
           )}
-          <button className="reply-preview-close" onClick={() => setReplyingTo(null)}>
+          <button className="reply-preview-close" onClick={() => setReplyingTo(null)} title="Cancel reply" aria-label="Cancel reply">
             <X size={16} />
           </button>
         </div>
@@ -1539,7 +1552,7 @@ const ChatArea = React.memo(function ChatArea({
                 {activeFileInfo.type?.startsWith('image/') ? <Image size={18} /> : <FileText size={18} />}
                 <span>{activeFileInfo.name} ({(activeFileInfo.size / 1024).toFixed(1)} KB)</span>
               </div>
-              <button className="remove-attachment-btn" onClick={() => setSelectedFile(null)}>
+              <button className="remove-attachment-btn" onClick={() => setSelectedFile(null)} title="Remove attachment" aria-label="Remove attachment">
                 <X size={18} />
               </button>
             </>
@@ -1623,6 +1636,7 @@ const ChatArea = React.memo(function ChatArea({
               className={`input-action-btn ${showAttachMenu ? 'active-menu' : ''}`}
               onClick={() => setShowAttachMenu(prev => !prev)}
               title={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
+              aria-label={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
               disabled={isRecording}
             >
               <Plus size={20} strokeWidth={2.5} />
@@ -1642,7 +1656,7 @@ const ChatArea = React.memo(function ChatArea({
                 <span className="wave-bar bar-4" />
                 <span className="wave-bar bar-5" />
               </div>
-              <button className="recording-cancel-btn" onClick={() => stopRecording(false)} title="Cancel recording">
+              <button className="recording-cancel-btn" onClick={() => stopRecording(false)} title="Cancel recording" aria-label="Cancel recording">
                 <Trash2 size={15} />
                 <span>Cancel</span>
               </button>
@@ -1665,6 +1679,7 @@ const ChatArea = React.memo(function ChatArea({
               className="send-message-btn voice-send" 
               onClick={() => stopRecording(true)} 
               title="Stop and send voice note"
+              aria-label="Stop and send voice note"
             >
               <ArrowUp size={16} strokeWidth={3} />
             </button>
@@ -1674,6 +1689,7 @@ const ChatArea = React.memo(function ChatArea({
               onClick={handleSendMessage} 
               disabled={(!inputText.trim() && !selectedFile) || uploading}
               title="Send Encrypted Message"
+              aria-label="Send Encrypted Message"
             >
               <ArrowUp size={16} strokeWidth={3} />
             </button>
@@ -1682,6 +1698,7 @@ const ChatArea = React.memo(function ChatArea({
               className="voice-record-btn idle"
               onClick={startRecording}
               title="Record voice note"
+              aria-label="Record voice note"
               disabled={uploading}
             >
               <Mic size={19} />

@@ -615,6 +615,7 @@ export default function CallWindow({
                     onToggleMute();
                   }}
                   title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
+                  aria-label={isMuted ? "Unmute Microphone" : "Mute Microphone"}
                 >
                   {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
                 </button>
@@ -626,6 +627,7 @@ export default function CallWindow({
                     onToggleCamera();
                   }}
                   title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
+                  aria-label={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
                 >
                   {isCameraOff ? <VideoOff size={18} /> : <Video size={18} />}
                 </button>
@@ -638,6 +640,7 @@ export default function CallWindow({
                       onToggleScreenShare();
                     }}
                     title={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
+                    aria-label={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
                   >
                     {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
                   </button>
@@ -648,6 +651,7 @@ export default function CallWindow({
                     className={`call-btn mute ${isFullscreen ? 'active' : ''}`} 
                     onClick={toggleBrowserFullscreen}
                     title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Mode"}
+                    aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen Mode"}
                   >
                     {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
                   </button>
@@ -665,6 +669,7 @@ export default function CallWindow({
                         }
                       }}
                       title="Expand Call Window"
+                      aria-label="Expand Call Window"
                     >
                       <Maximize2 size={18} />
                     </button>
@@ -673,6 +678,7 @@ export default function CallWindow({
                       className="call-btn minimize" 
                       onClick={() => setIsCallMinimized(true)}
                       title="Minimize Call (PiP)"
+                      aria-label="Minimize Call (PiP)"
                     >
                       <Minimize2 size={18} />
                     </button>
@@ -683,6 +689,7 @@ export default function CallWindow({
                   className="call-btn decline" 
                   onClick={onHangUp}
                   title="End Call"
+                  aria-label="End Call"
                 >
                   <PhoneOff size={18} />
                 </button>
