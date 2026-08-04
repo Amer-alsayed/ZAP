@@ -278,11 +278,17 @@ const ChatArea = React.memo(function ChatArea({
   const [uploading, setUploading] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const attachMenuRef = useRef(null);
+  const attachBtnRef = useRef(null);
 
   // Close attach popover menu on outside click or Escape key
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target)) {
+      if (
+        attachMenuRef.current && 
+        !attachMenuRef.current.contains(e.target) &&
+        attachBtnRef.current &&
+        !attachBtnRef.current.contains(e.target)
+      ) {
         setShowAttachMenu(false);
       }
     };
@@ -1613,9 +1619,10 @@ const ChatArea = React.memo(function ChatArea({
           
           {!isRecording && (
             <button 
+              ref={attachBtnRef}
               className={`input-action-btn ${showAttachMenu ? 'active-menu' : ''}`}
               onClick={() => setShowAttachMenu(prev => !prev)}
-              title="Share media or files"
+              title={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
               disabled={isRecording}
             >
               <Plus size={20} strokeWidth={2.5} />
