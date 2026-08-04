@@ -16,10 +16,13 @@ let jwtSecret = process.env.JWT_SECRET;
 
 if (!jwtSecret) {
   if (IS_PROD) {
-    jwtSecret = crypto.randomBytes(64).toString('hex');
-    console.warn('⚠️ WARNING: process.env.JWT_SECRET is missing in production mode!');
-    console.warn('🔑 Generated a cryptographically secure random JWT secret for this session.');
-    console.warn('💡 Tip: Set JWT_SECRET in your environment variables to persist sessions across server restarts.');
+    // In production, a missing JWT_SECRET means every server restart invalidates all user tokens.
+    // This causes a permanent "Connecting to Chatra Server..." loop for all logged-in users.
+    // CRITICAL: Set JWT_SECRET as an environment variable on your hosting platform (e.g. Render).
+    console.error('❌ FATAL: JWT_SECRET environment variable is not set in production!');
+    console.error('   Every server restart will invalidate all user sessions.');
+    console.error('   Set JWT_SECRET in your Render environment variables and restart the server.');
+    process.exit(1);
   } else {
     jwtSecret = 'super-secure-chatra-secret-key-12345';
   }

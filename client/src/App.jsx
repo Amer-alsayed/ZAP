@@ -550,7 +550,19 @@ export default function App() {
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      if (err.message && err.message.includes('database reset')) {
+
+      const msg = err?.message || '';
+
+      // Authentication errors: token is invalid or expired (e.g. server restarted with new JWT secret)
+      // Force a clean logout so the user can log back in and get a fresh token.
+      const isAuthError = msg.includes('Authentication error') || msg.includes('Invalid token') || msg.includes('jwt');
+      const isDbReset = msg.includes('database reset');
+
+      if (isAuthError || isDbReset) {
+        const reason = isDbReset
+          ? 'Your session has expired because the server database was reset. Please register/login again.'
+          : 'Your session has expired. Please log in again.';
+
         localStorage.removeItem('session_enc_key');
         localStorage.removeItem('chatra_username');
         localStorage.removeItem('chatra_token');
@@ -564,7 +576,7 @@ export default function App() {
         setActiveContact(null);
         setShowSettings(false);
         sharedSecrets.current = {};
-        alert('Your session has expired because the server database was reset. Please register/login again.');
+        alert(reason);
       }
     });
 
