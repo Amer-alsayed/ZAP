@@ -1258,6 +1258,30 @@ export default function App() {
     });
   }, []);
 
+  const markAllMessagesAsReadLocal = useCallback((contactUsername) => {
+    if (!contactUsername) return;
+    const lowerUser = contactUsername.toLowerCase();
+    setContacts(prev => prev.map(c => {
+      if (c.username.toLowerCase() === lowerUser) {
+        return {
+          ...c,
+          unreadCount: 0,
+          messages: c.messages.map(m => m.sender.toLowerCase() === lowerUser ? { ...m, status: 2 } : m)
+        };
+      }
+      return c;
+    }));
+    setActiveContact(prev => {
+      if (!prev || prev.username.toLowerCase() !== lowerUser) return prev;
+      return {
+        ...prev,
+        unreadCount: 0,
+        messages: prev.messages.map(m => m.sender.toLowerCase() === lowerUser ? { ...m, status: 2 } : m)
+      };
+    });
+    emitMarkAsRead(contactUsername);
+  }, []);
+
   // Add Contact manual search handler
   const handleAddContact = async (contact) => {
     const existing = contacts.find(c => c.username.toLowerCase() === contact.username.toLowerCase());
@@ -1366,9 +1390,9 @@ export default function App() {
       canvas.width = 640;
       canvas.height = 480;
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#11131a';
+      ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, 640, 480);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = '#cccccc';
       ctx.font = '24px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Voice Call', 320, 240);
@@ -2124,7 +2148,7 @@ export default function App() {
       setIsNavigatingBack(false);
       localStorage.setItem('chatra_active_view', 'dashboard');
       localStorage.removeItem('chatra_active_contact');
-    }, 400); // Matches the 0.4s transform transition exactly!
+    }, 180); // Snappy 180ms back transition
   };
 
   return (
@@ -2133,7 +2157,7 @@ export default function App() {
         <div className="app-preloader">
           <div className="preloader-logo-container">
             <div className="preloader-glow"></div>
-            <svg className="preloader-logo" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="preloader-logo" viewBox="0 0 24 24" fill="none" stroke="#007acc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
               <path d="m9 11 2 2 4-4" stroke="#30d158" strokeWidth="2"/>
             </svg>
@@ -2279,6 +2303,7 @@ export default function App() {
                 onBack={handleBackToMenu}
                 isNavigatingBack={isNavigatingBack}
                 markMessageAsReadLocal={markMessageAsReadLocal}
+                markAllMessagesAsReadLocal={markAllMessagesAsReadLocal}
                 onImageClick={handleOpenLightbox}
                 onVerifyContact={handleVerifyContact}
                 onSaveContact={handleSaveContact}

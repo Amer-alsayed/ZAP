@@ -13,7 +13,7 @@ const formatSidebarTime = (timestamp) => {
 export const renderAvatar = (username, displayName, avatarIcon, customSizeStyle = {}) => {
   const displayInitials = (displayName || username || 'U').substring(0, 2).toUpperCase();
   
-  let avatarColor = '#0a84ff'; // default accent blue
+  let avatarColor = '#007acc'; // default accent blue
   let avatarEmoji = null;
   let avatarImage = null;
 
@@ -25,7 +25,7 @@ export const renderAvatar = (username, displayName, avatarIcon, customSizeStyle 
       } else {
         if (parsed.color) {
           const colorMap = {
-            blue: '#0a84ff',
+            blue: '#007acc',
             purple: '#bf5af2',
             emerald: '#30d158',
             orange: '#ff9f0a',

@@ -9,7 +9,7 @@
     <style>
       /* Immediate background reset to avoid flash */
       html, body {
-        background-color: #0b0d13 !important;
+        background-color: #000000 !important;
         margin: 0;
         padding: 0;
         width: 100%;
@@ -28,8 +28,8 @@
         justify-content: center;
         width: 100vw;
         height: 100vh;
-        background: radial-gradient(circle at 70% 30%, #11141D 0%, #0B0D13 100%);
-        color: #ffffff;
+        background: radial-gradient(circle at 70% 30%, #0e0e0e 0%, #000000 100%);
+        color: #cccccc;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         position: fixed;
         top: 0;
@@ -49,7 +49,7 @@
         position: absolute;
         width: 120px;
         height: 120px;
-        background: rgba(10, 132, 255, 0.15);
+        background: rgba(0, 122, 204, 0.18);
         border-radius: 50%;
         filter: blur(40px);
         animation: preloaderPulseGlow 2.5s ease-in-out infinite alternate;
@@ -74,7 +74,7 @@
       .preloader-bar {
         width: 40%;
         height: 100%;
-        background: #0a84ff;
+        background: #007acc;
         border-radius: 2px;
         animation: preloaderLoadSlide 1.8s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
       }
@@ -82,7 +82,7 @@
       .preloader-text {
         font-size: 13px;
         font-weight: 500;
-        color: #8e8e93;
+        color: #888888;
         letter-spacing: 0.5px;
         text-transform: uppercase;
         animation: preloaderFadePulse 1.5s ease-in-out infinite alternate;
@@ -115,7 +115,7 @@
       <div class="app-preloader">
         <div class="preloader-logo-container">
           <div class="preloader-glow"></div>
-          <svg class="preloader-logo" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="preloader-logo" viewBox="0 0 24 24" fill="none" stroke="#007acc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             <path d="m9 11 2 2 4-4" stroke="#30d158" stroke-width="2"/>
           </svg>

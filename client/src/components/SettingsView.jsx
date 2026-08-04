@@ -67,7 +67,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
   const fileInputRef = useRef(null);
 
   const colors = [
-    { name: 'blue', value: '#0a84ff' },
+    { name: 'blue', value: '#007acc' },
     { name: 'purple', value: '#bf5af2' },
     { name: 'emerald', value: '#30d158' },
     { name: 'orange', value: '#ff9f0a' },
@@ -475,7 +475,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                       alignItems: 'flex-start',
                       padding: '12px 16px',
                       borderRadius: '12px',
-                      background: callQuality === q.id ? 'rgba(10, 132, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                      background: callQuality === q.id ? 'rgba(0, 122, 204, 0.15)' : 'rgba(255, 255, 255, 0.03)',
                       border: callQuality === q.id ? '1px solid var(--accent-color)' : '1px solid rgba(255, 255, 255, 0.08)',
                       textAlign: 'left',
                       cursor: 'pointer',

@@ -29,33 +29,33 @@ export class ErrorBoundary extends React.Component {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100vh',
-          backgroundColor: '#0f172a',
-          color: '#f8fafc',
+          backgroundColor: '#000000',
+          color: '#cccccc',
           fontFamily: 'system-ui, -apple-system, sans-serif',
           padding: '24px',
           textAlign: 'center'
         }}>
           <div style={{
-            background: 'rgba(30, 41, 59, 0.8)',
+            background: 'rgba(18, 18, 18, 0.9)',
             border: '1px solid rgba(239, 68, 68, 0.3)',
             borderRadius: '16px',
             padding: '32px 40px',
             maxWidth: '450px',
             backdropFilter: 'blur(12px)',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.8)'
           }}>
             <AlertTriangle size={48} color="#ef4444" style={{ marginBottom: '16px' }} />
-            <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px', color: '#f1f5f9' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px', color: '#cccccc' }}>
               Application Encountered an Error
             </h2>
-            <p style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '16px', lineHeight: '1.5' }}>
+            <p style={{ fontSize: '14px', color: '#888888', marginBottom: '16px', lineHeight: '1.5' }}>
               Chatra encountered an unexpected error. Your encryption keys and messages remain safe.
             </p>
             {this.state.error && (
               <div style={{
                 marginBottom: '20px',
                 padding: '12px',
-                background: 'rgba(0, 0, 0, 0.4)',
+                background: 'rgba(0, 0, 0, 0.6)',
                 borderRadius: '8px',
                 textAlign: 'left',
                 maxHeight: '100px',
@@ -75,7 +75,7 @@ export class ErrorBoundary extends React.Component {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                backgroundColor: '#3b82f6',
+                backgroundColor: '#007acc',
                 color: '#ffffff',
                 border: 'none',
                 padding: '10px 20px',

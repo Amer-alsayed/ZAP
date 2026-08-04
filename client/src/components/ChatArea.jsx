@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { 
   Send, Shield, Phone, Video, Paperclip, Mic, X, Play, Pause, 
   FileText, Image, Video as VideoIcon, Download, AlertTriangle,
@@ -227,7 +227,7 @@ const MessageList = React.memo(({
                     <span className="message-status-ticks" title={msg.status === 2 ? "Read" : msg.status === 1 ? "Delivered" : "Sent"}>
                       {msg.status === 0 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓</span>}
                       {msg.status === 1 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
-                      {msg.status === 2 && <span style={{ color: '#38BDF8', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
+                      {msg.status === 2 && <span style={{ color: '#007acc', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
                     </span>
                   )}
                 </div>
@@ -264,6 +264,7 @@ const ChatArea = React.memo(function ChatArea({
   onBack,
   isNavigatingBack,
   markMessageAsReadLocal,
+  markAllMessagesAsReadLocal,
   onImageClick,
   onVerifyContact,
   onSaveContact,
@@ -321,10 +322,6 @@ const ChatArea = React.memo(function ChatArea({
   };
   
   const messagesEndRef = useRef(null);
-
-  const localUnreadCount = activeContact.messages
-    ? activeContact.messages.filter(m => m.sender === activeContact.username && m.status < 2).length
-    : 0;
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
@@ -351,6 +348,14 @@ const ChatArea = React.memo(function ChatArea({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isLastMessageVisible, setIsLastMessageVisible] = useState(true);
   const lastMessageRef = useRef(null);
+
+  const unreadMessagesCount = useMemo(() => {
+    if (!activeContact?.messages) return 0;
+    return activeContact.messages.filter(m => m.sender === activeContact.username && m.status < 2).length;
+  }, [activeContact?.messages, activeContact?.username]);
+
+  // The scroll unread badge ONLY displays if the user is scrolled up away from the bottom AND there are unread messages
+  const localUnreadCount = (!isScrolledUp || isLastMessageVisible) ? 0 : unreadMessagesCount;
 
   useEffect(() => {
     if (replyingTo) {
@@ -434,6 +439,10 @@ const ChatArea = React.memo(function ChatArea({
     }
     isScrolledUpRef.current = false;
     setIsScrolledUp(false);
+    setIsLastMessageVisible(true);
+    if (markAllMessagesAsReadLocal) {
+      markAllMessagesAsReadLocal(activeContact.username);
+    }
   };
 
   // Track very recently received messages to manage typing bubble fusion timing
@@ -539,12 +548,26 @@ const ChatArea = React.memo(function ChatArea({
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
     prevMessageCountRef.current = activeContact?.messages?.length || 0;
+    setIsLastMessageVisible(true);
+    setIsScrolledUp(false);
+    isScrolledUpRef.current = false;
+    
+    if (markAllMessagesAsReadLocal) {
+      markAllMessagesAsReadLocal(activeContact.username);
+    }
     
     // Reset textarea height to 36px baseline
     if (textareaRef.current) {
       textareaRef.current.style.height = '36px';
     }
-  }, [activeContact.username]);
+  }, [activeContact.username, markAllMessagesAsReadLocal]);
+
+  // Immediately mark unread messages as read when looking at bottom view
+  useEffect(() => {
+    if ((isLastMessageVisible || !isScrolledUp) && unreadMessagesCount > 0 && markAllMessagesAsReadLocal) {
+      markAllMessagesAsReadLocal(activeContact.username);
+    }
+  }, [unreadMessagesCount, isLastMessageVisible, isScrolledUp, activeContact.username, markAllMessagesAsReadLocal]);
 
   // Scroll smoothly on new messages or typing indicators
   useEffect(() => {
@@ -1657,8 +1680,7 @@ const ChatArea = React.memo(function ChatArea({
                 <span className="wave-bar bar-5" />
               </div>
               <button className="recording-cancel-btn" onClick={() => stopRecording(false)} title="Cancel recording" aria-label="Cancel recording">
-                <Trash2 size={15} />
-                <span>Cancel</span>
+                <Trash2 size={18} />
               </button>
             </div>
           ) : (
@@ -1681,7 +1703,7 @@ const ChatArea = React.memo(function ChatArea({
               title="Stop and send voice note"
               aria-label="Stop and send voice note"
             >
-              <ArrowUp size={16} strokeWidth={3} />
+              <ArrowUp size={18} strokeWidth={2.5} />
             </button>
           ) : (inputText.trim() || selectedFile) ? (
             <button 
