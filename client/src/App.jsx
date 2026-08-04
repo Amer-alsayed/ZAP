@@ -265,6 +265,18 @@ export default function App() {
   const [sidebarMinimized, setSidebarMinimized] = useState(() => {
     return localStorage.getItem('chatra_sidebar_minimized') === 'true';
   });
+  const [isSidebarAnimating, setIsSidebarAnimating] = useState(false);
+  const sidebarAnimTimerRef = useRef(null);
+
+  const handleToggleSidebar = useCallback(() => {
+    if (sidebarAnimTimerRef.current) clearTimeout(sidebarAnimTimerRef.current);
+    setIsSidebarAnimating(true);
+    setSidebarMinimized(prev => !prev);
+    sidebarAnimTimerRef.current = setTimeout(() => {
+      setIsSidebarAnimating(false);
+    }, 380);
+  }, []);
+
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -299,6 +311,10 @@ export default function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
+  }, []);
+
+  const handleOpenSafetyModal = useCallback(() => {
+    setShowSafetyModal(true);
   }, []);
 
   const handleOpenLightbox = (src) => {
@@ -442,23 +458,27 @@ export default function App() {
     const handlePopState = (e) => {
       if (lightboxRef.current) {
         setLightboxImageSrc(null);
+        return;
       }
       
       if (document.fullscreenElement) {
-        document.exitFullscreen();
+        document.exitFullscreen?.().catch(() => {});
+        return;
       }
       
       if (callStateRef.current === 'connected' && !isCallMinimizedRef.current) {
         setIsCallMinimized(true);
+        return;
       }
       
       if (replyingToRef.current) {
         setReplyingTo(null);
+        return;
       }
 
       // Only close the active chat session and return to sidebar if we popped back past 'chat' state!
       const currentState = window.history.state;
-      if (currentState !== 'chat' && currentState !== 'reply' && currentState !== 'lightbox' && currentState !== 'call-maximized') {
+      if (currentState !== 'chat' && currentState !== 'reply' && currentState !== 'lightbox' && currentState !== 'call-maximized' && currentState !== 'fullscreen' && currentState !== 'recording') {
         if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
           handleBackToMenu(true);
         }
@@ -491,11 +511,11 @@ export default function App() {
     }
   }, [replyingTo]);
 
-  // Push history state 'call-maximized' when active call window is maximized or fullscreened
+  // Push history state 'call-maximized' when active call window is maximized
   useEffect(() => {
     const isMaximizedCallActive = callState === 'connected' && !isCallMinimized;
-    if (isMaximizedCallActive || isFullscreen) {
-      if (window.history.state !== 'call-maximized') {
+    if (isMaximizedCallActive) {
+      if (window.history.state !== 'call-maximized' && window.history.state !== 'fullscreen') {
         window.history.pushState('call-maximized', '');
       }
     } else {
@@ -503,7 +523,20 @@ export default function App() {
         window.history.back();
       }
     }
-  }, [callState, isCallMinimized, isFullscreen]);
+  }, [callState, isCallMinimized]);
+
+  // Push history state 'fullscreen' when fullscreen mode is active
+  useEffect(() => {
+    if (isFullscreen) {
+      if (window.history.state !== 'fullscreen') {
+        window.history.pushState('fullscreen', '');
+      }
+    } else {
+      if (window.history.state === 'fullscreen') {
+        window.history.back();
+      }
+    }
+  }, [isFullscreen]);
 
 
   // ==========================================
@@ -2105,7 +2138,7 @@ export default function App() {
           const isMobileSize = windowWidth <= 768;
           const isAppMinimized = sidebarMinimized && !isMobileSize;
           return (
-            <div className={`app-container ${((activeContact || showSettings || showRecents) && !isNavigatingBack) ? 'chat-active' : ''} ${isAppMinimized ? 'sidebar-minimized' : ''}`}>
+            <div className={`app-container ${((activeContact || showSettings || showRecents) && !isNavigatingBack) ? 'chat-active' : ''} ${isAppMinimized ? 'sidebar-minimized' : ''} ${isSidebarAnimating ? 'is-sidebar-animating' : ''}`}>
               
               {/* Network & Server Connectivity Status Bar */}
               {(!isOnline || !isSocketConnected) && (
@@ -2132,7 +2165,7 @@ export default function App() {
                 addContact={handleAddContact}
                 onLogout={handleLogout}
                 isMinimized={isAppMinimized}
-                onToggleMinimize={() => setSidebarMinimized(!sidebarMinimized)}
+                onToggleMinimize={handleToggleSidebar}
                 showSettings={showSettings}
                 showRecents={showRecents}
             onShowSettings={() => {
@@ -2238,7 +2271,7 @@ export default function App() {
                 onVerifyContact={handleVerifyContact}
                 onSaveContact={handleSaveContact}
                 onBlockContact={handleBlockContact}
-                onOpenSafetyModal={() => setShowSafetyModal(true)}
+                onOpenSafetyModal={handleOpenSafetyModal}
                 replyingTo={replyingTo}
                 setReplyingTo={setReplyingTo}
               />

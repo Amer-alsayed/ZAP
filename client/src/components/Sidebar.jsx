@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Phone, PhoneOff, Video, VideoOff, Mic, Image, FileText, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { searchUser } from '../services/api';
 import { emitGetUserStatus } from '../services/socket';
@@ -185,7 +185,7 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
   );
 };
 
-export default function Sidebar({ currentUser, contacts, activeContact, setActiveContact, addContact, onLogout, onShowSettings, onShowRecents, isMinimized, onToggleMinimize, showSettings = false, showRecents = false }) {
+const Sidebar = React.memo(function Sidebar({ currentUser, contacts, activeContact, setActiveContact, addContact, onLogout, onShowSettings, onShowRecents, isMinimized, onToggleMinimize, showSettings = false, showRecents = false }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState(null);
   const [searchError, setSearchError] = useState('');
@@ -194,6 +194,27 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
   const listRef = useRef(null);
   const positionsRef = useRef(new Map());
   const prevOrderRef = useRef([]);
+
+  const filteredContacts = useMemo(() => {
+    return [...contacts]
+      .sort((a, b) => {
+        const aLastMsg = a.messages && a.messages.length > 0 ? a.messages[a.messages.length - 1] : null;
+        const bLastMsg = b.messages && b.messages.length > 0 ? b.messages[b.messages.length - 1] : null;
+        
+        const aTime = (aLastMsg && !isNaN(new Date(aLastMsg.timestamp).getTime())) ? new Date(aLastMsg.timestamp).getTime() : 0;
+        const bTime = (bLastMsg && !isNaN(new Date(bLastMsg.timestamp).getTime())) ? new Date(bLastMsg.timestamp).getTime() : 0;
+        
+        return bTime - aTime; // Newest messages at the top
+      })
+      .filter(contact => {
+        const query = searchQuery.trim().toLowerCase();
+        if (!query) return true;
+        return (
+          (contact.username || '').toLowerCase().includes(query) ||
+          (contact.displayName || '').toLowerCase().includes(query)
+        );
+      });
+  }, [contacts, searchQuery]);
 
   useLayoutEffect(() => {
     if (!listRef.current) return;
@@ -242,7 +263,7 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
     }
     positionsRef.current = newPositions;
     prevOrderRef.current = currentOrder;
-  });
+  }, [filteredContacts]);
 
   // Auto-clear search results/errors when search input is cleared
   useEffect(() => {
@@ -291,25 +312,6 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
     setSearchResult(null);
     setSearchQuery('');
   };
-
-  const filteredContacts = [...contacts]
-    .sort((a, b) => {
-      const aLastMsg = a.messages && a.messages.length > 0 ? a.messages[a.messages.length - 1] : null;
-      const bLastMsg = b.messages && b.messages.length > 0 ? b.messages[b.messages.length - 1] : null;
-      
-      const aTime = (aLastMsg && !isNaN(new Date(aLastMsg.timestamp).getTime())) ? new Date(aLastMsg.timestamp).getTime() : 0;
-      const bTime = (bLastMsg && !isNaN(new Date(bLastMsg.timestamp).getTime())) ? new Date(bLastMsg.timestamp).getTime() : 0;
-      
-      return bTime - aTime; // Newest messages at the top
-    })
-    .filter(contact => {
-      const query = searchQuery.trim().toLowerCase();
-      if (!query) return true;
-      return (
-        (contact.username || '').toLowerCase().includes(query) ||
-        (contact.displayName || '').toLowerCase().includes(query)
-      );
-    });
 
   return (
     <div className="sidebar glass">
@@ -464,4 +466,6 @@ export default function Sidebar({ currentUser, contacts, activeContact, setActiv
       </div>
     </div>
   );
-}
+});
+
+export default Sidebar;

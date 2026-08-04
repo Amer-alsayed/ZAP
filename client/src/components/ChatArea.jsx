@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from
 import { 
   Send, Shield, Phone, Video, Paperclip, Mic, X, Play, Pause, 
   FileText, Image, Video as VideoIcon, Download, AlertTriangle,
-  ArrowLeft, CornerUpLeft, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck
+  ArrowLeft, CornerUpLeft, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck, Trash2, Camera, Music
 } from 'lucide-react';
 import { uploadEncryptedFile } from '../services/api';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
@@ -172,62 +172,64 @@ const MessageList = React.memo(({
                 <span>{formatSeparatorDate(msg.timestamp)}</span>
               </div>
             )}
-            <div 
-              id={`msg-${msg.id}`} 
-              ref={index === messages.length - 1 ? lastMessageRef : null}
-              data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
-              className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''}`}
-            >
-              <div className="message-bubble">
-                <div className="message-actions-container">
-                  <button 
-                    className="msg-action-btn" 
-                    title="Reply"
-                    onClick={() => {
-                      setReplyingTo({
-                        id: msg.id,
-                        sender: msg.sender,
-                        text: msg.mediaType ? `[${msg.mediaType}]` : msg.text,
-                        mediaType: msg.mediaType || null,
-                        fileMetadata: msg.fileMetadata || null
-                      });
-                      setTimeout(() => textareaRef.current?.focus(), 50);
-                    }}
-                  >
-                    <CornerUpLeft size={12} />
-                  </button>
-                </div>
-                {msg.replyTo && (
-                  <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
-                    <span className="reply-context-sender">{msg.replyTo.sender}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                      {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') && (
-                        <div className="reply-image-thumbnail">
-                          <ImagePreviewLoader fileMetadata={msg.replyTo.fileMetadata} />
-                        </div>
-                      )}
-                      <p className="reply-context-text">
-                        {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
-                          ? 'Photo'
-                          : msg.replyTo.text
-                        }
-                      </p>
-                    </div>
+            <div className={`message-row ${isSent ? 'sent' : 'received'}`}>
+              <div 
+                id={`msg-${msg.id}`} 
+                ref={index === messages.length - 1 ? lastMessageRef : null}
+                data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
+                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''}`}
+              >
+                <div className="message-bubble">
+                  <div className="message-actions-container">
+                    <button 
+                      className="msg-action-btn" 
+                      title="Reply"
+                      onClick={() => {
+                        setReplyingTo({
+                          id: msg.id,
+                          sender: msg.sender,
+                          text: msg.mediaType ? `[${msg.mediaType}]` : msg.text,
+                          mediaType: msg.mediaType || null,
+                          fileMetadata: msg.fileMetadata || null
+                        });
+                        setTimeout(() => textareaRef.current?.focus(), 50);
+                      }}
+                    >
+                      <CornerUpLeft size={12} />
+                    </button>
                   </div>
-                )}
-                {renderMessageContent(msg, index === messages.length - 1)}
-              </div>
-              <div className="message-meta">
-                <span>
-                  {formatMessageTime(msg.timestamp)}
-                </span>
-                {isSent && (
-                  <span className="message-status-ticks" title={msg.status === 2 ? "Read" : msg.status === 1 ? "Delivered" : "Sent"}>
-                    {msg.status === 0 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓</span>}
-                    {msg.status === 1 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
-                    {msg.status === 2 && <span style={{ color: '#38BDF8', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
+                  {msg.replyTo && (
+                    <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
+                      <span className="reply-context-sender">{msg.replyTo.sender}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                        {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') && (
+                          <div className="reply-image-thumbnail">
+                            <ImagePreviewLoader fileMetadata={msg.replyTo.fileMetadata} />
+                          </div>
+                        )}
+                        <p className="reply-context-text">
+                          {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
+                            ? 'Photo'
+                            : msg.replyTo.text
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {renderMessageContent(msg, index === messages.length - 1)}
+                </div>
+                <div className="message-meta">
+                  <span>
+                    {formatMessageTime(msg.timestamp)}
                   </span>
-                )}
+                  {isSent && (
+                    <span className="message-status-ticks" title={msg.status === 2 ? "Read" : msg.status === 1 ? "Delivered" : "Sent"}>
+                      {msg.status === 0 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓</span>}
+                      {msg.status === 1 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
+                      {msg.status === 2 && <span style={{ color: '#38BDF8', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </React.Fragment>
@@ -251,7 +253,7 @@ const MessageList = React.memo(({
   );
 });
 
-export default function ChatArea({ 
+const ChatArea = React.memo(function ChatArea({ 
   currentUser,
   activeContact, 
   onSendMessage, 
@@ -274,6 +276,42 @@ export default function ChatArea({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const attachMenuRef = useRef(null);
+
+  // Close attach popover menu on outside click or Escape key
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target)) {
+        setShowAttachMenu(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowAttachMenu(false);
+      }
+    };
+    if (showAttachMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showAttachMenu]);
+
+  const openFilePicker = (acceptType = '*/*') => {
+    setShowAttachMenu(false);
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) {
+      fileInput.accept = acceptType;
+      fileInput.value = '';
+      fileInput.click();
+    }
+  };
   
   const messagesEndRef = useRef(null);
 
@@ -369,13 +407,16 @@ export default function ChatArea({
     };
   }, [activeContact.username]);
 
-  const handleScroll = (e) => {
+  const handleScroll = useCallback((e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
     // Mark as scrolled up the moment the bottom content (typing indicator) begins to get cut off (20px threshold)
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 20;
-    isScrolledUpRef.current = !isAtBottom;
-    setIsScrolledUp(!isAtBottom);
-  };
+    const nextScrolledUp = !isAtBottom;
+    if (isScrolledUpRef.current !== nextScrolledUp) {
+      isScrolledUpRef.current = nextScrolledUp;
+      setIsScrolledUp(nextScrolledUp);
+    }
+  }, []);
 
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
@@ -410,16 +451,76 @@ export default function ChatArea({
     }
   }, [activeContact?.isTyping]);
 
+  const highlightTimersRef = useRef({});
+
+  useEffect(() => {
+    return () => {
+      Object.values(highlightTimersRef.current).forEach(clearTimeout);
+      highlightTimersRef.current = {};
+    };
+  }, []);
+
+  const triggerHighlight = useCallback((element, msgId) => {
+    if (!element) return;
+
+    if (highlightTimersRef.current[msgId]) {
+      clearTimeout(highlightTimersRef.current[msgId]);
+    }
+
+    // Force CSS animation re-trigger on rapid consecutive clicks
+    element.classList.remove('highlight-flash');
+    void element.offsetWidth; // Force DOM reflow
+    element.classList.add('highlight-flash');
+
+    highlightTimersRef.current[msgId] = setTimeout(() => {
+      element.classList.remove('highlight-flash');
+      delete highlightTimersRef.current[msgId];
+    }, 1800);
+  }, []);
+
   const scrollToMessage = useCallback((msgId) => {
     const element = document.getElementById(`msg-${msgId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      element.classList.add('highlight-flash');
-      setTimeout(() => {
-        element.classList.remove('highlight-flash');
-      }, 2000);
+    const container = messagesContainerRef.current;
+    if (!element || !container) return;
+
+    // Check if element is currently in view
+    const containerRect = container.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+
+    const isCurrentlyVisible = (
+      elementRect.top >= containerRect.top - 50 &&
+      elementRect.bottom <= containerRect.bottom + 50
+    );
+
+    // Initiate smooth scroll
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    if (isCurrentlyVisible) {
+      triggerHighlight(element, msgId);
+    } else {
+      // Observe when target scrolls into view before playing highlight animation
+      if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              triggerHighlight(element, msgId);
+              observer.disconnect();
+            }
+          });
+        }, {
+          root: container,
+          threshold: 0.3
+        });
+        observer.observe(element);
+
+        setTimeout(() => observer.disconnect(), 2000);
+      } else {
+        setTimeout(() => {
+          triggerHighlight(element, msgId);
+        }, 400);
+      }
     }
-  }, []);
+  }, [triggerHighlight]);
 
   const prevMessageCountRef = useRef(0);
   const messagesContainerRef = useRef(null);
@@ -871,18 +972,90 @@ export default function ChatArea({
     }
   };
 
+  const isRecordingRef = useRef(isRecording);
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  // Push history state 'recording' when voice recording is active
+  useEffect(() => {
+    if (isRecording) {
+      if (window.history.state !== 'recording') {
+        window.history.pushState('recording', '');
+      }
+    } else {
+      if (window.history.state === 'recording') {
+        window.history.back();
+      }
+    }
+  }, [isRecording]);
+
+  // Intercept native back gesture / popstate event while recording voice note
+  useEffect(() => {
+    const handleVoiceRecordingPopState = () => {
+      if (isRecordingRef.current) {
+        // Intercept back action: cancel recording cleanly without sending!
+        stopRecording(false);
+      }
+    };
+
+    window.addEventListener('popstate', handleVoiceRecordingPopState);
+    return () => window.removeEventListener('popstate', handleVoiceRecordingPopState);
+  }, []);
+
+  // Cleanup voice recording on unmount or active contact change or page unload
+  useEffect(() => {
+    const cleanupRecording = () => {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.onstop = null; // null out onstop callback so it NEVER sends
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          try {
+            mediaRecorderRef.current.stop();
+          } catch (e) {}
+        }
+        if (mediaRecorderRef.current.stream) {
+          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        }
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+    };
+
+    window.addEventListener('beforeunload', cleanupRecording);
+
+    return () => {
+      window.removeEventListener('beforeunload', cleanupRecording);
+      cleanupRecording();
+    };
+  }, [activeContact?.username]);
+
   const stopRecording = (shouldSend = true) => {
-    if (!mediaRecorderRef.current || isRecording === false) return;
+    if (!mediaRecorderRef.current && !isRecording) return;
     
-    clearInterval(recordingTimerRef.current);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
     soundEngine.playVoiceRecordStop();
     
     if (!shouldSend) {
-      mediaRecorderRef.current.onstop = null; // discard
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.onstop = null; // null out onstop callback so it NEVER sends
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          try {
+            mediaRecorderRef.current.stop();
+          } catch (e) {}
+        }
+        if (mediaRecorderRef.current.stream) {
+          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        }
+      }
     } else {
-      mediaRecorderRef.current.stop();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch (e) {}
+      }
     }
     
     setIsRecording(false);
@@ -1190,149 +1363,7 @@ export default function ChatArea({
     return msg.text;
   }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, handleWaveformClick, onImageClick]);
 
-  // Hook for elastic overscroll bounce (rubber-banding)
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    const wrapper = messagesBounceWrapperRef.current;
-    if (!container || !wrapper) return;
-
-    let startY = 0;
-    let isDragging = false;
-    
-    // Physics engine state variables
-    let position = 0;
-    let velocity = 0;
-    const tension = 0.08; // Stiffness of the spring
-    const damping = 0.48;  // Critically damped friction coefficient (prevents oscillating back and forth)
-    let rafId = null;
-
-    // Reset translations
-    wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
-    wrapper.style.transition = 'none';
-
-    const updatePhysics = () => {
-      if (isDragging) return;
-
-      // Physics equations: Force = -k*x (pullback) - c*v (damping)
-      const force = -tension * position;
-      const friction = -damping * velocity;
-      const acceleration = force + friction;
-      
-      velocity += acceleration;
-      position += velocity;
-
-      // Clamp position visual bounds to protect UI layout
-      const maxVisualOverscroll = 85;
-      if (Math.abs(position) > maxVisualOverscroll) {
-        position = Math.sign(position) * maxVisualOverscroll;
-        velocity = 0; // Absorb momentum on hitting boundary wall
-      }
-
-      // Apply GPU-accelerated translation
-      wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
-
-      // Loop frame-by-frame until spring settles
-      if (Math.abs(position) > 0.05 || Math.abs(velocity) > 0.05) {
-        rafId = requestAnimationFrame(updatePhysics);
-      } else {
-        position = 0;
-        velocity = 0;
-        wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
-        rafId = null;
-      }
-    };
-
-    const handleTouchStart = (e) => {
-      if (e.touches.length !== 1) return;
-      
-      // Stop spring loop instantly when finger touches the screen mid-bounce
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      
-      startY = e.touches[0].clientY;
-      isDragging = true;
-    };
-
-    const handleTouchMove = (e) => {
-      if (!isDragging) return;
-
-      const currentY = e.touches[0].clientY;
-      const deltaY = currentY - startY;
-
-      const scrollTop = container.scrollTop;
-      const scrollHeight = container.scrollHeight;
-      const clientHeight = container.clientHeight;
-
-      const atTop = scrollTop <= 0;
-      const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
-
-      // Touch drag resistance is non-linear (y^0.75) for a natural stretch feel
-      if (atTop && deltaY > 0) {
-        if (e.cancelable) e.preventDefault();
-        position = Math.sign(deltaY) * Math.pow(Math.abs(deltaY), 0.75);
-        wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
-      } else if (atBottom && deltaY < 0) {
-        if (e.cancelable) e.preventDefault();
-        position = Math.sign(deltaY) * Math.pow(Math.abs(deltaY), 0.75);
-        wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
-      } else {
-        // Shift baseline if returning to normal scrolling boundaries
-        startY = currentY;
-        position = 0;
-        wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
-      }
-    };
-
-    const handleTouchEnd = () => {
-      if (!isDragging) return;
-      isDragging = false;
-      
-      velocity = 0;
-      if (!rafId) {
-        rafId = requestAnimationFrame(updatePhysics);
-      }
-    };
-
-    const handleWheel = (e) => {
-      const scrollTop = container.scrollTop;
-      const scrollHeight = container.scrollHeight;
-      const clientHeight = container.clientHeight;
-
-      const atTop = scrollTop <= 0;
-      const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
-
-      if ((atTop && e.deltaY < 0) || (atBottom && e.deltaY > 0)) {
-        if (e.cancelable) e.preventDefault();
-
-        // INJECT kinetic momentum into velocity only (never modify position directly!).
-        // This makes trackpad scroll inputs smoothly compound force, avoiding any stuttering
-        // since the coordinates are updated exclusively inside the requestAnimationFrame loop.
-        velocity -= e.deltaY * 0.045;
-
-        // Start the physics animation loop if it is idle
-        if (!rafId) {
-          rafId = requestAnimationFrame(updatePhysics);
-        }
-      }
-    };
-
-    container.addEventListener('touchstart', handleTouchStart, { passive: true });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd, { passive: true });
-    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
-    container.addEventListener('wheel', handleWheel, { passive: false });
-
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchcancel', handleTouchEnd);
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, [activeContact.username]);
+  // Native 120fps GPU compositor scrolling enabled
 
   return (
     <div className={`chat-area ${isNavigatingBack ? 'navigating-back' : ''}`}>
@@ -1510,7 +1541,7 @@ export default function ChatArea({
         </div>
 
         {/* Input container */}
-        <div className={`chat-input-container ${(selectedFile || replyingTo) ? 'with-preview' : ''} glass`}>
+        <div className={`chat-input-container ${(selectedFile || replyingTo) ? 'with-preview' : ''} ${isRecording ? 'is-recording-mode' : ''} glass`}>
           
           <input
             type="file"
@@ -1518,22 +1549,95 @@ export default function ChatArea({
             style={{ display: 'none' }}
             onChange={handleFileSelect}
           />
+
+          {showAttachMenu && !isRecording && (
+            <div ref={attachMenuRef} className="attach-menu-popover glass">
+              <div className="attach-menu-header">
+                <span>Share Media & Files</span>
+              </div>
+              <div className="attach-menu-options">
+                <button 
+                  className="attach-menu-item"
+                  onClick={() => openFilePicker('image/*,video/*')}
+                >
+                  <div className="attach-icon-badge photos">
+                    <Image size={18} />
+                  </div>
+                  <div className="attach-item-text">
+                    <span className="attach-title">Photos & Videos</span>
+                    <span className="attach-desc">Share images or video clips</span>
+                  </div>
+                </button>
+
+                <button 
+                  className="attach-menu-item"
+                  onClick={() => openFilePicker('*/*')}
+                >
+                  <div className="attach-icon-badge document">
+                    <FileText size={18} />
+                  </div>
+                  <div className="attach-item-text">
+                    <span className="attach-title">Document</span>
+                    <span className="attach-desc">Share any file format or PDF</span>
+                  </div>
+                </button>
+
+                <button 
+                  className="attach-menu-item"
+                  onClick={() => openFilePicker('audio/*')}
+                >
+                  <div className="attach-icon-badge audio">
+                    <Music size={18} />
+                  </div>
+                  <div className="attach-item-text">
+                    <span className="attach-title">Audio & Music</span>
+                    <span className="attach-desc">Share audio tracks or sound</span>
+                  </div>
+                </button>
+
+                <button 
+                  className="attach-menu-item"
+                  onClick={() => openFilePicker('image/*')}
+                >
+                  <div className="attach-icon-badge camera">
+                    <Camera size={18} />
+                  </div>
+                  <div className="attach-item-text">
+                    <span className="attach-title">Camera</span>
+                    <span className="attach-desc">Capture a photo or selfie</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
           
-          <button 
-            className="input-action-btn"
-            onClick={() => document.getElementById('file-input').click()}
-            title="Attach file"
-            disabled={isRecording}
-          >
-            <Plus size={20} strokeWidth={2.5} />
-          </button>
+          {!isRecording && (
+            <button 
+              className={`input-action-btn ${showAttachMenu ? 'active-menu' : ''}`}
+              onClick={() => setShowAttachMenu(prev => !prev)}
+              title="Share media or files"
+              disabled={isRecording}
+            >
+              <Plus size={20} strokeWidth={2.5} />
+            </button>
+          )}
 
           {isRecording ? (
             <div className="recording-banner">
-              <div className="recording-dot" />
-              <span>Recording Voice Note: {formatTime(recordingDuration)}</span>
-              <button onClick={() => stopRecording(false)} style={{ marginLeft: 'auto', color: 'var(--text-subtle)' }}>
-                Cancel
+              <div className="recording-indicator">
+                <div className="recording-dot" />
+                <span className="recording-timer">{formatTime(recordingDuration)}</span>
+              </div>
+              <div className="recording-waveform-bars">
+                <span className="wave-bar bar-1" />
+                <span className="wave-bar bar-2" />
+                <span className="wave-bar bar-3" />
+                <span className="wave-bar bar-4" />
+                <span className="wave-bar bar-5" />
+              </div>
+              <button className="recording-cancel-btn" onClick={() => stopRecording(false)} title="Cancel recording">
+                <Trash2 size={15} />
+                <span>Cancel</span>
               </button>
             </div>
           ) : (
@@ -1551,12 +1655,11 @@ export default function ChatArea({
 
           {isRecording ? (
             <button 
-              className="send-message-btn" 
+              className="send-message-btn voice-send" 
               onClick={() => stopRecording(true)} 
-              title="Stop and Send voice note"
-              style={{ backgroundColor: 'var(--danger-color)' }}
+              title="Stop and send voice note"
             >
-              <Mic size={18} />
+              <ArrowUp size={16} strokeWidth={3} />
             </button>
           ) : (inputText.trim() || selectedFile) ? (
             <button 
@@ -1569,45 +1672,135 @@ export default function ChatArea({
             </button>
           ) : (
             <button 
-              className="input-action-btn"
+              className="voice-record-btn idle"
               onClick={startRecording}
               title="Record voice note"
               disabled={uploading}
             >
-              <Mic size={20} />
+              <Mic size={19} />
             </button>
           )}
 
         </div>
       </div>
-      
-
     </div>
   );
-}
+});
+
+export default ChatArea;
 
 // ==========================================
 // Helper component: Decrypted image loader
 // ==========================================
-// ==========================================
-// Helper component: Decrypted image loader
-// ==========================================
+// Creates a downscaled lightweight canvas thumbnail blob for in-chat message previews
+const createThumbnailBlob = (blob, maxDimension = 480) => {
+  return new Promise((resolve) => {
+    if (!blob || blob.size < 150 * 1024 || !blob.type || !blob.type.startsWith('image/')) {
+      return resolve(blob);
+    }
+    const img = new window.Image();
+    const origUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(origUrl);
+      const width = img.width;
+      const height = img.height;
+
+      if (width <= maxDimension && height <= maxDimension) {
+        return resolve(blob);
+      }
+
+      let targetWidth = width;
+      let targetHeight = height;
+
+      if (width > height) {
+        if (width > maxDimension) {
+          targetHeight = Math.round((height * maxDimension) / width);
+          targetWidth = maxDimension;
+        }
+      } else {
+        if (height > maxDimension) {
+          targetWidth = Math.round((width * maxDimension) / height);
+          targetHeight = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+      canvas.toBlob(
+        (thumbnailBlob) => {
+          resolve(thumbnailBlob || blob);
+        },
+        'image/jpeg',
+        0.82
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(origUrl);
+      resolve(blob);
+    };
+    img.src = origUrl;
+  });
+};
+
+// In-memory instant media URL cache (URL -> { fullUrl, thumbUrl })
+const globalMediaSessionCache = new Map();
+
 function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
-  const [imgSrc, setImgSrc] = useState(null);
+  const fileUrl = fileMetadata?.url;
+  
+  const [imgSrc, setImgSrc] = useState(() => {
+    if (fileUrl && globalMediaSessionCache.has(fileUrl)) {
+      return globalMediaSessionCache.get(fileUrl).thumbUrl;
+    }
+    return null;
+  });
   const [error, setError] = useState(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const objectUrlRef = useRef(null);
+  const [isLoaded, setIsLoaded] = useState(() => {
+    return fileUrl ? globalMediaSessionCache.has(fileUrl) : false;
+  });
+  const fullResUrlRef = useRef(
+    fileUrl && globalMediaSessionCache.has(fileUrl)
+      ? globalMediaSessionCache.get(fileUrl).fullUrl
+      : null
+  );
 
   useEffect(() => {
+    if (!fileUrl) return;
+
+    // Instant hit from global session cache (0ms)
+    if (globalMediaSessionCache.has(fileUrl)) {
+      const cached = globalMediaSessionCache.get(fileUrl);
+      setImgSrc(cached.thumbUrl);
+      fullResUrlRef.current = cached.fullUrl;
+      setIsLoaded(true);
+      if (onImageLoad) onImageLoad();
+      return;
+    }
+
     let active = true;
 
     const loadAndDecrypt = async () => {
       try {
-        const blob = await loadOrFetchDecryptedMedia(fileMetadata);
+        const fullBlob = await loadOrFetchDecryptedMedia(fileMetadata);
         if (!active) return;
-        const localUrl = URL.createObjectURL(blob);
-        objectUrlRef.current = localUrl;
-        setImgSrc(localUrl);
+        
+        const fullUrl = URL.createObjectURL(fullBlob);
+
+        // Downscale for in-chat message bubble preview
+        const thumbBlob = await createThumbnailBlob(fullBlob, 480);
+        if (!active) return;
+
+        const thumbUrl = (thumbBlob === fullBlob) ? fullUrl : URL.createObjectURL(thumbBlob);
+
+        const cacheEntry = { fullUrl, thumbUrl };
+        globalMediaSessionCache.set(fileUrl, cacheEntry);
+
+        fullResUrlRef.current = fullUrl;
+        setImgSrc(thumbUrl);
       } catch (err) {
         if (active) setError(err.message || 'Media loading failed');
       }
@@ -1617,12 +1810,8 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
 
     return () => {
       active = false;
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
     };
-  }, [fileMetadata]);
+  }, [fileUrl]);
 
   if (error) return <span style={{ color: 'var(--text-muted, #a0aec0)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}><AlertTriangle size={14} style={{ color: '#e53e3e' }} /> {error}</span>;
 
@@ -1642,7 +1831,8 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
           className={`message-image ${isLoaded ? 'loaded' : ''}`}
           src={imgSrc} 
           alt={fileMetadata.name} 
-          onClick={onImageClick ? () => onImageClick(imgSrc) : undefined}
+          decoding="async"
+          onClick={onImageClick ? () => onImageClick(fullResUrlRef.current || imgSrc) : undefined}
           onLoad={() => {
             setIsLoaded(true);
             if (onImageLoad) onImageLoad();
@@ -1650,7 +1840,7 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
           style={{
             opacity: isLoaded ? 1 : 0,
             pointerEvents: isLoaded ? 'auto' : 'none',
-            cursor: onImageClick ? 'zoom-in' : 'default'
+            cursor: onImageClick ? 'pointer' : 'default'
           }}
         />
       )}

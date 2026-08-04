@@ -41,10 +41,29 @@ export default function CallWindow({
 
   const [isSwapped, setIsSwapped] = useState(false);
 
-  // Auto-reset swap state when any screen sharing session starts/stops, or when call resets to idle
+  // Auto-reset swap state and exit browser fullscreen when screen sharing ends or when call resets to idle
+  const prevScreenSharingRef = useRef(isScreenSharing || remoteScreenSharing);
   useEffect(() => {
+    const wasSharing = prevScreenSharingRef.current;
+    const isSharing = isScreenSharing || remoteScreenSharing;
+    prevScreenSharingRef.current = isSharing;
+
     setIsSwapped(false);
-  }, [isScreenSharing, remoteScreenSharing, callState]);
+
+    if (wasSharing && !isSharing) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    }
+  }, [isScreenSharing, remoteScreenSharing]);
+
+  useEffect(() => {
+    if (callState === 'idle') {
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    }
+  }, [callState]);
 
   // Synchronous callback refs for 100% immediate stream attachment upon DOM insertion
   const bindLocalVideo = (node) => {
@@ -718,6 +737,16 @@ export default function CallWindow({
                 >
                   {isScreenSharing ? <MonitorOff size={24} /> : <Monitor size={24} />}
                 </button>
+
+                {!isCallMinimized && (
+                  <button 
+                    className={`call-btn mute ${isFullscreen ? 'active' : ''}`} 
+                    onClick={toggleBrowserFullscreen}
+                    title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Mode"}
+                  >
+                    {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
+                  </button>
+                )}
 
                 {isCallMinimized ? (
                   <button className="call-btn maximize" onClick={() => setIsCallMinimized(false)} title="Maximize Call">

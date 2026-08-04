@@ -464,6 +464,25 @@ button {
   -webkit-backdrop-filter: none !important;
   transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: width, min-width;
+  transform: translateZ(0);
+}
+
+/* GPU-Accelerated Buttery Smooth Sidebar Isolation */
+.app-container.is-sidebar-animating .main-content-pane {
+  contain: size layout paint !important;
+  overflow: hidden !important;
+  will-change: width, transform;
+}
+
+.app-container.is-sidebar-animating .chat-header,
+.app-container.is-sidebar-animating .chat-input-container,
+.app-container.is-sidebar-animating .reply-preview-bar {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.app-container.is-sidebar-animating .messages-container {
+  pointer-events: none !important;
 }
 
 .sidebar-header {
@@ -868,6 +887,7 @@ button {
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -901,10 +921,26 @@ button {
   }
 }
 
+.message-row {
+  display: flex;
+  width: 100%;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.message-row.sent {
+  justify-content: flex-end;
+}
+
+.message-row.received {
+  justify-content: flex-start;
+}
+
 .message-wrapper {
   display: flex;
   flex-direction: column;
   max-width: 65%;
+  position: relative;
   transform: translate3d(0, 0, 0);
   will-change: transform;
 }
@@ -1100,10 +1136,147 @@ button {
   background-color: rgba(255, 255, 255, 0.05);
 }
 
+.input-action-btn.active-menu {
+  color: var(--accent-color) !important;
+  background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+.input-action-btn.active-menu svg {
+  transform: rotate(45deg);
+}
+
+.input-action-btn svg {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 .input-action-btn.recording {
   color: var(--danger-color);
   background-color: rgba(239, 68, 68, 0.1);
   animation: pulse-glow 1.5s infinite;
+}
+
+/* ==========================================
+   ATTACHMENT POPOVER MENU (Telegram/WhatsApp style)
+   ========================================== */
+.attach-menu-popover {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 12px;
+  width: 250px;
+  background: rgba(18, 22, 34, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 10px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  z-index: 1000;
+  animation: attachMenuPop 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: bottom left;
+}
+
+@keyframes attachMenuPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.88) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.attach-menu-header {
+  padding: 4px 10px 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 6px;
+}
+
+.attach-menu-header span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.attach-menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attach-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: background-color 0.18s ease, transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.attach-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateX(3px);
+}
+
+.attach-menu-item:active {
+  transform: scale(0.98);
+}
+
+.attach-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.attach-icon-badge.photos {
+  background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+}
+
+.attach-icon-badge.document {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+}
+
+.attach-icon-badge.audio {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.attach-icon-badge.camera {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.attach-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.attach-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.attach-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .message-textarea {
@@ -1145,28 +1318,41 @@ button {
   margin: 2px;
   transition: 
     background-color 0.2s ease,
-    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 0.2s cubic-bezier(0.2, 0, 0, 1),
     box-shadow 0.2s ease;
 }
 
 .send-message-btn:hover {
   background-color: #0076F6;
-  transform: scale(1.08);
-  box-shadow: 0 4px 12px rgba(10, 132, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(10, 132, 255, 0.35);
 }
 
 .send-message-btn:active {
-  transform: scale(0.92);
-  box-shadow: 0 2px 4px rgba(10, 132, 255, 0.2);
+  transform: scale(0.94);
+  box-shadow: 0 1px 3px rgba(10, 132, 255, 0.2);
+}
+
+/* Distinct Voice Note Send Button Color */
+.send-message-btn.voice-send {
+  background-color: #f43f5e;
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.3);
+}
+
+.send-message-btn.voice-send:hover {
+  background-color: #e11d48;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.4);
+}
+
+.send-message-btn.voice-send:active {
+  transform: scale(0.94);
+  box-shadow: 0 1px 3px rgba(225, 29, 72, 0.2);
 }
 
 .send-message-btn svg {
-  transform: translateY(-0.5px);
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.send-message-btn:hover svg {
-  transform: translateY(-2.5px);
+  display: block;
+  transform: none;
 }
 
 .send-message-btn:disabled {
@@ -1423,24 +1609,159 @@ button {
   min-width: 30px;
 }
 
-/* Recording Overlay / Animation */
+/* ==========================================
+   VOICE RECORDING BUTTON & ANIMATIONS
+   ========================================== */
+
+/* Dedicated Voice Recording Button */
+.voice-record-btn {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  color: var(--text-muted);
+  margin: 2px;
+  transition: 
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.2s ease;
+  outline: none;
+}
+
+.voice-record-btn.idle:hover {
+  color: var(--accent-color);
+  background-color: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.voice-record-btn.idle:active {
+  transform: scale(0.94);
+}
+
+/* Recording active container glass glow */
+.chat-input-container.is-recording-mode {
+  border-color: rgba(244, 63, 94, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 20px rgba(225, 29, 72, 0.15) !important;
+}
+
+/* Recording Status Banner */
 .recording-banner {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  color: var(--danger-color);
-  font-weight: 500;
-  font-size: 14px;
+  gap: 12px;
+  padding: 4px 8px;
+  animation: voiceBannerSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes voiceBannerSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  border-radius: 20px;
 }
 
 .recording-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background-color: var(--danger-color);
-  animation: pulse-recording 1s infinite;
+  background-color: #f43f5e;
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.8);
+  animation: recordingDotBlink 1.2s infinite ease-in-out;
+}
+
+@keyframes recordingDotBlink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
+}
+
+.recording-timer {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  color: #f43f5e;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dancing Sound Wave Equalizer Bars */
+.recording-waveform-bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 4px;
+}
+
+.recording-waveform-bars .wave-bar {
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(180deg, #f43f5e 0%, rgba(244, 63, 94, 0.4) 100%);
+  border-radius: 2px;
+  transform-origin: bottom;
+  animation: audioWaveBounce 1.2s infinite ease-in-out;
+}
+
+.recording-waveform-bars .bar-1 { animation-delay: 0.0s; }
+.recording-waveform-bars .bar-2 { animation-delay: 0.2s; }
+.recording-waveform-bars .bar-3 { animation-delay: 0.4s; }
+.recording-waveform-bars .bar-4 { animation-delay: 0.15s; }
+.recording-waveform-bars .bar-5 { animation-delay: 0.35s; }
+
+@keyframes audioWaveBounce {
+  0%, 100% { height: 4px; opacity: 0.5; }
+  50% { height: 16px; opacity: 1; }
+}
+
+/* Sleek Recording Cancel Button */
+.recording-cancel-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  margin-left: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.recording-cancel-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f43f5e;
+  transform: scale(1.04);
+}
+
+.recording-cancel-btn:active {
+  transform: scale(0.95);
 }
 
 /* ==========================================
@@ -2488,53 +2809,103 @@ body.dragging-pip * {
 .message-actions-container {
   position: absolute;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translateY(-50%) scale(0.9);
   opacity: 0;
-  transition: opacity 0.2s ease;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   gap: 4px;
   z-index: 5;
 }
 
 .message-wrapper.sent .message-actions-container {
-  left: -36px;
+  left: -40px;
 }
 
 .message-wrapper.received .message-actions-container {
-  right: -36px;
+  right: -40px;
 }
 
-.message-wrapper:hover .message-actions-container {
+.message-row:hover .message-actions-container,
+.message-wrapper:hover .message-actions-container,
+.message-actions-container:hover {
   opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) scale(1);
 }
 
 .msg-action-btn {
   color: var(--text-subtle);
-  padding: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border-radius: 50%;
   background-color: var(--bg-card-solid);
   border: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
   transition: var(--transition-smooth);
 }
 
 .msg-action-btn:hover {
   color: var(--accent-color);
   background-color: var(--bg-card);
-  transform: scale(1.1);
+  border-color: var(--accent-color);
+  transform: scale(1.15);
 }
 
-/* Highlight Flash Animation for Reply Redirection */
-@keyframes highlight-pulse {
-  0% { background-color: rgba(99, 102, 241, 0.45); filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.3)); }
-  100% { background-color: transparent; filter: none; }
-}
-
+/* GPU Hardware-Accelerated Buttery Smooth Reply Target Highlight */
 .message-wrapper.highlight-flash .message-bubble {
-  animation: highlight-pulse 2s ease;
+  position: relative;
+  will-change: transform;
+  animation: butteryReplyNudge 1.1s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+
+.message-wrapper.highlight-flash .message-bubble::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: inherit;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.18) 0%, rgba(99, 102, 241, 0.28) 100%);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.45), inset 0 0 10px rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  z-index: 2;
+  will-change: opacity, transform;
+  animation: butteryGlowFade 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+@keyframes butteryReplyNudge {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  28% {
+    transform: translate3d(8px, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes butteryGlowFade {
+  0% {
+    opacity: 0;
+    transform: scale3d(0.97, 0.97, 1);
+  }
+  18% {
+    opacity: 1;
+    transform: scale3d(1.02, 1.02, 1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale3d(1, 1, 1);
+  }
 }
 
 /* Typing Indicator Animation Wrapper */
@@ -2783,7 +3154,7 @@ body.dragging-pip * {
   align-items: center;
   justify-content: center;
   z-index: 9999; /* Float on top of everything, including headers */
-  cursor: zoom-out;
+  cursor: default;
   transition: 
     background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     backdrop-filter 0.25s cubic-bezier(0.4, 0, 0.2, 1),
@@ -2807,7 +3178,7 @@ body.dragging-pip * {
   border-radius: 12px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0);
   object-fit: contain;
-  cursor: zoom-out;
+  cursor: default;
   transform: scale(0.92);
   transition: 
     transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -3910,14 +4281,14 @@ body.dragging-pip * {
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), height 0.3s cubic-bezier(0.16, 1, 0.3, 1), margin 0.3s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   border: none !important;
 }
 
 .sidebar-minimized .no-contacts svg {
   margin-bottom: 0 !important;
   opacity: 0.5;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), margin 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sidebar-minimized .contact-item {
