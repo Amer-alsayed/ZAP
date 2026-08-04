@@ -337,10 +337,10 @@ export default function CallWindow({
           </div>
 
           <div className="incoming-pill-actions">
-            <button className="pill-btn accept" onClick={onAccept} title="Accept Call">
+            <button className="pill-btn accept" aria-label="Accept Call" onClick={onAccept} title="Accept Call">
               {mediaType === 'video' ? <Video size={16} /> : <Phone size={16} />}
             </button>
-            <button className="pill-btn decline" onClick={onDecline} title="Decline Call">
+            <button className="pill-btn decline" aria-label="Decline Call" onClick={onDecline} title="Decline Call">
               <PhoneOff size={16} />
             </button>
           </div>
@@ -384,15 +384,15 @@ export default function CallWindow({
           </div>
           <div className="call-actions">
             {isCallMinimized ? (
-              <button className="call-btn maximize" onClick={() => setIsCallMinimized(false)} title="Maximize Call">
+              <button className="call-btn maximize" aria-label="Maximize Call" onClick={() => setIsCallMinimized(false)} title="Maximize Call">
                 <Maximize2 size={24} />
               </button>
             ) : (
-              <button className="call-btn minimize" onClick={() => setIsCallMinimized(true)} title="Minimize Call">
+              <button className="call-btn minimize" aria-label="Minimize Call" onClick={() => setIsCallMinimized(true)} title="Minimize Call">
                 <Minimize2 size={24} />
               </button>
             )}
-            <button className="call-btn decline" onClick={onHangUp} title="Cancel Call">
+            <button className="call-btn decline" aria-label="Cancel Call" onClick={onHangUp} title="Cancel Call">
               <PhoneOff size={24} />
             </button>
           </div>
@@ -562,7 +562,7 @@ export default function CallWindow({
                     <Minimize2 size={24} />
                   </button>
                 )}
-                <button className="call-btn decline" onClick={onHangUp} title="Hang up">
+                <button className="call-btn decline" aria-label="Hang up" onClick={onHangUp} title="Hang up">
                   <PhoneOff size={24} />
                 </button>
               </div>

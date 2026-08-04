@@ -1132,7 +1132,7 @@ export default function ChatArea({
 
       return (
         <div className="voice-note-player">
-          <button className="play-pause-btn" onClick={() => togglePlayAudio(msg.id, file)}>
+          <button className="play-pause-btn" aria-label={isPlaying ? "Pause voice note" : "Play voice note"} onClick={() => togglePlayAudio(msg.id, file)}>
             {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" style={{ marginLeft: '2px' }} />}
           </button>
           <div 
@@ -1376,7 +1376,7 @@ export default function ChatArea({
       {/* Header */}
       <div className="chat-header glass">
         <div className="chat-header-info">
-          <button className="back-btn" onClick={onBack} title="Back to menu">
+          <button className="back-btn" aria-label="Back to menu" onClick={onBack} title="Back to menu">
             <ArrowLeft size={18} />
           </button>
           {renderAvatar(activeContact.username, activeContact.displayName, activeContact.avatarIcon)}
@@ -1407,6 +1407,7 @@ export default function ChatArea({
           </button>
           <button 
             className="header-action-btn" 
+            aria-label="Secure Voice Call"
             onClick={() => onInitiateCall('voice')}
             title="Secure Voice Call"
           >
@@ -1414,6 +1415,7 @@ export default function ChatArea({
           </button>
           <button 
             className="header-action-btn" 
+            aria-label="Secure Video Call"
             onClick={() => onInitiateCall('video')}
             title="Secure Video Call"
           >
@@ -1484,6 +1486,7 @@ export default function ChatArea({
         {/* Floating Scroll-to-Bottom Button / Typing Indicator */}
         <button 
           className={`scroll-to-bottom-btn glass ${(!isLastMessageVisible && !isInlineTypingVisible) ? 'visible' : ''} ${(activeContact.isTyping && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
+          aria-label="Scroll to bottom"
           onClick={scrollToBottom} 
           title="Scroll to bottom"
         >
@@ -1521,7 +1524,7 @@ export default function ChatArea({
               </div>
             </div>
           )}
-          <button className="reply-preview-close" onClick={() => setReplyingTo(null)}>
+          <button className="reply-preview-close" aria-label="Cancel reply" onClick={() => setReplyingTo(null)}>
             <X size={16} />
           </button>
         </div>
@@ -1539,7 +1542,7 @@ export default function ChatArea({
                 {activeFileInfo.type?.startsWith('image/') ? <Image size={18} /> : <FileText size={18} />}
                 <span>{activeFileInfo.name} ({(activeFileInfo.size / 1024).toFixed(1)} KB)</span>
               </div>
-              <button className="remove-attachment-btn" onClick={() => setSelectedFile(null)}>
+              <button className="remove-attachment-btn" aria-label="Remove attachment" onClick={() => setSelectedFile(null)}>
                 <X size={18} />
               </button>
             </>
@@ -1569,7 +1572,7 @@ export default function ChatArea({
             <div className="recording-banner">
               <div className="recording-dot" />
               <span>Recording Voice Note: {formatTime(recordingDuration)}</span>
-              <button onClick={() => stopRecording(false)} style={{ marginLeft: 'auto', color: 'var(--text-subtle)' }}>
+              <button aria-label="Cancel recording" onClick={() => stopRecording(false)} style={{ marginLeft: 'auto', color: 'var(--text-subtle)' }}>
                 Cancel
               </button>
             </div>
@@ -1589,6 +1592,7 @@ export default function ChatArea({
           {isRecording ? (
             <button 
               className="send-message-btn" 
+              aria-label="Stop and Send voice note"
               onClick={() => stopRecording(true)} 
               title="Stop and Send voice note"
               style={{ backgroundColor: 'var(--danger-color)' }}
@@ -1598,6 +1602,7 @@ export default function ChatArea({
           ) : (inputText.trim() || selectedFile) ? (
             <button 
               className="send-message-btn" 
+              aria-label="Send Encrypted Message"
               onClick={handleSendMessage} 
               disabled={(!inputText.trim() && !selectedFile) || uploading}
               title="Send Encrypted Message"
