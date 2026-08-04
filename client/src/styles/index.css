@@ -979,8 +979,9 @@ button {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
   overflow-anchor: none; /* Disable browser native scroll anchoring updates */
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 16px, black 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, black 16px, black 100%);
+  /* Fade messages into header at top AND into input bar at bottom */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 16px, black calc(100% - 40px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, black 16px, black calc(100% - 40px), transparent 100%);
   
   /* Premium conversation loading animation */
   animation: chatLogsFadeIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -1125,9 +1126,6 @@ button {
   backdrop-filter: blur(16px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4) !important;
-  /* Upward gradient fade to blend with message list */
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.6) 18%, black 36%);
-  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.6) 18%, black 36%);
 }
 
 /* Media preview attachment bar */
