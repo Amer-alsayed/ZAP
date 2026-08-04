@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, User, Lock, KeyRound, AlertTriangle } from 'lucide-react';
+import { Shield, User, Lock, KeyRound, AlertTriangle, RefreshCw } from 'lucide-react';
 import { deriveKeysFromPassword, generateKeyPairs, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys } from '../services/crypto';
 import { registerUser, loginUser } from '../services/api';
 
@@ -234,7 +234,11 @@ export default function Login({ onAuthSuccess }) {
           </div>
 
           <button className="auth-btn" type="submit" disabled={loading}>
-            {loading ? 'Processing Cryptography...' : isRegister ? 'Create Anonymous Account' : 'Secure Login'}
+            {loading ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <RefreshCw size={16} className="spin-icon" /> Processing Cryptography...
+              </span>
+            ) : isRegister ? 'Create Anonymous Account' : 'Secure Login'}
           </button>
         </form>
 
