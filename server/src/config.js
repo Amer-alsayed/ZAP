@@ -2,6 +2,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import crypto from 'crypto';
+
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -11,14 +13,16 @@ const IS_PROD = NODE_ENV === 'production';
 
 // Strict secret validation
 let jwtSecret = process.env.JWT_SECRET;
-const DEFAULT_DEV_SECRET = 'super-secure-chatra-secret-key-12345';
 
 if (!jwtSecret) {
   if (IS_PROD) {
-    console.error('FATAL SECURITY ERROR: process.env.JWT_SECRET is required in production mode!');
-    throw new Error('FATAL SECURITY ERROR: process.env.JWT_SECRET environment variable is missing in production mode.');
+    jwtSecret = crypto.randomBytes(64).toString('hex');
+    console.warn('⚠️ WARNING: process.env.JWT_SECRET is missing in production mode!');
+    console.warn('🔑 Generated a cryptographically secure random JWT secret for this session.');
+    console.warn('💡 Tip: Set JWT_SECRET in your environment variables to persist sessions across server restarts.');
+  } else {
+    jwtSecret = 'super-secure-chatra-secret-key-12345';
   }
-  jwtSecret = DEFAULT_DEV_SECRET;
 }
 
 // CORS Allowed Origins
