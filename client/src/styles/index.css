@@ -91,11 +91,9 @@ body {
   height: 100%;
   display: flex;
   overflow: hidden;
-  /* Push content inward from status bar and nav bar safe areas */
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+  /* DO NOT add safe-area padding here — it creates a gap behind the nav bar.
+     Safe area is handled per-element below so the black background bleeds
+     seamlessly into the Android nav bar zone. */
 }
 
 /* Buttons & Inputs resets */
@@ -480,6 +478,8 @@ button {
   transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: width, min-width;
   transform: translateZ(0);
+  /* Sidebar content extends into nav bar zone on mobile home screen */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* GPU-Accelerated Buttery Smooth Sidebar Isolation */
@@ -1134,6 +1134,8 @@ button {
 .chat-input-wrapper {
   position: relative; /* Anchor for the centered scroll button */
   padding: 20px 24px;
+  /* Grow into the nav bar zone — content stays above it, black bg bleeds behind it */
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
   z-index: 10;
   background: rgba(0, 0, 0, 0.75) !important;
   backdrop-filter: blur(16px) saturate(180%) !important;
