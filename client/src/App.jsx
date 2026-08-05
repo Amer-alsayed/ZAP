@@ -531,10 +531,6 @@ export default function App() {
       if (window.history.state !== 'reply') {
         window.history.pushState('reply', '');
       }
-    } else {
-      if (window.history.state === 'reply') {
-        window.history.back();
-      }
     }
   }, [replyingTo]);
 
