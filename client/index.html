@@ -10,7 +10,7 @@
     <!-- PWA & Status/Nav Bar Theming -->
     <meta name="theme-color" content="#000000" />
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
-    <meta name="background-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
 
     <!-- iOS PWA Standalone Mode -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -20,6 +20,27 @@
 
     <!-- Android Chrome PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
+
+    <!-- PWA launch: always start at home screen, not last page -->
+    <script>
+      (function() {
+        var isPWA = window.matchMedia('(display-mode: standalone)').matches
+          || window.navigator.standalone === true
+          || document.referrer.includes('android-app://');
+        var isLaunch = window.performance && window.performance.navigation
+          ? window.performance.navigation.type === 0
+          : (window.performance.getEntriesByType
+              ? window.performance.getEntriesByType('navigation').some(function(n){ return n.type === 'navigate'; })
+              : true);
+        var fromManifest = window.location.search.includes('source=pwa');
+        if ((isPWA && isLaunch) || fromManifest) {
+          try {
+            localStorage.setItem('chatra_active_view', 'dashboard');
+            localStorage.removeItem('chatra_active_contact');
+          } catch(e) {}
+        }
+      })();
+    </script>
     <style>
       /* Immediate background reset to avoid flash */
       html, body {
