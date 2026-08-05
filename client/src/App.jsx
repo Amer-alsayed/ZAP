@@ -476,6 +476,11 @@ export default function App() {
   // Handle native back gestures (Android back button & mobile browser back)
   useEffect(() => {
     const handlePopState = (e) => {
+      // 0. Ignore popstate if it's from voice recording
+      if (window.__isChatraRecording || window.__isPoppingRecording) {
+        return;
+      }
+
       // 1. Close lightbox viewer if active
       if (lightboxRef.current) {
         setLightboxImageSrc(null);

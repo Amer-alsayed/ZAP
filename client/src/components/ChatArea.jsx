@@ -1080,6 +1080,7 @@ const ChatArea = React.memo(function ChatArea({
   const isRecordingRef = useRef(isRecording);
   useEffect(() => {
     isRecordingRef.current = isRecording;
+    window.__isChatraRecording = isRecording;
   }, [isRecording]);
 
   // Push history state 'recording' when voice recording is active
@@ -1090,7 +1091,11 @@ const ChatArea = React.memo(function ChatArea({
       }
     } else {
       if (window.history.state === 'recording') {
+        window.__isPoppingRecording = true;
         window.history.back();
+        setTimeout(() => {
+          window.__isPoppingRecording = false;
+        }, 100);
       }
     }
   }, [isRecording]);
