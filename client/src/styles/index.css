@@ -64,17 +64,10 @@
   background: rgba(255, 255, 255, 0.25);
 }
 
-html {
-  background-color: #000000;
-  /* Force nav bar and status bar zones to be pure black */
-  color-scheme: dark;
-}
-
 body {
   background-color: var(--bg-main);
   color: var(--text-primary);
   overflow: hidden;
-  /* Use min-height to fill the full viewport including safe areas */
   height: 100vh;
   height: 100dvh;
   width: 100vw;
@@ -84,6 +77,11 @@ body {
   position: fixed;
   left: 0;
   top: 0;
+  /* Fill entire screen including status bar and nav bar areas in PWA standalone */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 #root {
@@ -91,9 +89,6 @@ body {
   height: 100%;
   display: flex;
   overflow: hidden;
-  /* DO NOT add safe-area padding here — it creates a gap behind the nav bar.
-     Safe area is handled per-element below so the black background bleeds
-     seamlessly into the Android nav bar zone. */
 }
 
 /* Buttons & Inputs resets */
@@ -478,21 +473,6 @@ button {
   transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: width, min-width;
   transform: translateZ(0);
-  /* Sidebar content extends into nav bar zone on mobile home screen */
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-/* Paint pure black into nav bar zone on home screen too */
-.sidebar::after {
-  content: '';
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: env(safe-area-inset-bottom);
-  background: #000000;
-  z-index: 9999;
-  pointer-events: none;
 }
 
 /* GPU-Accelerated Buttery Smooth Sidebar Isolation */
@@ -1147,27 +1127,11 @@ button {
 .chat-input-wrapper {
   position: relative; /* Anchor for the centered scroll button */
   padding: 20px 24px;
-  /* Grow into the nav bar zone — guarantee at least 48px to cover any Android nav bar */
-  padding-bottom: max(calc(20px + env(safe-area-inset-bottom)), 68px);
   z-index: 10;
-  background: #000000 !important;
+  background: rgba(0, 0, 0, 0.75) !important;
   backdrop-filter: blur(16px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4) !important;
-}
-
-/* Explicitly paint pure black into the Android nav bar zone.
-   The OS scrim is semi-transparent — black beneath it still looks black. */
-.chat-input-wrapper::after {
-  content: '';
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: env(safe-area-inset-bottom);
-  background: #000000;
-  z-index: 9999;
-  pointer-events: none;
 }
 
 /* Media preview attachment bar */
