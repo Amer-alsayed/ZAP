@@ -6,6 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="description" content="Chatra is a completely anonymous, secure, and end-to-end encrypted real-time chat application supporting text, calling, and file sharing." />
     <title>Chatra</title>
+
+    <!-- PWA & Status/Nav Bar Theming -->
+    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <meta name="background-color" content="#000000" />
+
+    <!-- iOS PWA Standalone Mode -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Chatra" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <!-- Android Chrome PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
     <style>
       /* Immediate background reset to avoid flash */
       html, body {
