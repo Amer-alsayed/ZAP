@@ -482,6 +482,19 @@ button {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Paint pure black into nav bar zone on home screen too */
+.sidebar::after {
+  content: '';
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-bottom);
+  background: #000000;
+  z-index: 9999;
+  pointer-events: none;
+}
+
 /* GPU-Accelerated Buttery Smooth Sidebar Isolation */
 .app-container.is-sidebar-animating .main-content-pane {
   contain: size layout paint !important;
@@ -1137,10 +1150,24 @@ button {
   /* Grow into the nav bar zone — content stays above it, black bg bleeds behind it */
   padding-bottom: calc(20px + env(safe-area-inset-bottom));
   z-index: 10;
-  background: rgba(0, 0, 0, 0.75) !important;
+  background: #000000 !important;
   backdrop-filter: blur(16px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Explicitly paint pure black into the Android nav bar zone.
+   The OS scrim is semi-transparent — black beneath it still looks black. */
+.chat-input-wrapper::after {
+  content: '';
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-bottom);
+  background: #000000;
+  z-index: 9999;
+  pointer-events: none;
 }
 
 /* Media preview attachment bar */
