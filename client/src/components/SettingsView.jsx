@@ -35,6 +35,30 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
     return localStorage.getItem('chatra_call_quality') || 'medium';
   });
 
+  const hexToRgb = (hex) => {
+    let c = hex.replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    const num = parseInt(c, 16);
+    return `${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}`;
+  };
+
+  const rgbToHex = (rgbStr) => {
+    if (!rgbStr) return '#007acc';
+    const parts = rgbStr.split(',').map(n => parseInt(n.trim(), 10));
+    if (parts.length !== 3 || parts.some(isNaN)) return '#007acc';
+    return `#${((1 << 24) + (parts[0] << 16) + (parts[1] << 8) + parts[2]).toString(16).slice(1)}`;
+  };
+
+  const [appThemeRgb, setAppThemeRgb] = useState(() => {
+    return localStorage.getItem('chatra_theme_rgb') || '0, 122, 204';
+  });
+
+  const handleThemeChange = (rgbValue) => {
+    setAppThemeRgb(rgbValue);
+    localStorage.setItem('chatra_theme_rgb', rgbValue);
+    document.documentElement.style.setProperty('--accent-rgb', rgbValue);
+  };
+
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(() => {
     return localStorage.getItem('chatra_sound_effects') !== 'false';
   });
@@ -401,6 +425,68 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value.slice(0, 24))}
                 />
+              </div>
+            </div>
+
+            {/* App Theme Accent Color Selector */}
+            <div className="form-group">
+              <label>App Theme Accent Color</label>
+              <div className="color-selector-row" style={{ flexWrap: 'wrap', gap: '10px' }}>
+                {[
+                  { name: 'Electric Blue', hex: '#007acc', rgb: '0, 122, 204' },
+                  { name: 'Royal Violet', hex: '#8b5cf6', rgb: '139, 92, 246' },
+                  { name: 'Deep Purple', hex: '#a855f7', rgb: '168, 85, 247' },
+                  { name: 'Neon Emerald', hex: '#10b981', rgb: '16, 185, 129' },
+                  { name: 'Mint Leaf', hex: '#2dd4bf', rgb: '45, 212, 191' },
+                  { name: 'Cyan Spark', hex: '#06b6d4', rgb: '6, 182, 212' },
+                  { name: 'Sunset Amber', hex: '#f59e0b', rgb: '245, 158, 11' },
+                  { name: 'Bright Orange', hex: '#ff7043', rgb: '255, 112, 67' },
+                  { name: 'Crimson Rose', hex: '#f43f5e', rgb: '244, 63, 94' },
+                  { name: 'Hot Pink', hex: '#ec4899', rgb: '236, 72, 153' }
+                ].map((theme) => {
+                  const isCurrentTheme = appThemeRgb === theme.rgb;
+                  return (
+                    <button
+                      key={theme.name}
+                      type="button"
+                      className={`color-dot ${isCurrentTheme ? 'active' : ''}`}
+                      style={{ backgroundColor: theme.hex }}
+                      onClick={() => handleThemeChange(theme.rgb)}
+                      title={`Switch app accent color to ${theme.name}`}
+                    >
+                      {isCurrentTheme && <Check size={14} color="#ffffff" />}
+                    </button>
+                  );
+                })}
+
+                {/* Custom Color Picker Button & Native Color Input */}
+                <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                  <input
+                    type="color"
+                    id="custom-theme-color-picker"
+                    value={rgbToHex(appThemeRgb)}
+                    onChange={(e) => handleThemeChange(hexToRgb(e.target.value))}
+                    style={{
+                      position: 'absolute',
+                      opacity: 0,
+                      width: '32px',
+                      height: '32px',
+                      cursor: 'pointer',
+                      zIndex: 2
+                    }}
+                    title="Choose custom theme color"
+                  />
+                  <div
+                    className="color-dot custom-picker-btn"
+                    style={{
+                      background: 'conic-gradient(from 0deg, #f43f5e, #f59e0b, #10b981, #06b6d4, #8b5cf6, #f43f5e)',
+                      position: 'relative',
+                      zIndex: 1,
+                      border: '1px solid rgba(255, 255, 255, 0.2)'
+                    }}
+                    title="Choose custom color..."
+                  />
+                </div>
               </div>
             </div>
 

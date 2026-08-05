@@ -227,7 +227,7 @@ const MessageList = React.memo(({
                     <span className="message-status-ticks" title={msg.status === 2 ? "Read" : msg.status === 1 ? "Delivered" : "Sent"}>
                       {msg.status === 0 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓</span>}
                       {msg.status === 1 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
-                      {msg.status === 2 && <span style={{ color: '#007acc', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
+                      {msg.status === 2 && <span style={{ color: 'var(--accent-color)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
                     </span>
                   )}
                 </div>
@@ -1126,6 +1126,14 @@ const ChatArea = React.memo(function ChatArea({
       const audioKeyJwk = await window.crypto.subtle.exportKey('jwk', audioKey);
 
       // 7. Send the voice note metadata encrypted
+      const replyContext = replyingTo ? { 
+        id: replyingTo.id, 
+        sender: replyingTo.sender, 
+        text: replyingTo.text,
+        mediaType: replyingTo.mediaType || null,
+        fileMetadata: replyingTo.fileMetadata || null
+      } : null;
+
       onSendMessage({
         type: 'voice',
         fileMetadata: {
@@ -1136,8 +1144,10 @@ const ChatArea = React.memo(function ChatArea({
           keyJwk: audioKeyJwk,
           iv: bufferToBase64(iv),
           duration: recordingDurationRef.current
-        }
+        },
+        replyTo: replyContext
       });
+      setReplyingTo(null);
       soundEngine.playMessageSent();
     } catch (err) {
       console.error(err);

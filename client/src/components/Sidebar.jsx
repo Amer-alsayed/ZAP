@@ -13,7 +13,7 @@ const formatSidebarTime = (timestamp) => {
 export const renderAvatar = (username, displayName, avatarIcon, customSizeStyle = {}) => {
   const displayInitials = (displayName || username || 'U').substring(0, 2).toUpperCase();
   
-  let avatarColor = '#007acc'; // default accent blue
+  let avatarColor = 'var(--accent-color)'; // default accent theme color
   let avatarEmoji = null;
   let avatarImage = null;
 
@@ -25,7 +25,7 @@ export const renderAvatar = (username, displayName, avatarIcon, customSizeStyle 
       } else {
         if (parsed.color) {
           const colorMap = {
-            blue: '#007acc',
+            blue: 'var(--accent-color)',
             purple: '#bf5af2',
             emerald: '#30d158',
             orange: '#ff9f0a',
@@ -100,7 +100,7 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
       ticksText = '✓✓';
     } else if (lastMsg.status === 2) {
       ticksText = '✓✓';
-      ticksColor = '#38bdf8'; // sky blue
+      ticksColor = 'var(--accent-color)'; // active theme accent
     }
 
     return (

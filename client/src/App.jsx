@@ -116,13 +116,18 @@ export default function App() {
     restoreSession();
   }, []);
 
-  // Apply flat theme on mount if disabled in preferences
+  // Apply theme preferences (glass mode and accent color)
   useEffect(() => {
     const glass = localStorage.getItem('chatra_glass') !== 'false';
     if (!glass) {
       document.body.classList.add('flat-theme');
     } else {
       document.body.classList.remove('flat-theme');
+    }
+
+    const savedRgb = localStorage.getItem('chatra_theme_rgb');
+    if (savedRgb) {
+      document.documentElement.style.setProperty('--accent-rgb', savedRgb);
     }
   }, []);
 
@@ -262,6 +267,15 @@ export default function App() {
   const [lightboxImageSrc, setLightboxImageSrc] = useState(null);
   const [activeLightboxSrc, setActiveLightboxSrc] = useState(null);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
+  const [isSafetyModalClosing, setIsSafetyModalClosing] = useState(false);
+
+  const handleCloseSafetyModal = () => {
+    setIsSafetyModalClosing(true);
+    setTimeout(() => {
+      setShowSafetyModal(false);
+      setIsSafetyModalClosing(false);
+    }, 250);
+  };
   const [sidebarMinimized, setSidebarMinimized] = useState(() => {
     return localStorage.getItem('chatra_sidebar_minimized') === 'true';
   });
@@ -2357,15 +2371,18 @@ export default function App() {
           </div>
 
           {/* E2EE Safety Number verification modal (Root level to overlap Sidebar) */}
-          {showSafetyModal && activeContact && (
-            <div className="safety-modal-overlay glass-modal-overlay" onClick={() => setShowSafetyModal(false)}>
+          {(showSafetyModal || isSafetyModalClosing) && activeContact && (
+            <div 
+              className={`safety-modal-overlay glass-modal-overlay ${isSafetyModalClosing ? 'closing' : ''}`} 
+              onClick={handleCloseSafetyModal}
+            >
               <div className="safety-modal-card glass" onClick={(e) => e.stopPropagation()}>
                 <div className="safety-modal-header">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <ShieldCheck size={22} style={{ color: 'var(--accent-color)' }} />
                     <h3>E2EE Safety Number</h3>
                   </div>
-                  <button className="safety-close-btn" onClick={() => setShowSafetyModal(false)}>
+                  <button className="safety-close-btn" onClick={handleCloseSafetyModal}>
                     <X size={18} />
                   </button>
                 </div>
