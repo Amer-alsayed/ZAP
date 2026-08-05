@@ -77,11 +77,6 @@ body {
   position: fixed;
   left: 0;
   top: 0;
-  /* Fill entire screen including status bar and nav bar areas in PWA standalone */
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
 }
 
 #root {
