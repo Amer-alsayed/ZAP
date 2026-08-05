@@ -1147,8 +1147,8 @@ button {
 .chat-input-wrapper {
   position: relative; /* Anchor for the centered scroll button */
   padding: 20px 24px;
-  /* Grow into the nav bar zone — content stays above it, black bg bleeds behind it */
-  padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  /* Grow into the nav bar zone — guarantee at least 48px to cover any Android nav bar */
+  padding-bottom: max(calc(20px + env(safe-area-inset-bottom)), 68px);
   z-index: 10;
   background: #000000 !important;
   backdrop-filter: blur(16px) saturate(180%) !important;

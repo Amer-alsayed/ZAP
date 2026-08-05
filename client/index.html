@@ -162,22 +162,54 @@
       </div>
     </div>
     <script type="module" src="/src/main.jsx"></script>
-
-    <!-- Nav bar zone fill: position:fixed at body root (no transform ancestors)
-         so it always covers the Android bottom nav bar with pure black.
-         Android's gesture scrim is semi-transparent, so #000 beneath = #000. -->
+    <!-- Nav bar zone fill - JS-driven to handle devices where env() returns 0 -->
     <div id="nav-bar-fill" style="
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
       width: 100%;
-      height: env(safe-area-inset-bottom, 0px);
+      height: 0;
       background: #000000;
       z-index: 2147483647;
       pointer-events: none;
-      -webkit-user-select: none;
-      user-select: none;
+      display: block;
     "></div>
+    <script>
+      (function () {
+        var fill = document.getElementById('nav-bar-fill');
+        if (!fill) return;
+
+        function setFillHeight() {
+          var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+          if (!isMobile) { fill.style.height = '0px'; return; }
+
+          // Try CSS env() first via a temporary element
+          var tmp = document.createElement('div');
+          tmp.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:env(safe-area-inset-bottom,0px);pointer-events:none;visibility:hidden;';
+          document.body.appendChild(tmp);
+          var envH = tmp.getBoundingClientRect().height;
+          document.body.removeChild(tmp);
+
+          // Fallback: use screen.height - window.innerHeight difference
+          var screenH = window.screen.height;
+          var viewH = window.innerHeight;
+          var diff = screenH - viewH;
+
+          // Use whichever gives a larger, more reliable value (min 0, max 80)
+          var h = Math.min(Math.max(envH || 0, diff > 0 && diff < 200 ? diff : 0), 80);
+
+          // On mobile PWA if we got 0, fallback to a standard Android nav bar height
+          var isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+          if (h === 0 && isPWA) h = 48;
+
+          fill.style.height = h + 'px';
+        }
+
+        setFillHeight();
+        window.addEventListener('resize', setFillHeight);
+      })();
+    </script>
   </body>
+
 </html>
