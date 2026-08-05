@@ -2801,6 +2801,28 @@ body.dragging-pip * {
     display: flex !important; /* Show back button on mobile */
   }
 
+  .message-actions-container {
+    display: none !important; /* Hide hover reply button on mobile; swipe-to-reply is active */
+  }
+
+  .swipe-reply-indicator {
+    display: flex !important;
+    position: absolute;
+    left: -28px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(var(--accent-rgb), 0.15);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 5;
+    transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
   .minimize-btn {
     display: none !important; /* Hide minimize sidebar button on mobile */
   }
@@ -3121,6 +3143,10 @@ body.dragging-pip * {
   background: rgba(255, 69, 58, 0.15);
   border-color: rgba(255, 69, 58, 0.3);
   transform: scale(1.08);
+}
+
+.swipe-reply-indicator {
+  display: none;
 }
 
 /* Message Hover Action Container */

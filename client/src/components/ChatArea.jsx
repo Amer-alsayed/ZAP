@@ -81,6 +81,9 @@ const MessageList = React.memo(({
   textareaRef,
   renderMessageContent
 }) => {
+  const [swipeState, setSwipeState] = useState({ msgId: null, offset: 0, isSwiping: false });
+  const swipeStartRef = useRef(null);
+
   const hasJustReceivedMessage = justReceivedId !== null && 
     messages && 
     messages.length > 0 && 
@@ -178,7 +181,68 @@ const MessageList = React.memo(({
                 ref={index === messages.length - 1 ? lastMessageRef : null}
                 data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
                 className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''}`}
+                style={{
+                  transform: swipeState.msgId === msg.id && swipeState.offset > 0 ? `translateX(${swipeState.offset}px)` : 'translateX(0px)',
+                  transition: swipeState.msgId === msg.id && swipeState.isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                }}
+                onTouchStart={(e) => {
+                  const touch = e.touches[0];
+                  swipeStartRef.current = { x: touch.clientX, y: touch.clientY, msgId: msg.id };
+                  setSwipeState({ msgId: msg.id, offset: 0, isSwiping: true });
+                }}
+                onTouchMove={(e) => {
+                  if (!swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
+                  const touch = e.touches[0];
+                  const deltaX = touch.clientX - swipeStartRef.current.x;
+                  const deltaY = touch.clientY - swipeStartRef.current.y;
+
+                  // Only trigger horizontal right swipe if user is swiping right and not scrolling vertically
+                  if (deltaX > 0 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                    const clampedOffset = Math.min(deltaX * 0.5, 70); // Resistance dampening up to 70px
+                    setSwipeState({ msgId: msg.id, offset: clampedOffset, isSwiping: true });
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (swipeStartRef.current?.msgId === msg.id) {
+                    if (swipeState.offset >= 45) { // Trigger reply threshold
+                      setReplyingTo({
+                        id: msg.id,
+                        sender: msg.sender,
+                        text: msg.mediaType ? `[${msg.mediaType}]` : msg.text,
+                        mediaType: msg.mediaType || null,
+                        fileMetadata: msg.fileMetadata || null
+                      });
+                      if (window.navigator && window.navigator.vibrate) {
+                        try { window.navigator.vibrate(15); } catch (err) {}
+                      }
+                      setTimeout(() => {
+                        if (textareaRef.current) {
+                          textareaRef.current.focus({ preventScroll: false });
+                          textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }
+                      }, 50);
+                    }
+                  }
+                  swipeStartRef.current = null;
+                  setSwipeState({ msgId: null, offset: 0, isSwiping: false });
+                }}
+                onTouchCancel={() => {
+                  swipeStartRef.current = null;
+                  setSwipeState({ msgId: null, offset: 0, isSwiping: false });
+                }}
               >
+                {/* Swipe-to-reply spring indicator icon */}
+                {swipeState.msgId === msg.id && swipeState.offset > 5 && (
+                  <div 
+                    className="swipe-reply-indicator"
+                    style={{
+                      opacity: Math.min(swipeState.offset / 45, 1),
+                      transform: `translateY(-50%) scale(${Math.min(swipeState.offset / 45, 1)})`
+                    }}
+                  >
+                    <CornerUpLeft size={16} color="var(--accent-color)" />
+                  </div>
+                )}
                 <div className="message-bubble">
                   <div className="message-actions-container">
                     <button 
@@ -279,6 +343,8 @@ const ChatArea = React.memo(function ChatArea({
   setReplyingTo
 }) {
   const [inputText, setInputText] = useState('');
+  const [swipeState, setSwipeState] = useState({ msgId: null, offset: 0, isSwiping: false });
+  const swipeStartRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [selectedFile, setSelectedFile] = useState(null);
