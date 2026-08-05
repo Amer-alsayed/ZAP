@@ -1642,7 +1642,15 @@ const ChatArea = React.memo(function ChatArea({
               </div>
             </div>
           )}
-          <button className="reply-preview-close" onClick={() => setReplyingTo(null)} title="Cancel reply" aria-label="Cancel reply">
+          <button 
+            className="reply-preview-close" 
+            onClick={(e) => {
+              e.currentTarget.blur();
+              setReplyingTo(null);
+            }} 
+            title="Cancel reply" 
+            aria-label="Cancel reply"
+          >
             <X size={16} />
           </button>
         </div>

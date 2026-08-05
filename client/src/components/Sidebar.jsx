@@ -185,7 +185,7 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
   );
 };
 
-const Sidebar = React.memo(function Sidebar({ currentUser, contacts, activeContact, setActiveContact, addContact, onLogout, onShowSettings, onShowRecents, isMinimized, onToggleMinimize, showSettings = false, showRecents = false }) {
+const Sidebar = React.memo(function Sidebar({ currentUser, contacts, activeContact, setActiveContact, addContact, onLogout, onShowSettings, onShowRecents, isMinimized, onToggleMinimize, showSettings = false, showRecents = false, isNavigatingBack = false }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState(null);
   const [searchError, setSearchError] = useState('');
@@ -384,7 +384,7 @@ const Sidebar = React.memo(function Sidebar({ currentUser, contacts, activeConta
         ) : (
           <div ref={listRef} className="contacts-list">
             {filteredContacts.map((contact) => {
-              const isSelected = activeContact?.username === contact.username;
+              const isSelected = !isNavigatingBack && activeContact?.username === contact.username;
               const lastMsg = contact.messages && contact.messages.length > 0 
                 ? contact.messages[contact.messages.length - 1]
                 : null;

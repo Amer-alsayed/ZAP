@@ -2171,7 +2171,7 @@ export default function App() {
       setIsNavigatingBack(false);
       localStorage.setItem('chatra_active_view', 'dashboard');
       localStorage.removeItem('chatra_active_contact');
-    }, 320); // 320ms smooth slide-back transition
+    }, 320); // Smooth 320ms slide-back transition
   };
 
   return (
@@ -2227,6 +2227,7 @@ export default function App() {
                 onToggleMinimize={handleToggleSidebar}
                 showSettings={showSettings}
                 showRecents={showRecents}
+                isNavigatingBack={isNavigatingBack}
             onShowSettings={() => {
               if (window.history.state !== 'settings') {
                 window.history.pushState('settings', '');

@@ -3138,11 +3138,13 @@ body.dragging-pip * {
   box-sizing: border-box;
 }
 
-.reply-preview-close:hover {
-  color: var(--danger-color);
-  background: rgba(255, 69, 58, 0.15);
-  border-color: rgba(255, 69, 58, 0.3);
-  transform: scale(1.08);
+@media (hover: hover) {
+  .reply-preview-close:hover {
+    color: var(--danger-color);
+    background: rgba(255, 69, 58, 0.15);
+    border-color: rgba(255, 69, 58, 0.3);
+    transform: scale(1.08);
+  }
 }
 
 .swipe-reply-indicator {
