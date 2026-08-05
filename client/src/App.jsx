@@ -457,6 +457,8 @@ export default function App() {
     }
   }, [activeContact]);
 
+  const showSafetyModalRef = useRef(false);
+
   useEffect(() => {
     showSettingsRef.current = showSettings;
   }, [showSettings]);
@@ -465,37 +467,48 @@ export default function App() {
     showRecentsRef.current = showRecents;
   }, [showRecents]);
 
+  useEffect(() => {
+    showSafetyModalRef.current = showSafetyModal;
+  }, [showSafetyModal]);
 
 
-  // Handle native back gestures
+
+  // Handle native back gestures (Android back button & mobile browser back)
   useEffect(() => {
     const handlePopState = (e) => {
+      // 1. Close lightbox viewer if active
       if (lightboxRef.current) {
         setLightboxImageSrc(null);
         return;
       }
+
+      // 2. Close safety verification modal if active
+      if (showSafetyModalRef.current) {
+        handleCloseSafetyModal();
+        return;
+      }
       
+      // 3. Exit fullscreen mode if active
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch(() => {});
         return;
       }
       
+      // 4. Minimize full-screen WebRTC call if active
       if (callStateRef.current === 'connected' && !isCallMinimizedRef.current) {
         setIsCallMinimized(true);
         return;
       }
       
+      // 5. Dismiss active message reply banner if active
       if (replyingToRef.current) {
         setReplyingTo(null);
         return;
       }
 
-      // Only close the active chat session and return to sidebar if we popped back past 'chat' state!
-      const currentState = window.history.state;
-      if (currentState !== 'chat' && currentState !== 'reply' && currentState !== 'lightbox' && currentState !== 'call-maximized' && currentState !== 'fullscreen' && currentState !== 'recording') {
-        if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
-          handleBackToMenu(true);
-        }
+      // 6. Return to sidebar / contacts list if we are inside a chat, settings, or recents view
+      if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
+        handleBackToMenu(true);
       }
     };
 
@@ -512,15 +525,11 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Push history state 'reply' when message reply mode is active
+  // Manage history state 'reply' when message reply mode is active
   useEffect(() => {
     if (replyingTo) {
       if (window.history.state !== 'reply') {
         window.history.pushState('reply', '');
-      }
-    } else {
-      if (window.history.state === 'reply') {
-        window.history.back();
       }
     }
   }, [replyingTo]);
@@ -2162,7 +2171,7 @@ export default function App() {
       setIsNavigatingBack(false);
       localStorage.setItem('chatra_active_view', 'dashboard');
       localStorage.removeItem('chatra_active_contact');
-    }, 180); // Snappy 180ms back transition
+    }, 320); // 320ms smooth slide-back transition
   };
 
   return (

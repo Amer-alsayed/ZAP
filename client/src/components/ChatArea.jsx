@@ -193,7 +193,12 @@ const MessageList = React.memo(({
                           mediaType: msg.mediaType || null,
                           fileMetadata: msg.fileMetadata || null
                         });
-                        setTimeout(() => textareaRef.current?.focus(), 50);
+                        setTimeout(() => {
+                          if (textareaRef.current) {
+                            textareaRef.current.focus({ preventScroll: false });
+                            textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                          }
+                        }, 50);
                       }}
                     >
                       <CornerUpLeft size={12} />
