@@ -1,0 +1,4 @@
+## 2025-08-05 - Voice Recording History Popping Navigation Fix
+**Vulnerability:** While explicitly stopping voice recording, we call window.history.back() to pop the 'recording' state, which inadvertently navigates to the main menu because the general App-level handlePopState listener gets triggered and assumes it's a generic back navigation.
+**Learning:** window.history.back() unconditionally triggers a popstate event, which global event handlers capture. If we only mean to consume an internal state push (like modal open or recording active), we must communicate this context globally.
+**Prevention:** When managing ephemeral UI states with window history, implement a flag mechanism (e.g. window.__isPoppingRecording) alongside window.history.back() to let global listeners distinguish between genuine back navigations and programmatic cleanup.
