@@ -1246,14 +1246,87 @@ button {
 }
 
 .attachment-preview-bar.visible {
-  max-height: 52px;
+  max-height: 60px;
   opacity: 1;
-  padding: 8px 8px;
-  background: rgba(26, 31, 46, 0.6) !important;
+  padding: 8px 12px;
+  background: rgba(18, 18, 18, 0.85) !important;
   border: 1px solid var(--border-color) !important;
   border-bottom: none !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
   visibility: visible;
+}
+
+.multi-file-preview-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.multi-file-preview-container::-webkit-scrollbar {
+  display: none;
+}
+
+.file-preview-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 4px 8px 4px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  flex-shrink: 0;
+  max-width: 180px;
+}
+
+.file-pill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.remove-pill-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.remove-pill-btn:hover {
+  background: rgba(244, 63, 94, 0.6);
+}
+
+.clear-all-files-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: color 0.15s ease;
+}
+
+.clear-all-files-btn:hover {
+  color: #f43f5e;
 }
 
 .attachment-info {
@@ -1720,16 +1793,19 @@ button {
 .file-attachment-card {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background-color: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-color);
-  padding: 10px 14px;
-  border-radius: 10px;
-  width: 250px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 250px;
+  box-sizing: border-box;
 }
 
 .file-info {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -1744,13 +1820,28 @@ button {
 .file-size {
   font-size: 11px;
   color: var(--text-subtle);
+  margin-top: 1px;
 }
 
 .file-download-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   color: var(--accent-color);
-  padding: 6px;
-  border-radius: 6px;
-  background-color: rgba(99, 102, 241, 0.1);
+  background-color: rgba(var(--accent-rgb), 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.file-download-btn:hover {
+  background-color: rgba(var(--accent-rgb), 0.3);
+  transform: scale(1.05);
 }
 
 .file-icon {
@@ -1773,11 +1864,12 @@ button {
 
 .message-wrapper.sent .file-download-btn {
   color: white;
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.35);
 }
 
 .message-wrapper.sent .file-download-btn:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(255, 255, 255, 0.35);
 }
 
 .voice-note-player {
@@ -2899,7 +2991,14 @@ body.dragging-pip * {
 /* Responsive Mobile Rules */
 @media (max-width: 768px) {
   .message-wrapper {
-    max-width: 80% !important;
+    max-width: 85% !important;
+  }
+
+  .file-attachment-card {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 8px 10px !important;
+    box-sizing: border-box !important;
   }
 
   .sidebar {

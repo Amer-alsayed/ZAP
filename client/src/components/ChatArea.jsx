@@ -353,7 +353,7 @@ const ChatArea = React.memo(function ChatArea({
   const swipeStartRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const attachMenuRef = useRef(null);
@@ -852,8 +852,8 @@ const ChatArea = React.memo(function ChatArea({
   };
 
   const handleSendMessage = async () => {
-    // If there's neither text nor an attached file, do nothing
-    if (!inputText.trim() && !selectedFile) return;
+    // If there's neither text nor attached files, do nothing
+    if (!inputText.trim() && selectedFiles.length === 0) return;
 
     // Immediately emit stop typing
     const socket = getSocket();
@@ -862,8 +862,6 @@ const ChatArea = React.memo(function ChatArea({
       isTypingRef.current = false;
     }
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-
-    // If sharedSecret is not yet cached, parent handleSendMessage will derive it on-the-fly
 
     const captionText = inputText.trim();
     const replyContext = replyingTo ? { 
@@ -881,63 +879,70 @@ const ChatArea = React.memo(function ChatArea({
       textareaRef.current.style.height = '36px';
     }
 
-    if (selectedFile) {
-      // Send message with file attachment
+    if (selectedFiles.length > 0) {
+      // Batch send files sequentially
       setUploading(true);
-      const fileToUpload = selectedFile;
-      setSelectedFile(null); // Clear selected file immediately
+      const filesToUpload = [...selectedFiles];
+      setSelectedFiles([]); // Clear queue immediately
 
       try {
-        // 1. Read file as ArrayBuffer
-        const reader = new FileReader();
-        const fileBufferPromise = new Promise((resolve, reject) => {
-          reader.onload = (e) => resolve(e.target.result);
-          reader.onerror = () => reject(new Error('Failed to read file contents from device'));
-        });
-        reader.readAsArrayBuffer(fileToUpload);
-        const fileBuffer = await fileBufferPromise;
+        for (let idx = 0; idx < filesToUpload.length; idx++) {
+          const fileToUpload = filesToUpload[idx];
+          
+          // 1. Read file as ArrayBuffer
+          const reader = new FileReader();
+          const fileBufferPromise = new Promise((resolve, reject) => {
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = () => reject(new Error(`Failed to read file "${fileToUpload.name}"`));
+          });
+          reader.readAsArrayBuffer(fileToUpload);
+          const fileBuffer = await fileBufferPromise;
 
-        // 2. Generate a one-time session key for AES-GCM file encryption
-        const fileSessionKey = await window.crypto.subtle.generateKey(
-          { name: 'AES-GCM', length: 256 },
-          true,
-          ['encrypt', 'decrypt']
-        );
+          // 2. Generate AES-GCM session key
+          const fileSessionKey = await window.crypto.subtle.generateKey(
+            { name: 'AES-GCM', length: 256 },
+            true,
+            ['encrypt', 'decrypt']
+          );
 
-        // 3. Encrypt the file data
-        const iv = window.crypto.getRandomValues(new Uint8Array(12));
-        const encryptedFileBuffer = await window.crypto.subtle.encrypt(
-          { name: 'AES-GCM', iv },
-          fileSessionKey,
-          fileBuffer
-        );
+          // 3. Encrypt file buffer
+          const iv = window.crypto.getRandomValues(new Uint8Array(12));
+          const encryptedFileBuffer = await window.crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            fileSessionKey,
+            fileBuffer
+          );
 
-        // 4. Convert encrypted file to Base64
-        const encryptedBase64 = bufferToBase64(encryptedFileBuffer);
+          // 4. Base64 convert
+          const encryptedBase64 = bufferToBase64(encryptedFileBuffer);
 
-        // 5. Upload encrypted file to server
-        const { fileUrl } = await uploadEncryptedFile(fileToUpload.name, encryptedBase64, currentUserToken);
+          // 5. Upload encrypted file payload
+          const { fileUrl } = await uploadEncryptedFile(fileToUpload.name, encryptedBase64, currentUserToken);
 
-        // Save original file blob in local IndexedDB so sender keeps media permanently
-        setCachedMedia(fileUrl, fileToUpload, fileToUpload.type || 'application/octet-stream');
+          // Save local copy in IndexedDB
+          setCachedMedia(fileUrl, fileToUpload, fileToUpload.type || 'application/octet-stream');
 
-        // 6. Export session key to JWK
-        const fileSessionKeyJwk = await window.crypto.subtle.exportKey('jwk', fileSessionKey);
+          // 6. Export JWK session key
+          const fileSessionKeyJwk = await window.crypto.subtle.exportKey('jwk', fileSessionKey);
 
-        // 7. Send the file link, key, and caption
-        onSendMessage({
-          type: 'file',
-          text: captionText || null, // send caption text if present
-          fileMetadata: {
-            url: fileUrl,
-            name: fileToUpload.name,
-            size: fileToUpload.size,
-            mimeType: fileToUpload.type || 'application/octet-stream',
-            keyJwk: fileSessionKeyJwk,
-            iv: bufferToBase64(iv)
-          },
-          replyTo: replyContext
-        });
+          // Attach caption only to the first file in a multi-file batch
+          const fileCaption = (idx === 0) ? (captionText || null) : null;
+
+          // 7. Emit message via Socket
+          onSendMessage({
+            type: 'file',
+            text: fileCaption,
+            fileMetadata: {
+              url: fileUrl,
+              name: fileToUpload.name,
+              size: fileToUpload.size,
+              mimeType: fileToUpload.type || 'application/octet-stream',
+              keyJwk: fileSessionKeyJwk,
+              iv: bufferToBase64(iv)
+            },
+            replyTo: idx === 0 ? replyContext : null
+          });
+        }
         soundEngine.playMessageSent();
       } catch (err) {
         console.error("Encryption/Upload failed:", err);
@@ -959,7 +964,7 @@ const ChatArea = React.memo(function ChatArea({
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if ((inputText && inputText.trim().length > 0) || selectedFile) {
+      if ((inputText && inputText.trim().length > 0) || selectedFiles.length > 0) {
         handleSendMessage();
       }
     }
@@ -969,19 +974,22 @@ const ChatArea = React.memo(function ChatArea({
     const items = e.clipboardData?.items;
     if (!items) return;
 
+    const pastedFiles = [];
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.startsWith('image/')) {
         const file = items[i].getAsFile();
         if (file) {
           if (file.size > 15 * 1024 * 1024) {
-            alert("File size limit is 15MB for free hosting.");
-            return;
+            alert(`File "${file.name}" exceeds 15MB limit.`);
+            continue;
           }
-          setSelectedFile(file);
-          e.preventDefault();
-          break;
+          pastedFiles.push(file);
         }
       }
+    }
+    if (pastedFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...pastedFiles]);
+      e.preventDefault();
     }
   };
 
@@ -989,15 +997,22 @@ const ChatArea = React.memo(function ChatArea({
   // File Attachment Handling & E2EE Upload
   // ==========================================
   const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     
-    if (file.size > 15 * 1024 * 1024) {
-      alert("File size limit is 15MB for free hosting.");
-      return;
+    const validFiles = [];
+    for (const f of files) {
+      if (f.size > 15 * 1024 * 1024) {
+        alert(`File "${f.name}" exceeds 15MB limit.`);
+      } else {
+        validFiles.push(f);
+      }
     }
-    
-    setSelectedFile(file);
+
+    if (validFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...validFiles]);
+    }
+    e.target.value = '';
   };
 
 
@@ -1688,31 +1703,39 @@ const ChatArea = React.memo(function ChatArea({
         </div>
         
         {/* Attachment preview / uploading progress bar */}
-        <div className={`attachment-preview-bar ${(selectedFile || uploading) ? 'glass visible' : ''}`}>
+        <div className={`attachment-preview-bar ${(selectedFiles.length > 0 || uploading) ? 'glass visible' : ''}`}>
           {uploading ? (
             <div className="attachment-info" style={{ color: 'var(--accent-color)' }}>
               <Shield size={18} className="shield-shimmer" />
-              <span>Encrypting & uploading attachment...</span>
+              <span>Encrypting & uploading {selectedFiles.length > 1 ? `${selectedFiles.length} attachments` : 'attachment'}...</span>
             </div>
-          ) : activeFileInfo ? (
-            <>
-              <div className="attachment-info">
-                {activeFileInfo.type?.startsWith('image/') ? <Image size={18} /> : <FileText size={18} />}
-                <span>{activeFileInfo.name} ({(activeFileInfo.size / 1024).toFixed(1)} KB)</span>
-              </div>
-              <button className="remove-attachment-btn" onClick={() => setSelectedFile(null)} title="Remove attachment" aria-label="Remove attachment">
-                <X size={18} />
-              </button>
-            </>
+          ) : selectedFiles.length > 0 ? (
+            <div className="multi-file-preview-container">
+              {selectedFiles.map((file, idx) => (
+                <div key={`${file.name}-${idx}`} className="file-preview-pill">
+                  {file.type?.startsWith('image/') ? <Image size={14} /> : <FileText size={14} />}
+                  <span className="file-pill-name">{file.name}</span>
+                  <button 
+                    className="remove-pill-btn" 
+                    onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
+                    title="Remove file"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <button className="clear-all-files-btn" onClick={() => setSelectedFiles([])}>Clear All</button>
+            </div>
           ) : null}
         </div>
 
         {/* Input container */}
-        <div className={`chat-input-container ${(selectedFile || replyingTo) ? 'with-preview' : ''} ${isRecording ? 'is-recording-mode' : ''} glass`}>
+        <div className={`chat-input-container ${(selectedFiles.length > 0 || replyingTo) ? 'with-preview' : ''} ${isRecording ? 'is-recording-mode' : ''} glass`}>
           
           <input
             type="file"
             id="file-input"
+            multiple
             style={{ display: 'none' }}
             onChange={handleFileSelect}
           />
