@@ -106,6 +106,8 @@ export const login = async (req, res) => {
       token,
       user: {
         username: user.username,
+        displayName: user.display_name,
+        avatarIcon: user.avatar_icon,
         publicIdentityKey: safeJsonParse(user.public_identity_key),
         publicSigningKey: safeJsonParse(user.public_signing_key),
         encryptedPrivateKeys: safeJsonParse(user.encrypted_private_keys)

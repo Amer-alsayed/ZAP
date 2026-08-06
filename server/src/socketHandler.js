@@ -298,6 +298,55 @@ export const socketHandler = (io) => {
         if (typeof callback === 'function') callback({ error: 'Failed to send message' });
       }
     });
+    // Fetch all conversation partners (contacts) for the authenticated user
+    socket.on('get-contacts', async (_, callback) => {
+      try {
+        const username = socket.user.username;
+
+        // Get all unique usernames who have exchanged messages with this user
+        const rows = await dbAll(`
+          SELECT DISTINCT
+            CASE
+              WHEN LOWER(sender) = LOWER(?) THEN recipient
+              ELSE sender
+            END AS contact_username
+          FROM messages
+          WHERE LOWER(sender) = LOWER(?) OR LOWER(recipient) = LOWER(?)
+        `, [username, username, username]);
+
+        const contactUsernames = rows.map(r => r.contact_username);
+
+        // Fetch full profile for each contact
+        const contactDetails = [];
+        for (const contactUsername of contactUsernames) {
+          try {
+            const user = await dbGet(
+              'SELECT username, display_name, avatar_icon, public_identity_key, public_signing_key FROM users WHERE LOWER(username) = LOWER(?)',
+              [contactUsername]
+            );
+            if (user) {
+              contactDetails.push({
+                username: user.username,
+                displayName: user.display_name || null,
+                avatarIcon: user.avatar_icon || null,
+                publicIdentityKey: user.public_identity_key ? JSON.parse(user.public_identity_key) : null,
+                publicSigningKey: user.public_signing_key ? JSON.parse(user.public_signing_key) : null,
+                status: isUserOnline(user.username) ? 'online' : 'offline'
+              });
+            }
+          } catch (e) {
+            logger.warn(`Failed to fetch profile for contact ${contactUsername}:`, e);
+          }
+        }
+
+        if (typeof callback === 'function') {
+          callback({ success: true, contacts: contactDetails });
+        }
+      } catch (error) {
+        logger.error('Error fetching contacts:', error);
+        if (typeof callback === 'function') callback({ error: 'Failed to fetch contacts' });
+      }
+    });
 
     // Fetch conversation history (with optional pagination support)
     socket.on('get-chat-history', async (data, callback) => {

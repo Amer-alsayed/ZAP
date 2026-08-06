@@ -152,6 +152,8 @@ export default function Login({ onAuthSuccess }) {
 
         onAuthSuccess({
           username: data.user.username,
+          displayName: data.user.displayName || null,
+          avatarIcon: data.user.avatarIcon || null,
           token: data.token,
           encryptedPrivateKeys: data.user.encryptedPrivateKeys,
           keys: {

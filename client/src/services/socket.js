@@ -123,6 +123,13 @@ export const emitGetChatHistory = (withUser) => {
 };
 
 /**
+ * Fetch all conversation partners (contacts) for the current user from server.
+ */
+export const emitGetContacts = () => {
+  return emitWithTimeout('get-contacts', {}).then(res => res.contacts || []);
+};
+
+/**
  * Check user online/offline status.
  */
 export const emitGetUserStatus = (targetUsername) => {

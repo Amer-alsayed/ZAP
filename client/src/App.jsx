@@ -46,6 +46,7 @@ import {
   disconnectSocket, 
   emitSendMessage, 
   emitGetChatHistory, 
+  emitGetContacts,
   emitMarkAsRead,
   emitGetUserStatus,
   subscribeToMessages, 
@@ -646,8 +647,49 @@ export default function App() {
       }
     };
 
-    const handleConnect = () => {
+    const handleConnect = async () => {
       setIsSocketConnected(true);
+
+      // Auto-load all contacts from server (cross-device sync)
+      try {
+        const serverContacts = await emitGetContacts();
+        if (serverContacts && serverContacts.length > 0) {
+          setContacts(prev => {
+            const existing = new Map(prev.map(c => [c.username.toLowerCase(), c]));
+            for (const sc of serverContacts) {
+              const key = sc.username.toLowerCase();
+              if (!existing.has(key)) {
+                existing.set(key, {
+                  username: sc.username,
+                  displayName: sc.displayName || null,
+                  avatarIcon: sc.avatarIcon || null,
+                  publicIdentityKey: sc.publicIdentityKey,
+                  publicSigningKey: sc.publicSigningKey,
+                  status: sc.status || 'offline',
+                  messages: [],
+                  unreadCount: 0
+                });
+              } else {
+                // Update profile info from server for existing contacts
+                const c = existing.get(key);
+                existing.set(key, {
+                  ...c,
+                  displayName: sc.displayName ?? c.displayName,
+                  avatarIcon: sc.avatarIcon ?? c.avatarIcon,
+                  status: sc.status || c.status,
+                  publicIdentityKey: sc.publicIdentityKey || c.publicIdentityKey,
+                  publicSigningKey: sc.publicSigningKey || c.publicSigningKey
+                });
+              }
+            }
+            return Array.from(existing.values());
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load contacts from server:', e);
+      }
+
+      // Refresh status & profile for each contact
       contactsRef.current.forEach(async (c) => {
         try {
           const res = await emitGetUserStatus(c.username);
@@ -874,7 +916,17 @@ export default function App() {
         if (status !== undefined && prev.status !== status) changes.status = status;
         if (displayName !== undefined && prev.displayName !== displayName) changes.displayName = displayName;
         if (avatarIcon !== undefined && prev.avatarIcon !== avatarIcon) changes.avatarIcon = avatarIcon;
-        
+        if (Object.keys(changes).length === 0) return prev;
+        return { ...prev, ...changes };
+      });
+    }
+
+    if (currentUser?.username?.toLowerCase() === username.toLowerCase()) {
+      setCurrentUser(prev => {
+        if (!prev) return prev;
+        const changes = {};
+        if (displayName !== undefined && prev.displayName !== displayName) changes.displayName = displayName;
+        if (avatarIcon !== undefined && prev.avatarIcon !== avatarIcon) changes.avatarIcon = avatarIcon;
         if (Object.keys(changes).length === 0) return prev;
         return { ...prev, ...changes };
       });
@@ -2117,7 +2169,7 @@ export default function App() {
       localStorage.removeItem('chatra_public_signing_key');
       localStorage.removeItem('chatra_display_name');
       localStorage.removeItem('chatra_avatar_icon');
-      clearMediaCache();
+      // Preserve cached media files in IndexedDB so sign in across devices/sessions keeps decrypted attachments intact
       localStorage.removeItem('chatra_active_view');
       localStorage.removeItem('chatra_active_contact');
       previousActiveContactRef.current = null;
