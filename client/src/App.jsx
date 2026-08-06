@@ -828,12 +828,23 @@ export default function App() {
       const ids = new Set(messageIds.map(id => String(id)));
       setContacts(prev => prev.map(c => ({
         ...c,
-        messages: c.messages.filter(m => !ids.has(String(m.id)))
+        messages: c.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true } : m)
       })));
       setActiveContact(prev => prev ? {
         ...prev,
-        messages: prev.messages.filter(m => !ids.has(String(m.id)))
+        messages: prev.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true } : m)
       } : prev);
+
+      window.setTimeout(() => {
+        setContacts(prev => prev.map(c => ({
+          ...c,
+          messages: c.messages.filter(m => !ids.has(String(m.id)))
+        })));
+        setActiveContact(prev => prev ? {
+          ...prev,
+          messages: prev.messages.filter(m => !ids.has(String(m.id)))
+        } : prev);
+      }, 220);
     });
 
     // ==========================================

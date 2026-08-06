@@ -305,7 +305,7 @@ const MessageList = React.memo(({
                 id={`msg-${msg.id}`} 
                 ref={index === messages.length - 1 ? lastMessageRef : null}
                 data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
-                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${selectedIds.includes(msg.id) ? 'is-selected' : ''} ${deletingIds.includes(msg.id) ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
+                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${selectedIds.includes(msg.id) ? 'is-selected' : ''} ${deletingIds.includes(msg.id) || msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
                 style={{
                   transform: swipeState.msgId === msg.id && swipeState.offset > 0 ? `translateX(${swipeState.offset}px)` : 'translateX(0px)',
                   transition: swipeState.msgId === msg.id && swipeState.isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
