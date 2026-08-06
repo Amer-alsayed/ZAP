@@ -1574,6 +1574,7 @@ const ChatArea = React.memo(function ChatArea({
           </div>
         </div>
         <div className="chat-header-actions">
+          {/* E2EE Safety Verification Button (temporarily hidden)
           <button 
             className={`header-action-btn ${activeContact.isVerified ? 'verified' : ''}`}
             onClick={onOpenSafetyModal}
@@ -1583,6 +1584,7 @@ const ChatArea = React.memo(function ChatArea({
           >
             <ShieldCheck size={20} />
           </button>
+          */}
           <button 
             className="header-action-btn" 
             onClick={() => onInitiateCall('voice')}
@@ -1869,17 +1871,12 @@ const ChatArea = React.memo(function ChatArea({
           ) : (inputText.trim() || selectedFiles.length > 0) ? (
             <button 
               className="send-message-btn" 
-              onMouseDown={(e) => e.preventDefault()}
-              onTouchStart={(e) => {
-                // Prevent mobile virtual keyboard from dismissing on button touch
+              onPointerDown={(e) => {
+                // Prevent focus transfer away from textarea to keep keyboard up
                 e.preventDefault();
-                handleSendMessage();
               }}
-              onClick={(e) => {
-                // Only trigger if not already handled by touchStart
-                if (e.detail !== 0) {
-                  handleSendMessage();
-                }
+              onClick={() => {
+                handleSendMessage();
               }} 
               disabled={(!inputText.trim() && selectedFiles.length === 0) || uploading}
               title="Send Encrypted Message"
