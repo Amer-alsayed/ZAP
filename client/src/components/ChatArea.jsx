@@ -1009,7 +1009,7 @@ const ChatArea = React.memo(function ChatArea({
   // ==========================================
   // File Attachment Handling & E2EE Upload
   // ==========================================
-  const handleFileSelect = (e) => {
+  const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     
@@ -1018,7 +1018,38 @@ const ChatArea = React.memo(function ChatArea({
       if (f.size > 15 * 1024 * 1024) {
         alert(`File "${f.name}" exceeds 15MB limit.`);
       } else {
-        validFiles.push(f);
+        // Android photo pickers may return a content-URI backed File whose
+        // permission is revoked once the picker closes. Snapshot the bytes
+        // now so encryption can safely happen after the user presses Send.
+        try {
+          let buffer;
+          if (typeof f.arrayBuffer === 'function') {
+            try {
+              buffer = await f.arrayBuffer();
+            } catch {
+              buffer = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error || new Error('Device read failed'));
+                reader.readAsArrayBuffer(f);
+              });
+            }
+          } else {
+            buffer = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = () => reject(reader.error || new Error('Device read failed'));
+              reader.readAsArrayBuffer(f);
+            });
+          }
+          validFiles.push(new File([buffer], f.name, {
+            type: f.type || 'application/octet-stream',
+            lastModified: f.lastModified
+          }));
+        } catch (readErr) {
+          console.error('File selection read error:', readErr);
+          alert(`Device permissions blocked reading "${f.name}". Please re-select the file.`);
+        }
       }
     }
 
