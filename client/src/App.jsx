@@ -2073,7 +2073,7 @@ export default function App() {
         ? allRearDevices.slice(1)
         : allRearDevices.filter(device => {
             const label = labelOf(device);
-            return !/ultra[- ]?wide|0\.5x|0\.5|ultrawide/.test(label);
+            return !/ultra[- ]?wide|0\.5x|0\.5|ultrawide|camera2?\s*0\b|camera\s*0\b|back camera\s*0\b|wide\s*0\b/.test(label);
           });
       const frontDevices = videoDevices.filter(isFront);
       const orderedDevices = (labelsUnavailable && videoDevices.length >= 3
