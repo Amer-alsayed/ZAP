@@ -163,20 +163,8 @@ export default function App() {
   }, [contacts]);
 
   const [activeContact, setActiveContact] = useState(null);
-  const [showSettings, setShowSettings] = useState(() => {
-    try {
-      return localStorage.getItem('chatra_active_view') === 'settings';
-    } catch (e) {
-      return false;
-    }
-  });
-  const [showRecents, setShowRecents] = useState(() => {
-    try {
-      return localStorage.getItem('chatra_active_view') === 'recents';
-    } catch (e) {
-      return false;
-    }
-  });
+  const [showSettings, setShowSettings] = useState(false);
+  const [showRecents, setShowRecents] = useState(false);
 
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
 
@@ -402,18 +390,6 @@ export default function App() {
         // Reset online status on load
         const sanitized = uniqueContacts.map(c => ({ ...c, status: 'offline', messages: c.messages || [] }));
         setContacts(sanitized);
-
-        // Restore active chat synchronously in the exact same render tick
-        try {
-          const savedView = localStorage.getItem('chatra_active_view');
-          const savedContactName = localStorage.getItem('chatra_active_contact');
-          if (savedView === 'chat' && savedContactName) {
-            const target = sanitized.find(c => c.username.toLowerCase() === savedContactName.toLowerCase());
-            if (target) {
-              setActiveContact(target);
-            }
-          }
-        } catch (e) {}
       }
     }
   }, [currentUser]);
@@ -1217,13 +1193,6 @@ export default function App() {
     const cachedContact = contacts.find(c => c.username.toLowerCase() === contact.username.toLowerCase());
     const targetContact = cachedContact || contact;
     setActiveContact(targetContact);
-
-    try {
-      localStorage.setItem('chatra_active_view', 'chat');
-      localStorage.setItem('chatra_active_contact', targetContact.username);
-    } catch (e) {
-      console.warn("Could not persist active contact navigation state:", e);
-    }
 
     try {
       // 2. Fetch conversation history from SQLite in the background
@@ -2174,8 +2143,6 @@ export default function App() {
       setShowSettings(false);
       setShowRecents(false);
       setIsNavigatingBack(false);
-      localStorage.setItem('chatra_active_view', 'dashboard');
-      localStorage.removeItem('chatra_active_contact');
     }, 320); // Smooth 320ms slide-back transition
   };
 
@@ -2242,10 +2209,6 @@ export default function App() {
               }
               setShowRecents(false);
               setShowSettings(true);
-              try {
-                localStorage.setItem('chatra_active_view', 'settings');
-                localStorage.removeItem('chatra_active_contact');
-              } catch (e) {}
               // Unmount ChatArea quietly underneath after SettingsView has faded in on top
               if (activeContactRef.current) {
                 setTimeout(() => setActiveContact(null), 300);
@@ -2260,10 +2223,6 @@ export default function App() {
               }
               setShowSettings(false);
               setShowRecents(true);
-              try {
-                localStorage.setItem('chatra_active_view', 'recents');
-                localStorage.removeItem('chatra_active_contact');
-              } catch (e) {}
               if (activeContactRef.current) {
                 setTimeout(() => setActiveContact(null), 300);
               }
@@ -2284,10 +2243,6 @@ export default function App() {
                 }
                 setShowRecents(false);
                 setShowSettings(true);
-                try {
-                  localStorage.setItem('chatra_active_view', 'settings');
-                  localStorage.removeItem('chatra_active_contact');
-                } catch (e) {}
                 if (activeContactRef.current) {
                   setTimeout(() => setActiveContact(null), 300);
                 }
