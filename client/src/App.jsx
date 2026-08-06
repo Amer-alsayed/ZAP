@@ -2066,7 +2066,6 @@ export default function App() {
         return /main|primary|wide angle|back camera 1|camera 2/.test(label) && !/ultra|0\.5|macro|tele|depth/.test(label);
       };
       const allRearDevices = videoDevices.filter(device => !isFront(device));
-      const labelsUnavailable = videoDevices.length > 0 && videoDevices.every(device => !labelOf(device));
       const rearDevices = allRearDevices.length > 1 && allRearDevices.every(device => !labelOf(device))
         // Android Chrome can expose Samsung/Pixel rear sensors as unlabeled
         // devices ordered auxiliary-wide first, primary second.
@@ -2076,14 +2075,15 @@ export default function App() {
             return !/ultra[- ]?wide|0\.5x|0\.5|ultrawide|camera2?\s*0\b|camera\s*0\b|back camera\s*0\b|wide\s*0\b/.test(label);
           });
       const frontDevices = videoDevices.filter(isFront);
-      const orderedDevices = (labelsUnavailable && videoDevices.length >= 3
-        ? [videoDevices[0], videoDevices[2]]
-        : [
-            ...frontDevices,
-            ...rearDevices.filter(isPrimaryRear),
-            ...rearDevices.filter(device => !isPrimaryRear(device))
-          ]
-      ).filter((device, index, all) => all.findIndex(item => item.deviceId === device.deviceId) === index);
+      // Expose exactly one selfie and one rear camera in the switch cycle.
+      // Android often reports multiple selfie/auxiliary entries; the last
+      // remaining rear entry is the primary lens on those devices.
+      const orderedDevices = [
+        frontDevices[0],
+        rearDevices[rearDevices.length - 1]
+      ].filter(Boolean).filter((device, index, all) =>
+        all.findIndex(item => item.deviceId === device.deviceId) === index
+      );
       const currentIndex = orderedDevices.findIndex(device => device.deviceId === currentDeviceId);
       const targetDevice = orderedDevices.length
         ? orderedDevices[(currentIndex + 1 + orderedDevices.length) % orderedDevices.length]
