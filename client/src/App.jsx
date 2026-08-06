@@ -2031,49 +2031,91 @@ export default function App() {
     const stream = localStreamRef.current;
     if (!stream || isCameraOff) return;
 
+    const oldVideoTracks = stream.getVideoTracks();
+
     try {
       const nextFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
 
-      // 1. Request video track with the target facing mode
+      // 1. Enumerate video input devices
+      let videoDevices = [];
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        videoDevices = devices.filter(d => d.kind === 'videoinput');
+      } catch (e) {
+        console.warn('enumerateDevices failed:', e);
+      }
+
+      // 2. Stop old video tracks FIRST to unlock hardware camera sensor on mobile (Android Chrome / iOS Safari)
+      oldVideoTracks.forEach(track => {
+        try { track.stop(); } catch (e) {}
+        try { stream.removeTrack(track); } catch (e) {}
+      });
+
+      // 3. Find target device by facingMode or label
+      let targetDeviceId = null;
+      if (videoDevices.length > 1) {
+        const backCamera = videoDevices.find(d => 
+          d.label.toLowerCase().includes('back') || 
+          d.label.toLowerCase().includes('rear') || 
+          d.label.toLowerCase().includes('environment') ||
+          d.label.toLowerCase().includes('0')
+        );
+        const frontCamera = videoDevices.find(d => 
+          d.label.toLowerCase().includes('front') || 
+          d.label.toLowerCase().includes('user') || 
+          d.label.toLowerCase().includes('selfie') ||
+          d.label.toLowerCase().includes('1')
+        );
+
+        if (nextFacingMode === 'environment' && backCamera) {
+          targetDeviceId = backCamera.deviceId;
+        } else if (nextFacingMode === 'user' && frontCamera) {
+          targetDeviceId = frontCamera.deviceId;
+        }
+      }
+
+      const baseConstraints = getVideoConstraints();
+      let videoConstraintConfig;
+      if (targetDeviceId) {
+        videoConstraintConfig = { deviceId: { ideal: targetDeviceId } };
+      } else {
+        videoConstraintConfig = { facingMode: nextFacingMode };
+      }
+
       let newStream;
       try {
         newStream = await navigator.mediaDevices.getUserMedia({
           audio: false,
-          video: {
-            facingMode: { exact: nextFacingMode },
-            ...getVideoConstraints()
-          }
+          video: videoConstraintConfig
         });
-      } catch (e) {
-        newStream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: nextFacingMode,
-            ...getVideoConstraints()
-          }
-        });
+      } catch (e1) {
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: nextFacingMode }
+          });
+        } catch (e2) {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: true
+          });
+        }
       }
 
       const newVideoTrack = newStream.getVideoTracks()[0];
-      if (!newVideoTrack) return;
+      if (!newVideoTrack) throw new Error('No new video track produced.');
 
       if ('contentHint' in newVideoTrack) {
         newVideoTrack.contentHint = 'motion';
       }
 
-      // 2. Stop old video tracks and swap on stream
-      const oldVideoTracks = stream.getVideoTracks();
-      oldVideoTracks.forEach(track => {
-        track.stop();
-        stream.removeTrack(track);
-      });
-
+      // 4. Attach new track to localStream
       stream.addTrack(newVideoTrack);
 
-      // 3. Replace video track on WebRTC PeerConnection sender
+      // 5. Replace track on WebRTC PeerConnection sender
       if (peerConnectionRef.current) {
         const senders = peerConnectionRef.current.getSenders();
-        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        const videoSender = senders.find(s => s && s.track && s.track.kind === 'video');
         if (videoSender) {
           await videoSender.replaceTrack(newVideoTrack);
           await optimizeSenderParameters(videoSender, isScreenSharing);
@@ -2084,7 +2126,25 @@ export default function App() {
       setLocalStream(new MediaStream(stream.getTracks()));
     } catch (err) {
       console.error('Failed to switch camera:', err);
-      alert('Could not switch camera device or back camera unavailable.');
+
+      // Gracefully restore front camera track if switching failed
+      try {
+        const restoreStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: 'user' }
+        });
+        const restoreTrack = restoreStream.getVideoTracks()[0];
+        if (restoreTrack) {
+          stream.addTrack(restoreTrack);
+          if (peerConnectionRef.current) {
+            const videoSender = peerConnectionRef.current.getSenders().find(s => s && s.track && s.track.kind === 'video');
+            if (videoSender) await videoSender.replaceTrack(restoreTrack);
+          }
+          setLocalStream(new MediaStream(stream.getTracks()));
+        }
+      } catch (e) {}
+
+      alert('Could not switch camera. Your device may be using a single camera or another application is locking camera access.');
     }
   };
 

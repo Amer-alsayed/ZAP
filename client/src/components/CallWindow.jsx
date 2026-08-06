@@ -549,7 +549,7 @@ export default function CallWindow({
                       /* Main View: Local Stream */
                       hasLocalVideoTrack ? (
                         <video 
-                          className={`remote-video ${isScreenSharing ? 'screen-sharing local-screen-share' : 'local-screen-share'} ${cameraFacingMode === 'environment' ? 'back-camera' : ''}`} 
+                          className={`remote-video local-stream-main ${isScreenSharing ? 'screen-sharing' : ''} ${cameraFacingMode === 'environment' ? 'back-camera' : 'front-camera'}`} 
                           ref={bindLocalVideo} 
                           autoPlay 
                           playsInline 
@@ -577,7 +577,7 @@ export default function CallWindow({
                         {activeThumbnailStream === 'local' ? (
                           <>
                             <video 
-                              className={`${isScreenSharing ? "local-video local-screen-share" : "local-video"} ${cameraFacingMode === 'environment' ? 'back-camera' : ''}`} 
+                              className={`local-video ${isScreenSharing ? 'screen-sharing' : ''} ${cameraFacingMode === 'environment' ? 'back-camera' : 'front-camera'}`} 
                               ref={bindLocalVideo} 
                               autoPlay 
                               playsInline 
