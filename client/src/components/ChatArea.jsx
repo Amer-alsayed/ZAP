@@ -178,6 +178,8 @@ const MessageList = React.memo(({
             <div 
               className={`message-row ${isSent ? 'sent' : 'received'}`}
               onTouchStart={(e) => {
+                // Only process touch drag gestures on true touch devices (coarse pointer)
+                if (window.matchMedia && !window.matchMedia('(pointer: coarse)').matches) return;
                 const touch = e.touches[0];
                 swipeStartRef.current = { x: touch.clientX, y: touch.clientY, msgId: msg.id };
                 setSwipeState({ msgId: msg.id, offset: 0, isSwiping: true });
@@ -408,6 +410,7 @@ const ChatArea = React.memo(function ChatArea({
   const [audioProgress, setAudioProgress] = useState({}); // msgId -> percentage
   const activeAudioRef = useRef(null);
   const activeAudioUrlRef = useRef(null);
+  const activeAudioMsgIdRef = useRef(null);
   
   // Debounce typing status triggers
   const typingTimeoutRef = useRef(null);
@@ -1240,28 +1243,35 @@ const ChatArea = React.memo(function ChatArea({
   // ==========================================
   // Custom Voice Note Player (Decrypted local playback)
   // ==========================================
-  const togglePlayAudio = useCallback(async (msgId, fileMetadata, seekPercentage = null) => {
-    // If it's already the active playing audio AND no seek is requested, just pause it!
-    if (playingAudioId === msgId && seekPercentage === null) {
-      activeAudioRef.current.pause();
-      setPlayingAudioId(null);
-      return;
-    }
+  const togglePlayAudio = useCallback(async (msgId, fileMetadata, seekPercentage = null, forceAutoPlay = null) => {
+    // 1. If this message is ALREADY loaded into activeAudioRef.current:
+    if (activeAudioMsgIdRef.current === msgId && activeAudioRef.current) {
+      const audio = activeAudioRef.current;
+      const duration = audio.duration || fileMetadata?.duration || 0;
 
-    // If it's already playing and we click to seek:
-    if (playingAudioId === msgId && seekPercentage !== null && activeAudioRef.current) {
-      const newTime = seekPercentage * activeAudioRef.current.duration;
-      if (!isNaN(newTime)) {
-        activeAudioRef.current.currentTime = newTime;
-        setAudioProgress(prev => ({
-          ...prev,
-          [msgId]: seekPercentage * 100
-        }));
+      // Handle seeking
+      if (seekPercentage !== null && duration > 0) {
+        const newTime = seekPercentage * duration;
+        if (!isNaN(newTime)) {
+          audio.currentTime = newTime;
+          setAudioProgress(prev => ({ ...prev, [msgId]: (newTime / duration) * 100 }));
+        }
+      }
+
+      // Handle Play / Pause action
+      const shouldPlay = forceAutoPlay !== null ? forceAutoPlay : audio.paused;
+      if (shouldPlay) {
+        audio.play().then(() => {
+          setPlayingAudioId(msgId);
+        }).catch(console.error);
+      } else {
+        audio.pause();
+        setPlayingAudioId(null);
       }
       return;
     }
 
-    // Pause any other active audio and revoke its object URL
+    // 2. If clicking play or seeking on a NEW audio message:
     if (activeAudioRef.current) {
       activeAudioRef.current.pause();
       if (activeAudioUrlRef.current) {
@@ -1271,53 +1281,57 @@ const ChatArea = React.memo(function ChatArea({
     }
 
     try {
-      // 1. Get decrypted audio blob (from local IndexedDB cache or server fetch + cache)
+      // Fetch and decrypt audio blob
       const blob = await loadOrFetchDecryptedMedia(fileMetadata);
       const localUrl = URL.createObjectURL(blob);
       activeAudioUrlRef.current = localUrl;
+      activeAudioMsgIdRef.current = msgId;
 
-      // 2. Play audio
       const audio = new Audio(localUrl);
       activeAudioRef.current = audio;
-      setPlayingAudioId(msgId);
 
       audio.ontimeupdate = () => {
-        const progress = (audio.currentTime / audio.duration) * 100;
-        setAudioProgress(prev => ({ ...prev, [msgId]: progress }));
+        if (audio.duration) {
+          const progress = (audio.currentTime / audio.duration) * 100;
+          setAudioProgress(prev => ({ ...prev, [msgId]: progress }));
+        }
       };
 
       audio.onended = () => {
         setPlayingAudioId(null);
         setAudioProgress(prev => ({ ...prev, [msgId]: 0 }));
-        if (activeAudioUrlRef.current === localUrl) {
-          URL.revokeObjectURL(localUrl);
-          activeAudioUrlRef.current = null;
-        }
       };
 
       audio.playbackRate = playbackRate;
 
-      // If seeking before play, we need to set the currentTime when metadata is loaded!
-      if (seekPercentage !== null) {
-        audio.onloadedmetadata = () => {
-          const newTime = seekPercentage * audio.duration;
-          if (!isNaN(newTime)) {
-            audio.currentTime = newTime;
-          }
-        };
-        // Update progress state immediately
-        setAudioProgress(prev => ({
-          ...prev,
-          [msgId]: seekPercentage * 100
-        }));
-      }
+      const duration = fileMetadata?.duration || 0;
+      const initialProgress = audioProgress[msgId] || (seekPercentage !== null ? seekPercentage * 100 : 0);
+      const startPct = seekPercentage !== null ? seekPercentage : (initialProgress / 100);
 
-      audio.play();
+      audio.onloadedmetadata = () => {
+        const actualDuration = audio.duration || duration;
+        if (startPct > 0 && actualDuration > 0) {
+          audio.currentTime = startPct * actualDuration;
+        }
+      };
+
+      setAudioProgress(prev => ({
+        ...prev,
+        [msgId]: startPct * 100
+      }));
+
+      const startPlayback = forceAutoPlay !== null ? forceAutoPlay : (seekPercentage === null);
+      if (startPlayback) {
+        setPlayingAudioId(msgId);
+        audio.play().catch(console.error);
+      } else {
+        setPlayingAudioId(null);
+      }
     } catch (err) {
       console.error(err);
       alert('Failed to decrypt and play voice note.');
     }
-  }, [playingAudioId, playbackRate]);
+  }, [playbackRate, audioProgress]);
 
   const handlePlaybackRateChange = useCallback((newRate) => {
     setPlaybackRate(newRate);
@@ -1326,20 +1340,12 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, []);
 
-  const handleWaveformClick = useCallback((e, msgId, fileMetadata) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const width = rect.width;
-    const clickPercentage = clickX / width;
-
-    togglePlayAudio(msgId, fileMetadata, clickPercentage);
-  }, [togglePlayAudio]);
-
-  // Format recording timer: SS or MM:SS
+  // Format voice note timer: MM:SS
   const formatTime = (secs) => {
+    if (isNaN(secs) || secs < 0) return "0:00";
     const mins = Math.floor(secs / 60);
-    const remainder = secs % 60;
-    return `${mins > 0 ? mins + ':' : ''}${remainder.toString().padStart(2, '0')}`;
+    const remainder = Math.floor(secs % 60);
+    return `${mins}:${remainder.toString().padStart(2, '0')}`;
   };
 
   // Render message bubble content based on 
@@ -1386,6 +1392,12 @@ const ChatArea = React.memo(function ChatArea({
       const file = msg.fileMetadata;
       const isPlaying = playingAudioId === msg.id;
       const progress = audioProgress[msg.id] || 0;
+      const totalDuration = file.duration || 0;
+
+      // Compute display time: current position if active audio is loaded, else progress ratio * totalDuration
+      const currentTimeSec = (activeAudioMsgIdRef.current === msg.id && activeAudioRef.current)
+        ? activeAudioRef.current.currentTime
+        : (progress / 100) * totalDuration;
 
       return (
         <div className="voice-note-player">
@@ -1397,19 +1409,29 @@ const ChatArea = React.memo(function ChatArea({
           >
             {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" style={{ marginLeft: '2px' }} />}
           </button>
-          <div 
-            className="voice-waveform" 
-            onClick={(e) => handleWaveformClick(e, msg.id, file)}
-            style={{ cursor: 'pointer' }}
-          >
-            <div className="voice-progress" style={{ width: `${progress}%` }} />
+
+          <div className="voice-slider-container">
+            <input 
+              type="range"
+              className="voice-slider"
+              min="0"
+              max="100"
+              step="0.1"
+              value={progress}
+              onChange={(e) => {
+                const seekPct = parseFloat(e.target.value) / 100;
+                // Navigate/seek audio without auto-playing if currently paused
+                togglePlayAudio(msg.id, file, seekPct, false);
+              }}
+              style={{
+                background: `linear-gradient(to right, var(--accent-color) ${progress}%, rgba(255, 255, 255, 0.15) ${progress}%)`
+              }}
+            />
           </div>
-          <div className="voice-meta-info" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', minWidth: '36px' }}>
+
+          <div className="voice-meta-info">
             <span className="voice-duration">
-              {isPlaying && activeAudioRef.current
-                ? formatTime(Math.round(activeAudioRef.current.currentTime))
-                : formatTime(file.duration || 0)
-              }
+              {formatTime(currentTimeSec)} / {formatTime(totalDuration)}
             </span>
             <button 
               className="voice-speed-btn" 
@@ -1489,7 +1511,7 @@ const ChatArea = React.memo(function ChatArea({
 
     // Default plaintext
     return msg.text;
-  }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, handleWaveformClick, onImageClick]);
+  }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick]);
 
   // Native 120fps GPU compositor scrolling enabled
 
@@ -1551,7 +1573,7 @@ const ChatArea = React.memo(function ChatArea({
       {activeContact.isSaved === false && (
         <div className="unsaved-contact-banner glass">
           <div className="banner-content">
-            <AlertTriangle size={15} className="warning-icon" style={{ color: 'var(--accent-color)' }} />
+            <AlertTriangle size={15} className="warning-icon" />
             <span>
               <strong>@{activeContact.username}</strong> is not in your contacts.
             </span>

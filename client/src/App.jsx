@@ -60,10 +60,16 @@ import {
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null); // { username, token, keys }
   const [restoringSession, setRestoringSession] = useState(true);
+  const [isPreloaderFading, setIsPreloaderFading] = useState(false);
 
   // Restore E2EE session on mount
   useEffect(() => {
     const restoreSession = async () => {
+      const savedRgb = localStorage.getItem('chatra_theme_rgb');
+      if (savedRgb) {
+        document.documentElement.style.setProperty('--accent-rgb', savedRgb);
+      }
+
       const token = localStorage.getItem('chatra_token');
       const username = localStorage.getItem('chatra_username');
       const sessionEncKeyBase64 = localStorage.getItem('session_enc_key');
@@ -110,24 +116,28 @@ export default function App() {
           localStorage.removeItem('chatra_token');
         }
       }
-      setRestoringSession(false);
+      setIsPreloaderFading(true);
+      setTimeout(() => {
+        setRestoringSession(false);
+        setIsPreloaderFading(false);
+      }, 400);
     };
 
     restoreSession();
   }, []);
 
-  // Apply theme preferences (glass mode and accent color)
+  // Apply theme preferences (glass mode and accent color) synchronously on boot
   useEffect(() => {
+    const savedRgb = localStorage.getItem('chatra_theme_rgb');
+    if (savedRgb) {
+      document.documentElement.style.setProperty('--accent-rgb', savedRgb);
+    }
+
     const glass = localStorage.getItem('chatra_glass') !== 'false';
     if (!glass) {
       document.body.classList.add('flat-theme');
     } else {
       document.body.classList.remove('flat-theme');
-    }
-
-    const savedRgb = localStorage.getItem('chatra_theme_rgb');
-    if (savedRgb) {
-      document.documentElement.style.setProperty('--accent-rgb', savedRgb);
     }
   }, []);
 
@@ -2149,7 +2159,7 @@ export default function App() {
   return (
     <>
       {restoringSession ? (
-        <div className="app-preloader">
+        <div className={`app-preloader ${isPreloaderFading ? 'fading-out' : ''}`}>
           <div className="preloader-logo-container">
             <div className="preloader-glow"></div>
             <svg className="preloader-logo" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
