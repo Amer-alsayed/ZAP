@@ -755,14 +755,17 @@ export default function CallWindow({
                   </button>
                 )}
 
-                {isCallMinimized ? (
-                  <button className="call-btn maximize" onClick={() => setIsCallMinimized(false)} title="Maximize Call">
-                    <Maximize2 size={24} />
-                  </button>
-                ) : (
-                  <button className="call-btn minimize" onClick={() => setIsCallMinimized(true)} title="Minimize Call">
-                    <Minimize2 size={24} />
-                  </button>
+                {/* Hide PiP minimize button when in Browser Fullscreen mode to prevent UI conflict */}
+                {!isFullscreen && (
+                  isCallMinimized ? (
+                    <button className="call-btn maximize" onClick={() => setIsCallMinimized(false)} title="Maximize Call">
+                      <Maximize2 size={24} />
+                    </button>
+                  ) : (
+                    <button className="call-btn minimize" onClick={() => setIsCallMinimized(true)} title="Minimize Call">
+                      <Minimize2 size={24} />
+                    </button>
+                  )
                 )}
                 <button className="call-btn decline" onClick={onHangUp} title="Hang up">
                   <PhoneOff size={24} />

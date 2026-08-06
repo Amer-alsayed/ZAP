@@ -3,12 +3,13 @@
  * Provides client-side key derivation, key generation, encryption, decryption, signing, and verification.
  */
 
-// Helper: Convert ArrayBuffer to Base64 string
+// Helper: Convert ArrayBuffer to Base64 string safely without stack overflow on large files
 export const bufferToBase64 = (buffer) => {
   const bytes = new Uint8Array(buffer);
+  const CHUNK_SIZE = 0x8000; // 32KB chunks
   let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
   }
   return window.btoa(binary);
 };

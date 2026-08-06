@@ -388,11 +388,16 @@ const ChatArea = React.memo(function ChatArea({
     };
   }, [showAttachMenu]);
 
-  const openFilePicker = (acceptType = '*/*') => {
+  const openFilePicker = (acceptType = '*/*', captureType = null) => {
     setShowAttachMenu(false);
     const fileInput = document.getElementById('file-input');
     if (fileInput) {
       fileInput.accept = acceptType;
+      if (captureType) {
+        fileInput.setAttribute('capture', captureType);
+      } else {
+        fileInput.removeAttribute('capture');
+      }
       fileInput.value = '';
       fileInput.click();
     }
@@ -936,7 +941,7 @@ const ChatArea = React.memo(function ChatArea({
         soundEngine.playMessageSent();
       } catch (err) {
         console.error("Encryption/Upload failed:", err);
-        alert("Failed to send encrypted file.");
+        alert(`Failed to send encrypted file: ${err.message || 'Unknown upload error'}`);
       } finally {
         setUploading(false);
       }
@@ -1720,7 +1725,7 @@ const ChatArea = React.memo(function ChatArea({
               <div className="attach-menu-options">
                 <button 
                   className="attach-menu-item"
-                  onClick={() => openFilePicker('image/*,video/*')}
+                  onClick={() => openFilePicker('image/*,video/*,image/heic,image/heif')}
                 >
                   <div className="attach-icon-badge photos">
                     <Image size={18} />
@@ -1746,7 +1751,7 @@ const ChatArea = React.memo(function ChatArea({
 
                 <button 
                   className="attach-menu-item"
-                  onClick={() => openFilePicker('audio/*')}
+                  onClick={() => openFilePicker('audio/*,.mp3,.m4a,.wav,.aac,.ogg,.flac')}
                 >
                   <div className="attach-icon-badge audio">
                     <Music size={18} />
@@ -1759,7 +1764,7 @@ const ChatArea = React.memo(function ChatArea({
 
                 <button 
                   className="attach-menu-item"
-                  onClick={() => openFilePicker('image/*')}
+                  onClick={() => openFilePicker('image/*', 'environment')}
                 >
                   <div className="attach-icon-badge camera">
                     <Camera size={18} />

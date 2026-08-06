@@ -2301,14 +2301,14 @@ button {
 }
 
 .call-card {
-  width: 100%;
-  max-width: 480px;
-  padding: 40px;
+  width: min(92vw, 440px);
+  max-width: 440px;
+  padding: 32px 24px;
   border-radius: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
   text-align: center;
   background: rgba(18, 18, 18, 0.85) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
@@ -3003,30 +3003,43 @@ body.dragging-pip * {
   /* Mobile Call Screen Optimization overrides */
   .call-card {
     width: calc(100% - 32px) !important;
-    max-width: 360px !important;
-    padding: 28px 20px !important;
-    gap: 20px !important;
-    border-radius: 20px !important;
+    max-width: 380px !important;
+    padding: 24px 16px !important;
+    gap: 18px !important;
+    border-radius: 24px !important;
+    box-sizing: border-box !important;
   }
 
   .call-avatar {
-    width: 80px !important;
-    height: 80px !important;
-    font-size: 32px !important;
+    width: 72px !important;
+    height: 72px !important;
+    font-size: 28px !important;
   }
 
   .call-actions {
-    gap: 16px !important;
+    gap: 10px !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
   }
 
   .call-actions .call-btn {
-    width: 48px !important;
-    height: 48px !important;
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    border-radius: 50% !important;
   }
 
   .call-actions .call-btn svg {
-    width: 20px !important;
-    height: 20px !important;
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  /* When call is minimized on mobile size, hide extra camera and screen share buttons to keep UI clean */
+  .call-overlay.pip-mode .call-btn.mute:nth-child(2),
+  .call-overlay.pip-mode .call-btn.mute:nth-child(3) {
+    display: none !important;
   }
 
   .local-video-container {
