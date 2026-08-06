@@ -2070,30 +2070,31 @@ export default function App() {
         selfieCameraDeviceIdRef.current = currentDeviceId;
       }
 
-      // Filter out ultra-wide (0.5x, camera 0, aux) sensors to isolate the main 1.0x back camera
-      const mainRearCandidates = allRearDevices.filter(device => {
-        const label = labelOf(device);
-        const isUltraWide = /ultra|0\.5|aux|camera2?\s*0\b|camera\s*0\b|\b0,/.test(label);
-        const isMacroOrDepth = /macro|depth|tof/.test(label);
-        return !isUltraWide && !isMacroOrDepth;
-      });
+      let targetDeviceId = null;
 
-      let preferredRear = null;
-      if (mainRearCandidates.length > 0) {
-        // Look for explicit main/primary label, otherwise pick the candidate
-        preferredRear = mainRearCandidates.find(device => /main|primary|standard|wide angle/.test(labelOf(device))) || mainRearCandidates[0];
-      } else if (allRearDevices.length > 1) {
-        // On Android/Samsung when labels are generic, index 0 is ultra-wide; index > 0 (last element) is main 1.0x camera
-        preferredRear = allRearDevices[allRearDevices.length - 1];
-      } else if (allRearDevices.length > 0) {
-        preferredRear = allRearDevices[0];
+      if (cameraFacingMode === 'user') {
+        // Toggling from Front (Selfie) to Rear (Main 1.0x) Camera:
+        // On multi-camera Android devices (e.g. Samsung/Pixel):
+        // videoDevices[0] = Selfie (Option 1)
+        // videoDevices[1] = Ultra-wide 0.5x (Option 2)
+        // videoDevices[2] = Main Camera 1.0x (Option 3) -> TARGETED DIRECTLY!
+        if (videoDevices.length >= 3) {
+          targetDeviceId = videoDevices[2].deviceId;
+        } else if (allRearDevices.length > 1) {
+          targetDeviceId = allRearDevices[allRearDevices.length - 1].deviceId;
+        } else if (allRearDevices.length > 0) {
+          targetDeviceId = allRearDevices[0].deviceId;
+        } else if (videoDevices.length > 1) {
+          targetDeviceId = videoDevices[1].deviceId;
+        }
+
+        if (targetDeviceId) mainRearCameraDeviceIdRef.current = targetDeviceId;
+      } else {
+        // Toggling from Rear back to Front (Selfie) Camera:
+        const frontCam = frontDevices[0] || videoDevices[0];
+        targetDeviceId = selfieCameraDeviceIdRef.current || frontCam?.deviceId;
       }
 
-      if (preferredRear) mainRearCameraDeviceIdRef.current = preferredRear.deviceId;
-
-      const targetDeviceId = cameraFacingMode === 'user'
-        ? mainRearCameraDeviceIdRef.current
-        : (selfieCameraDeviceIdRef.current || frontDevices[0]?.deviceId);
       const targetDevice = videoDevices.find(device => device.deviceId === targetDeviceId) || null;
       const nextFacingMode = targetDevice && isFront(targetDevice) ? 'user' : 'environment';
       const videoConstraintConfig = targetDeviceId
