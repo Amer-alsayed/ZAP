@@ -447,10 +447,12 @@ const ChatArea = React.memo(function ChatArea({
   }, [replyingTo]);
 
   useEffect(() => {
-    if (selectedFile) {
-      setActiveFileInfo(selectedFile);
+    if (selectedFiles.length > 0) {
+      setActiveFileInfo(selectedFiles[0]);
+    } else {
+      setActiveFileInfo(null);
     }
-  }, [selectedFile]);
+  }, [selectedFiles]);
 
 
 
@@ -1853,11 +1855,11 @@ const ChatArea = React.memo(function ChatArea({
             >
               <ArrowUp size={18} strokeWidth={2.5} />
             </button>
-          ) : (inputText.trim() || selectedFile) ? (
+          ) : (inputText.trim() || selectedFiles.length > 0) ? (
             <button 
               className="send-message-btn" 
               onClick={handleSendMessage} 
-              disabled={(!inputText.trim() && !selectedFile) || uploading}
+              disabled={(!inputText.trim() && selectedFiles.length === 0) || uploading}
               title="Send Encrypted Message"
               aria-label="Send Encrypted Message"
             >
