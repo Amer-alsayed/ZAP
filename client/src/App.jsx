@@ -2063,32 +2063,32 @@ export default function App() {
       // source of truth and labels only influence the preferred ordering.
       const labelOf = device => (device.label || '').toLowerCase();
       const isFront = device => /front|user|selfie|facing front/.test(labelOf(device));
-      const isPrimaryRear = device => {
-        const label = labelOf(device);
-        return /main|primary|wide angle|back camera 1|camera 2/.test(label) && !/ultra|0\.5|macro|tele|depth/.test(label);
-      };
       const allRearDevices = videoDevices.filter(device => !isFront(device));
-      const rearDevices = allRearDevices.length > 1 && allRearDevices.every(device => !labelOf(device))
-        // Android Chrome can expose Samsung/Pixel rear sensors as unlabeled
-        // devices ordered auxiliary-wide first, primary second.
-        ? allRearDevices.slice(1)
-        : allRearDevices.filter(device => {
-            const label = labelOf(device);
-            return !/ultra[- ]?wide|0\.5x|0\.5|ultrawide|camera2?\s*0\b|camera\s*0\b|back camera\s*0\b|wide\s*0\b/.test(label);
-          });
       const frontDevices = videoDevices.filter(isFront);
-      const isAndroid = /android/i.test(navigator.userAgent);
+
       if (cameraFacingMode === 'user' && currentDeviceId) {
         selfieCameraDeviceIdRef.current = currentDeviceId;
       }
 
-      // On the affected Android devices, Chrome exposes the camera sequence
-      // as selfie -> ultra-wide -> main. Prefer the confirmed third entry,
-      // then remember it so the toggle remains strictly selfie <-> main.
-      const androidMainCandidate = isAndroid && videoDevices.length >= 3
-        ? videoDevices[2]
-        : null;
-      const preferredRear = androidMainCandidate || rearDevices.find(isPrimaryRear) || rearDevices[rearDevices.length - 1];
+      // Filter out ultra-wide (0.5x, camera 0, aux) sensors to isolate the main 1.0x back camera
+      const mainRearCandidates = allRearDevices.filter(device => {
+        const label = labelOf(device);
+        const isUltraWide = /ultra|0\.5|aux|camera2?\s*0\b|camera\s*0\b|\b0,/.test(label);
+        const isMacroOrDepth = /macro|depth|tof/.test(label);
+        return !isUltraWide && !isMacroOrDepth;
+      });
+
+      let preferredRear = null;
+      if (mainRearCandidates.length > 0) {
+        // Look for explicit main/primary label, otherwise pick the candidate
+        preferredRear = mainRearCandidates.find(device => /main|primary|standard|wide angle/.test(labelOf(device))) || mainRearCandidates[0];
+      } else if (allRearDevices.length > 1) {
+        // On Android/Samsung when labels are generic, index 0 is ultra-wide; index > 0 (last element) is main 1.0x camera
+        preferredRear = allRearDevices[allRearDevices.length - 1];
+      } else if (allRearDevices.length > 0) {
+        preferredRear = allRearDevices[0];
+      }
+
       if (preferredRear) mainRearCameraDeviceIdRef.current = preferredRear.deviceId;
 
       const targetDeviceId = cameraFacingMode === 'user'
