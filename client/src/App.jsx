@@ -234,6 +234,7 @@ export default function App() {
   const [remoteCameraOff, setRemoteCameraOff] = useState(false);
   const [remoteMuted, setRemoteMuted] = useState(false);
   const [cameraFacingMode, setCameraFacingMode] = useState('user'); // 'user' (front) | 'environment' (back)
+  const cameraDeviceIdRef = useRef(null);
 
   const [isCallMinimized, setIsCallMinimized] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
@@ -1682,12 +1683,14 @@ export default function App() {
       return {
         width: { ideal: 1920 },
         height: { ideal: 1080 },
+        aspectRatio: { ideal: 16 / 9 },
         frameRate: { ideal: 30 }
       };
     } else if (quality === 'low') {
       return {
         width: { ideal: 640 },
         height: { ideal: 480 },
+        aspectRatio: { ideal: 4 / 3 },
         frameRate: { ideal: 15 }
       };
     } else {
@@ -1695,6 +1698,7 @@ export default function App() {
       return {
         width: { ideal: 1280 },
         height: { ideal: 720 },
+        aspectRatio: { ideal: 16 / 9 },
         frameRate: { ideal: 30 }
       };
     }
@@ -2034,7 +2038,8 @@ export default function App() {
     const oldVideoTracks = stream.getVideoTracks();
 
     try {
-      const nextFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+      const currentTrack = oldVideoTracks[0];
+      const currentDeviceId = currentTrack?.getSettings?.().deviceId || cameraDeviceIdRef.current;
 
       // 1. Enumerate video input devices
       let videoDevices = [];
@@ -2051,52 +2056,43 @@ export default function App() {
         try { stream.removeTrack(track); } catch (e) {}
       });
 
-      // 3. Find target device: prioritize primary main 1.0x camera over ultrawide (camera2 0) / macro lenses
-      let targetDeviceId = null;
-      if (videoDevices.length > 1) {
-        if (nextFacingMode === 'environment') {
-          // Filter all rear / back cameras (exclude front cameras)
-          const rearDevices = videoDevices.filter(d => {
-            const label = d.label.toLowerCase();
-            const isFront = label.includes('front') || label.includes('user') || label.includes('selfie') || label.includes('1, facing front');
-            return !isFront;
-          });
-
-          if (rearDevices.length > 0) {
-            // Exclude ultra-wide (0.5x), camera2 0, aux, depth, macro, telephoto lenses
-            const mainBackCamera = rearDevices.find(d => {
-              const label = d.label.toLowerCase();
-              const isUltraWide = label.includes('ultra') || label.includes('0.5') || label.includes('wide 0') || label.includes('aux') || label.includes('camera2 0') || label.includes('camera 0') || label.includes(' 0,');
-              const isMacroOrDepth = label.includes('macro') || label.includes('depth') || label.includes('tof');
-              return !isUltraWide && !isMacroOrDepth;
-            });
-
-            // If found main camera use it, else pick the non-zero rear camera (last element in rearDevices)
-            if (mainBackCamera) {
-              targetDeviceId = mainBackCamera.deviceId;
-            } else if (rearDevices.length > 1) {
-              targetDeviceId = rearDevices[rearDevices.length - 1].deviceId;
-            } else {
-              targetDeviceId = rearDevices[0].deviceId;
-            }
+      // Cycle actual camera devices instead of toggling only user/environment.
+      // Labels are frequently empty before permission, so deviceId is the
+      // source of truth and labels only influence the preferred ordering.
+      const labelOf = device => (device.label || '').toLowerCase();
+      const isFront = device => /front|user|selfie|facing front/.test(labelOf(device));
+      const isPrimaryRear = device => {
+        const label = labelOf(device);
+        return /main|primary|wide angle|back camera 1|camera 2/.test(label) && !/ultra|0\.5|macro|tele|depth/.test(label);
+      };
+      const rearDevices = videoDevices.filter(device => !isFront(device));
+      const frontDevices = videoDevices.filter(isFront);
+      const orderedDevices = [
+        ...frontDevices,
+        ...rearDevices.filter(isPrimaryRear),
+        ...rearDevices.filter(device => !isPrimaryRear(device))
+      ].filter((device, index, all) => all.findIndex(item => item.deviceId === device.deviceId) === index);
+      const currentIndex = orderedDevices.findIndex(device => device.deviceId === currentDeviceId);
+      const targetDevice = orderedDevices.length
+        ? orderedDevices[(currentIndex + 1 + orderedDevices.length) % orderedDevices.length]
+        : null;
+      const targetDeviceId = targetDevice?.deviceId || null;
+      const nextFacingMode = targetDevice && isFront(targetDevice) ? 'user' : 'environment';
+      const videoConstraintConfig = targetDeviceId
+        ? {
+            deviceId: { exact: targetDeviceId },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            aspectRatio: { ideal: 16 / 9 },
+            frameRate: { ideal: 30 }
           }
-        } else {
-          const frontCamera = videoDevices.find(d => {
-            const label = d.label.toLowerCase();
-            return label.includes('front') || label.includes('user') || label.includes('selfie') || label.includes('1, facing front');
-          });
-          if (frontCamera) {
-            targetDeviceId = frontCamera.deviceId;
-          }
-        }
-      }
-
-      let videoConstraintConfig;
-      if (targetDeviceId) {
-        videoConstraintConfig = { deviceId: { exact: targetDeviceId } };
-      } else {
-        videoConstraintConfig = { facingMode: { ideal: nextFacingMode } };
-      }
+        : {
+            facingMode: { ideal: nextFacingMode },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            aspectRatio: { ideal: 16 / 9 },
+            frameRate: { ideal: 30 }
+          };
 
       let newStream;
       try {
@@ -2124,6 +2120,7 @@ export default function App() {
       if ('contentHint' in newVideoTrack) {
         newVideoTrack.contentHint = 'motion';
       }
+      cameraDeviceIdRef.current = newVideoTrack.getSettings?.().deviceId || targetDeviceId;
 
       // 4. Attach new track to localStream
       stream.addTrack(newVideoTrack);
