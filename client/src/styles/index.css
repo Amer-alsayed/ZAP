@@ -2585,52 +2585,89 @@ textarea {
   pointer-events: none !important;
 }
 
+.message-wrapper {
+  transition: max-height 0.38s cubic-bezier(0.2, 0.9, 0.2, 1),
+              margin 0.35s cubic-bezier(0.2, 0.9, 0.2, 1),
+              padding 0.35s cubic-bezier(0.2, 0.9, 0.2, 1),
+              opacity 0.32s cubic-bezier(0.2, 0.9, 0.2, 1),
+              transform 0.35s cubic-bezier(0.2, 0.9, 0.2, 1),
+              filter 0.3s cubic-bezier(0.2, 0.9, 0.2, 1);
+  will-change: max-height, transform, opacity, filter, margin;
+  overflow: hidden;
+  max-height: 800px;
+}
+
 .message-wrapper.is-deleting {
-  animation: messageDeleteOut 220ms ease forwards;
-  pointer-events: none;
+  animation: messageDeleteOut 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  pointer-events: none !important;
 }
 
-.message-selection-toolbar {
-  display: none;
+.message-wrapper.sent.is-deleting {
+  animation: messageDeleteOutSent 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
 }
 
-.selection-header-actions { gap: 10px; }
-.selection-count-label { color: var(--text-subtle); font-size: 12px; font-weight: 700; }
-.selection-delete-header-btn { color: #ff7d8b; }
-.selection-back-btn { color: var(--accent-color); }
-
-.message-selection-toolbar span {
-  color: var(--text-main);
-  font-size: 14px;
-  font-weight: 700;
+.message-wrapper.received.is-deleting {
+  animation: messageDeleteOutReceived 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
 }
 
-.message-selection-toolbar button {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 12px;
-  color: var(--text-main);
-  background: transparent;
+@keyframes messageDeleteOutSent {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    filter: blur(0px);
+    max-height: 500px;
+    margin-bottom: var(--msg-margin-bottom, 8px);
+  }
+  30% {
+    opacity: 0.85;
+    transform: scale(1.03) translateX(6px);
+    filter: blur(1px);
+  }
+  65% {
+    opacity: 0.2;
+    transform: scale(0.88) translateX(28px);
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.75) translateX(40px);
+    filter: blur(10px);
+    max-height: 0px;
+    margin-top: 0px;
+    margin-bottom: 0px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+  }
 }
 
-.message-selection-toolbar button:active { transform: scale(0.9); }
-.message-selection-toolbar .selection-delete-btn { color: #ff7d8b; }
-
-@keyframes selectionToolbarIn {
-  from { opacity: 0; transform: translateY(16px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes selectionMarkIn {
-  from { opacity: 0; transform: scale(0.5); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes messageDeleteOut {
-  to { opacity: 0; transform: translateX(24px) scale(0.94); max-height: 0; margin-block: 0; }
+@keyframes messageDeleteOutReceived {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    filter: blur(0px);
+    max-height: 500px;
+    margin-bottom: var(--msg-margin-bottom, 8px);
+  }
+  30% {
+    opacity: 0.85;
+    transform: scale(1.03) translateX(-6px);
+    filter: blur(1px);
+  }
+  65% {
+    opacity: 0.2;
+    transform: scale(0.88) translateX(-28px);
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.75) translateX(-40px);
+    filter: blur(10px);
+    max-height: 0px;
+    margin-top: 0px;
+    margin-bottom: 0px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+  }
 }
 
 /* Standalone PiP Mode Control Overlay */

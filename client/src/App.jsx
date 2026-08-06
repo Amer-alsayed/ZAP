@@ -844,7 +844,7 @@ export default function App() {
           ...prev,
           messages: prev.messages.filter(m => !ids.has(String(m.id)))
         } : prev);
-      }, 220);
+      }, 350);
     });
 
     // ==========================================
@@ -1363,10 +1363,25 @@ export default function App() {
   }, []);
 
   const deleteMessagesLocal = useCallback((messageIds) => {
-    const ids = new Set(messageIds);
-    setContacts(prev => prev.map(c => ({ ...c, messages: c.messages.filter(m => !ids.has(m.id)) })));
-    setActiveContact(prev => prev ? { ...prev, messages: prev.messages.filter(m => !ids.has(m.id)) } : prev);
+    const ids = new Set(messageIds.map(id => String(id)));
+    // Phase 1: Mark messages as deleting so CSS animation triggers
+    setContacts(prev => prev.map(c => ({
+      ...c,
+      messages: c.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true } : m)
+    })));
+    setActiveContact(prev => prev ? {
+      ...prev,
+      messages: prev.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true } : m)
+    } : prev);
+
+    // Emit socket event to remote users
     emitDeleteMessages(messageIds).catch(err => console.warn('Failed to delete messages remotely:', err));
+
+    // Phase 2: Remove from state after animation completes
+    window.setTimeout(() => {
+      setContacts(prev => prev.map(c => ({ ...c, messages: c.messages.filter(m => !ids.has(String(m.id))) })));
+      setActiveContact(prev => prev ? { ...prev, messages: prev.messages.filter(m => !ids.has(String(m.id))) } : prev);
+    }, 350);
   }, []);
 
   const markAllMessagesAsReadLocal = useCallback((contactUsername) => {

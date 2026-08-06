@@ -97,9 +97,8 @@ const MessageList = React.memo(({
       selectionCancelRef.current = () => setSelectedIds([]);
       selectionCancelRef.current.delete = () => {
         const ids = [...selectedIds];
-        setDeletingIds(ids);
         setSelectedIds([]);
-        window.setTimeout(() => { onDeleteMessages(ids); setDeletingIds([]); }, 220);
+        onDeleteMessages(ids);
       };
     }
     return () => { if (selectionCancelRef) selectionCancelRef.current = null; };
@@ -388,7 +387,7 @@ const MessageList = React.memo(({
       {selectionMode && (
         <div className="message-selection-toolbar glass">
           <span>{selectedIds.length} selected</span>
-          <button aria-label="Delete selected messages" className="selection-delete-btn" onClick={() => { const ids = [...selectedIds]; setDeletingIds(ids); setSelectedIds([]); window.setTimeout(() => { onDeleteMessages(ids); setDeletingIds([]); }, 220); }}><Trash2 size={18} /></button>
+          <button aria-label="Delete selected messages" className="selection-delete-btn" onClick={() => { const ids = [...selectedIds]; setSelectedIds([]); onDeleteMessages(ids); }}><Trash2 size={18} /></button>
         </div>
       )}
       <div 
