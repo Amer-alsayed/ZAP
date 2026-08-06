@@ -879,6 +879,7 @@ const ChatArea = React.memo(function ChatArea({
     setReplyingTo(null);
     if (textareaRef.current) {
       textareaRef.current.style.height = '36px';
+      textareaRef.current.focus({ preventScroll: true });
     }
 
     if (selectedFiles.length > 0) {
@@ -1868,7 +1869,18 @@ const ChatArea = React.memo(function ChatArea({
           ) : (inputText.trim() || selectedFiles.length > 0) ? (
             <button 
               className="send-message-btn" 
-              onClick={handleSendMessage} 
+              onMouseDown={(e) => e.preventDefault()}
+              onTouchStart={(e) => {
+                // Prevent mobile virtual keyboard from dismissing on button touch
+                e.preventDefault();
+                handleSendMessage();
+              }}
+              onClick={(e) => {
+                // Only trigger if not already handled by touchStart
+                if (e.detail !== 0) {
+                  handleSendMessage();
+                }
+              }} 
               disabled={(!inputText.trim() && selectedFiles.length === 0) || uploading}
               title="Send Encrypted Message"
               aria-label="Send Encrypted Message"
