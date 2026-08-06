@@ -2152,9 +2152,9 @@ export default function App() {
         <div className="app-preloader">
           <div className="preloader-logo-container">
             <div className="preloader-glow"></div>
-            <svg className="preloader-logo" viewBox="0 0 24 24" fill="none" stroke="#007acc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="preloader-logo" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              <path d="m9 11 2 2 4-4" stroke="#30d158" strokeWidth="2"/>
+              <path d="m9 11 2 2 4-4" stroke="var(--accent-color)" strokeWidth="2"/>
             </svg>
           </div>
           <div className="preloader-bar-bg">
