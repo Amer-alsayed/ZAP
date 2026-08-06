@@ -193,10 +193,20 @@ export const initDb = async () => {
       // Column already exists
     }
 
+    // Create Deleted Messages Per User Table (stores per-user message deletion)
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS deleted_messages_user (
+        message_id INTEGER NOT NULL,
+        username TEXT NOT NULL,
+        PRIMARY KEY (message_id, username)
+      )
+    `);
+
     // Database indexes for high performance query resolution
     await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender, recipient)');
     await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_pending ON messages(recipient, delivered)');
     await dbRun('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_deleted_messages_user ON deleted_messages_user(username, message_id)');
 
     logger.info('Database tables and performance indexes initialized successfully.');
   } catch (error) {

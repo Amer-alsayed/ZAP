@@ -128,11 +128,12 @@ export const socketHandler = (io) => {
     const deliverOfflineMessages = async () => {
       try {
         const offlineMessages = await dbAll(
-          `SELECT id, sender, recipient, ciphertext, iv, signature, timestamp, delivered
-           FROM messages
-           WHERE LOWER(recipient) = LOWER(?) AND delivered = 0
-           ORDER BY timestamp ASC`,
-          [username]
+          `SELECT m.id, m.sender, m.recipient, m.ciphertext, m.iv, m.signature, m.timestamp, m.delivered
+           FROM messages m
+           LEFT JOIN deleted_messages_user d ON m.id = d.message_id AND LOWER(d.username) = LOWER(?)
+           WHERE LOWER(m.recipient) = LOWER(?) AND m.delivered = 0 AND d.message_id IS NULL
+           ORDER BY m.timestamp ASC`,
+          [username, username]
         );
 
         if (offlineMessages.length > 0) {
@@ -315,17 +316,31 @@ export const socketHandler = (io) => {
         const rows = await dbAll(
           `SELECT id, sender, recipient FROM messages WHERE id IN (${placeholders})`, ids
         );
-        const allowed = rows.filter(row =>
-          row.sender.toLowerCase() === username.toLowerCase() ||
-          row.recipient.toLowerCase() === username.toLowerCase()
-        );
-        if (allowed.length) {
-          const allowedIds = allowed.map(row => row.id);
-          const allowedPlaceholders = allowedIds.map(() => '?').join(',');
-          await dbRun(`DELETE FROM messages WHERE id IN (${allowedPlaceholders})`, allowedIds);
-          const participants = [...new Set(allowed.flatMap(row => [row.sender, row.recipient]))];
-          participants.forEach(participant => io.to(participant.toLowerCase()).emit('messages-deleted', { messageIds: allowedIds }));
+
+        const sentByUser = rows.filter(row => row.sender.toLowerCase() === username.toLowerCase());
+        const receivedByUser = rows.filter(row => row.recipient.toLowerCase() === username.toLowerCase());
+
+        // 1) Messages sent by current user: Delete for everyone from server DB
+        if (sentByUser.length) {
+          const sentIds = sentByUser.map(row => row.id);
+          const sentPlaceholders = sentIds.map(() => '?').join(',');
+          await dbRun(`DELETE FROM messages WHERE id IN (${sentPlaceholders})`, sentIds);
+          await dbRun(`DELETE FROM deleted_messages_user WHERE message_id IN (${sentPlaceholders})`, sentIds);
+          
+          const participants = [...new Set(sentByUser.flatMap(row => [row.sender, row.recipient]))];
+          participants.forEach(participant => io.to(participant.toLowerCase()).emit('messages-deleted', { messageIds: sentIds }));
         }
+
+        // 2) Messages received by current user: Hide for current user ("delete for me")
+        if (receivedByUser.length) {
+          for (const msg of receivedByUser) {
+            await dbRun(
+              `INSERT OR IGNORE INTO deleted_messages_user (message_id, username) VALUES (?, ?)`,
+              [msg.id, username.toLowerCase()]
+            );
+          }
+        }
+
         callback?.({ success: true });
       } catch (error) {
         logger.error('Error deleting messages:', error);
@@ -395,12 +410,15 @@ export const socketHandler = (io) => {
         }
 
         let query = `
-          SELECT id, sender, recipient, ciphertext, iv, signature, timestamp, delivered
-          FROM messages
-          WHERE (LOWER(sender) = LOWER(?) AND LOWER(recipient) = LOWER(?))
-             OR (LOWER(sender) = LOWER(?) AND LOWER(recipient) = LOWER(?))
+          SELECT m.id, m.sender, m.recipient, m.ciphertext, m.iv, m.signature, m.timestamp, m.delivered
+          FROM messages m
+          LEFT JOIN deleted_messages_user d 
+            ON m.id = d.message_id AND LOWER(d.username) = LOWER(?)
+          WHERE d.message_id IS NULL
+            AND ((LOWER(m.sender) = LOWER(?) AND LOWER(m.recipient) = LOWER(?))
+              OR (LOWER(m.sender) = LOWER(?) AND LOWER(m.recipient) = LOWER(?)))
         `;
-        const params = [currentUser, withUser, withUser, currentUser];
+        const params = [currentUser, currentUser, withUser, withUser, currentUser];
 
         if (beforeId) {
           query += ` AND id < ?`;

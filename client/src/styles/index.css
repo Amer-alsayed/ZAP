@@ -1089,6 +1089,13 @@ button {
   will-change: transform;
 }
 
+.message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+}
+
 @keyframes chatLogsFadeIn {
   0% {
     opacity: 0;
@@ -1101,18 +1108,48 @@ button {
 }
 
 .message-row {
-  display: flex;
+  display: grid;
+  grid-template-rows: 1fr;
   width: 100%;
+  margin-bottom: 16px;
   position: relative;
   box-sizing: border-box;
+  /* Ultra-smooth spring bezier for fluid layout reorganization (FLIP-like physics) */
+  transition: grid-template-rows 600ms cubic-bezier(0.22, 1, 0.36, 1),
+              margin 600ms cubic-bezier(0.22, 1, 0.36, 1),
+              padding 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: grid-template-rows, margin, padding;
+}
+
+.message-row.is-collapsing {
+  grid-template-rows: 0fr !important;
+  /* Remove both flex gaps adjacent to this row during the same transition.
+     A row between two messages owns one gap before and one after it. */
+  margin-top: 0 !important;
+  /* The list itself has a 16px flex gap. Cancel it while this row collapses,
+     otherwise React unmounting the zero-height row removes that final gap in
+     a visible single-frame jump. */
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  pointer-events: none !important;
+}
+
+.message-row > div {
+  overflow: visible;
+  min-height: 0;
+}
+
+.message-row.is-collapsing > div {
+  overflow: hidden;
 }
 
 .message-row.sent {
-  justify-content: flex-end;
+  justify-items: end;
 }
 
 .message-row.received {
-  justify-content: flex-start;
+  justify-items: start;
 }
 
 .message-wrapper {
@@ -2554,26 +2591,178 @@ textarea {
 
 .message-wrapper.is-selected .message-bubble {
   border-color: var(--accent-color) !important;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 35%, transparent), 0 12px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 45%, transparent), 0 0 16px rgba(var(--accent-rgb), 0.22), 0 12px 28px rgba(0, 0, 0, 0.35) !important;
   transform: scale(0.985);
+  position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.message-wrapper.is-selected::before {
-  content: '✓';
+.selection-indicator-badge {
   position: absolute;
-  inset-inline-end: -8px;
-  inset-block-start: -8px;
-  z-index: 3;
+  top: -8px;
+  right: -8px;
+  z-index: 5;
   width: 22px;
   height: 22px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 50%;
-  color: #fff;
-  background: var(--accent-color);
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--accent-color) 0%, color-mix(in srgb, var(--accent-color) 80%, #000) 100%);
+  border: 2px solid #000000;
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.5), 0 3px 8px rgba(0, 0, 0, 0.6);
+  animation: selectionMarkIn 220ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  pointer-events: none;
+}
+
+@keyframes selectionMarkIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-30deg);
+  }
+  70% {
+    transform: scale(1.15) rotate(5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.selection-back-btn {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+  transition: var(--transition-smooth) !important;
+}
+
+.selection-back-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  transform: scale(1.05) !important;
+  box-shadow: none !important;
+}
+
+.selection-back-btn:active {
+  transform: scale(0.95) !important;
+}
+
+.back-btn .btn-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: btnIconSwapIn 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes btnIconSwapIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-45deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.selection-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selection-count-label {
   font-size: 13px;
-  font-weight: 800;
-  animation: selectionMarkIn 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  animation: headerBtnSwapIn 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.selection-count-number {
+  display: inline-block;
+  animation: countPopScale 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes countPopScale {
+  0% {
+    opacity: 0.2;
+    transform: scale(0.6) translateY(-3px);
+  }
+  60% {
+    transform: scale(1.25) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.selection-copy-header-btn {
+  color: var(--text-primary) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+  transition: var(--transition-smooth) !important;
+  animation: headerBtnSwapIn 0.23s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.selection-copy-header-btn:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  transform: scale(1.05) !important;
+  box-shadow: none !important;
+}
+
+.selection-copy-header-btn:active {
+  transform: scale(0.95) !important;
+}
+
+.selection-delete-header-btn {
+  color: #ff453a !important;
+  background: rgba(255, 69, 58, 0.12) !important;
+  border: 1px solid rgba(255, 69, 58, 0.25) !important;
+  box-shadow: none !important;
+  transition: var(--transition-smooth) !important;
+  animation: headerBtnSwapIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.selection-delete-header-btn:hover {
+  background: rgba(255, 69, 58, 0.22) !important;
+  border-color: rgba(255, 69, 58, 0.4) !important;
+  color: #ff453a !important;
+  transform: scale(1.05) !important;
+  box-shadow: none !important;
+}
+
+.selection-delete-header-btn:active {
+  transform: scale(0.95) !important;
+}
+
+@keyframes headerBtnSwapIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.selection-mode-message .message-actions-container,
+.message-wrapper.is-selected .message-actions-container {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
 }
 
 .selection-mode-message .message-image,
@@ -2585,88 +2774,31 @@ textarea {
   pointer-events: none !important;
 }
 
+
+
+
+
 .message-wrapper {
-  transition: max-height 0.38s cubic-bezier(0.2, 0.9, 0.2, 1),
-              margin 0.35s cubic-bezier(0.2, 0.9, 0.2, 1),
-              padding 0.35s cubic-bezier(0.2, 0.9, 0.2, 1),
-              opacity 0.32s cubic-bezier(0.2, 0.9, 0.2, 1),
-              transform 0.35s cubic-bezier(0.2, 0.9, 0.2, 1),
-              filter 0.3s cubic-bezier(0.2, 0.9, 0.2, 1);
-  will-change: max-height, transform, opacity, filter, margin;
-  overflow: hidden;
-  max-height: 800px;
+  min-width: 0;
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .message-wrapper.is-deleting {
-  animation: messageDeleteOut 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
   pointer-events: none !important;
+  animation: messageFluidFadeOut 480ms ease-in forwards !important;
 }
 
-.message-wrapper.sent.is-deleting {
-  animation: messageDeleteOutSent 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
-}
-
-.message-wrapper.received.is-deleting {
-  animation: messageDeleteOutReceived 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
-}
-
-@keyframes messageDeleteOutSent {
+@keyframes messageFluidFadeOut {
   0% {
     opacity: 1;
-    transform: scale(1) translateX(0);
-    filter: blur(0px);
-    max-height: 500px;
-    margin-bottom: var(--msg-margin-bottom, 8px);
-  }
-  30% {
-    opacity: 0.85;
-    transform: scale(1.03) translateX(6px);
-    filter: blur(1px);
-  }
-  65% {
-    opacity: 0.2;
-    transform: scale(0.88) translateX(28px);
-    filter: blur(6px);
+    transform: translate3d(0, 0, 0);
   }
   100% {
     opacity: 0;
-    transform: scale(0.75) translateX(40px);
-    filter: blur(10px);
-    max-height: 0px;
-    margin-top: 0px;
-    margin-bottom: 0px;
-    padding-top: 0px;
-    padding-bottom: 0px;
-  }
-}
-
-@keyframes messageDeleteOutReceived {
-  0% {
-    opacity: 1;
-    transform: scale(1) translateX(0);
-    filter: blur(0px);
-    max-height: 500px;
-    margin-bottom: var(--msg-margin-bottom, 8px);
-  }
-  30% {
-    opacity: 0.85;
-    transform: scale(1.03) translateX(-6px);
-    filter: blur(1px);
-  }
-  65% {
-    opacity: 0.2;
-    transform: scale(0.88) translateX(-28px);
-    filter: blur(6px);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.75) translateX(-40px);
-    filter: blur(10px);
-    max-height: 0px;
-    margin-top: 0px;
-    margin-bottom: 0px;
-    padding-top: 0px;
-    padding-bottom: 0px;
+    transform: translate3d(0, 0, 0);
   }
 }
 

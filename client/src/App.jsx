@@ -828,12 +828,23 @@ export default function App() {
       const ids = new Set(messageIds.map(id => String(id)));
       setContacts(prev => prev.map(c => ({
         ...c,
-        messages: c.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true } : m)
+        messages: c.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true, isCollapsing: false } : m)
       })));
       setActiveContact(prev => prev ? {
         ...prev,
-        messages: prev.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true } : m)
+        messages: prev.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true, isCollapsing: false } : m)
       } : prev);
+
+      window.setTimeout(() => {
+        setContacts(prev => prev.map(c => ({
+          ...c,
+          messages: c.messages.map(m => ids.has(String(m.id)) ? { ...m, isCollapsing: true } : m)
+        })));
+        setActiveContact(prev => prev ? {
+          ...prev,
+          messages: prev.messages.map(m => ids.has(String(m.id)) ? { ...m, isCollapsing: true } : m)
+        } : prev);
+      }, 500);
 
       window.setTimeout(() => {
         setContacts(prev => prev.map(c => ({
@@ -844,7 +855,7 @@ export default function App() {
           ...prev,
           messages: prev.messages.filter(m => !ids.has(String(m.id)))
         } : prev);
-      }, 350);
+      }, 1150);
     });
 
     // ==========================================
@@ -1363,26 +1374,40 @@ export default function App() {
   }, []);
 
   const deleteMessagesLocal = useCallback((messageIds) => {
+    if (!messageIds || messageIds.length === 0) return;
     const ids = new Set(messageIds.map(id => String(id)));
-    // Phase 1: Mark messages as deleting so CSS animation triggers
+
+    // Phase 1: Mark all selected messages as deleting locally (disappears for current user)
     setContacts(prev => prev.map(c => ({
       ...c,
       messages: c.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true } : m)
     })));
     setActiveContact(prev => prev ? {
       ...prev,
-      messages: prev.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true } : m)
+      messages: prev.messages.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true, isCollapsing: false } : m)
     } : prev);
 
-    // Emit socket event to remote users
+    // Emit remote deletion to server for all selected messages (sent or received)
     emitDeleteMessages(messageIds).catch(err => console.warn('Failed to delete messages remotely:', err));
 
-    // Phase 2: Remove from state after animation completes
+    // Phase 2: collapse the now-invisible row before removing it from React.
+    window.setTimeout(() => {
+      setContacts(prev => prev.map(c => ({
+        ...c,
+        messages: c.messages.map(m => ids.has(String(m.id)) ? { ...m, isCollapsing: true } : m)
+      })));
+      setActiveContact(prev => prev ? {
+        ...prev,
+        messages: prev.messages.map(m => ids.has(String(m.id)) ? { ...m, isCollapsing: true } : m)
+      } : prev);
+    }, 500);
+
+    // Remove only after the layout space has fully collapsed.
     window.setTimeout(() => {
       setContacts(prev => prev.map(c => ({ ...c, messages: c.messages.filter(m => !ids.has(String(m.id))) })));
       setActiveContact(prev => prev ? { ...prev, messages: prev.messages.filter(m => !ids.has(String(m.id))) } : prev);
-    }, 350);
-  }, []);
+    }, 1150);
+  }, [currentUser?.username]);
 
   const markAllMessagesAsReadLocal = useCallback((contactUsername) => {
     if (!contactUsername) return;

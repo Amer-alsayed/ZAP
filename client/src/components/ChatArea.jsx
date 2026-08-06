@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMe
 import { 
   Send, Shield, Phone, Video, Paperclip, Mic, X, Play, Pause, 
   FileText, Image, Video as VideoIcon, Download, AlertTriangle,
-  ArrowLeft, CornerUpLeft, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck, Trash2, Camera, Music
+  ArrowLeft, CornerUpLeft, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck, Trash2, Camera, Music, Check, Copy
 } from 'lucide-react';
 import { uploadEncryptedFile } from '../services/api';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
@@ -11,9 +11,6 @@ import { renderAvatar } from './Sidebar';
 import { loadOrFetchDecryptedMedia, setCachedMedia } from '../services/mediaCache';
 import { soundEngine } from '../services/soundEffects';
 
-// ==========================================
-// E2EE Safety Fingerprint Helper (Synchronous Hash)
-// ==========================================
 const getSafetyNumber = (keyA, keyB) => {
   if (!keyA || !keyB) return 'N/A';
   
@@ -91,8 +88,18 @@ const MessageList = React.memo(({
   const [selectedIds, setSelectedIds] = useState([]);
   const [deletingIds, setDeletingIds] = useState([]);
   const selectionMode = selectedIds.length > 0;
+
+  const selectedMsgForCopy = selectedIds.length === 1 ? messages.find(m => m.id === selectedIds[0]) : null;
+  const canCopySelected = Boolean(
+    selectedMsgForCopy && 
+    !selectedMsgForCopy.mediaType && 
+    !selectedMsgForCopy.fileMetadata && 
+    typeof selectedMsgForCopy.text === 'string' && 
+    selectedMsgForCopy.text.trim().length > 0
+  );
+
   useEffect(() => {
-    onSelectionModeChange?.({ active: selectionMode, count: selectedIds.length });
+    onSelectionModeChange?.({ active: selectionMode, count: selectedIds.length, canCopy: canCopySelected });
     if (selectionCancelRef) {
       selectionCancelRef.current = () => setSelectedIds([]);
       selectionCancelRef.current.delete = () => {
@@ -100,9 +107,29 @@ const MessageList = React.memo(({
         setSelectedIds([]);
         onDeleteMessages(ids);
       };
+      selectionCancelRef.current.copy = () => {
+        if (selectedMsgForCopy && selectedMsgForCopy.text) {
+          const textToCopy = selectedMsgForCopy.text;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy).catch(() => {});
+          } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = textToCopy;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(textarea);
+          }
+          if (window.navigator && window.navigator.vibrate) {
+            try { window.navigator.vibrate(15); } catch (err) {}
+          }
+          soundEngine?.playClick?.();
+          setSelectedIds([]);
+        }
+      };
     }
     return () => { if (selectionCancelRef) selectionCancelRef.current = null; };
-  }, [selectionMode, selectedIds, onDeleteMessages, onSelectionModeChange, selectionCancelRef]);
+  }, [selectionMode, selectedIds, selectedMsgForCopy, canCopySelected, onDeleteMessages, onSelectionModeChange, selectionCancelRef]);
 
   const toggleSelected = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   const startLongPress = (id) => {
@@ -115,13 +142,10 @@ const MessageList = React.memo(({
   };
   const cancelLongPress = () => window.clearTimeout(longPressTimerRef.current);
 
-  const hasJustReceivedMessage = justReceivedId !== null && 
-    messages && 
-    messages.length > 0 && 
     messages[messages.length - 1].id === justReceivedId;
 
   return (
-    <>
+    <div className="message-list">
       {messages && messages.map((msg, index) => {
         const isSent = msg.sender === activeContactUsername ? false : true;
         const showDateSeparator = shouldShowDateSeparator(messages, index);
@@ -207,7 +231,7 @@ const MessageList = React.memo(({
               </div>
             )}
             <div 
-              className={`message-row ${isSent ? 'sent' : 'received'}`}
+              className={`message-row ${isSent ? 'sent' : 'received'} ${deletingIds.includes(msg.id) || msg.isDeleting ? 'is-deleting' : ''} ${msg.isCollapsing ? 'is-collapsing' : ''}`}
               onContextMenu={(e) => e.preventDefault()}
               onClickCapture={(e) => {
                 // Capture before media controls receive the click. This is
@@ -323,30 +347,38 @@ const MessageList = React.memo(({
                   </div>
                 )}
                 <div className="message-bubble">
-                  <div className="message-actions-container">
-                    <button 
-                      className="msg-action-btn" 
-                      title="Reply"
-                      aria-label="Reply to message"
-                      onClick={() => {
-                        setReplyingTo({
-                          id: msg.id,
-                          sender: msg.sender,
-                          text: msg.mediaType ? `[${msg.mediaType}]` : msg.text,
-                          mediaType: msg.mediaType || null,
-                          fileMetadata: msg.fileMetadata || null
-                        });
-                        setTimeout(() => {
-                          if (textareaRef.current) {
-                            textareaRef.current.focus({ preventScroll: false });
-                            textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                          }
-                        }, 50);
-                      }}
-                    >
-                      <CornerUpLeft size={12} />
-                    </button>
-                  </div>
+                  {selectedIds.includes(msg.id) && (
+                    <div className="selection-indicator-badge" aria-hidden="true">
+                      <Check size={12} strokeWidth={2.8} />
+                    </div>
+                  )}
+                  {!selectionMode && (
+                    <div className="message-actions-container">
+                      <button 
+                        className="msg-action-btn" 
+                        title="Reply"
+                        aria-label="Reply to message"
+                        onClick={() => {
+                          setReplyingTo({
+                            id: msg.id,
+                            sender: msg.sender,
+                            text: msg.mediaType ? `[${msg.mediaType}]` : msg.text,
+                            mediaType: msg.mediaType || null,
+                            fileMetadata: msg.fileMetadata || null
+                          });
+                          setTimeout(() => {
+                            if (textareaRef.current) {
+                              textareaRef.current.blur();
+                              textareaRef.current.focus();
+                              textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }
+                          }, 50);
+                        }}
+                      >
+                        <CornerUpLeft size={12} />
+                      </button>
+                    </div>
+                  )}
                   {msg.replyTo && (
                     <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
                       <span className="reply-context-sender">{msg.replyTo.sender}</span>
@@ -384,12 +416,6 @@ const MessageList = React.memo(({
           </React.Fragment>
         );
       })}
-      {selectionMode && (
-        <div className="message-selection-toolbar glass">
-          <span>{selectedIds.length} selected</span>
-          <button aria-label="Delete selected messages" className="selection-delete-btn" onClick={() => { const ids = [...selectedIds]; setSelectedIds([]); onDeleteMessages(ids); }}><Trash2 size={18} /></button>
-        </div>
-      )}
       <div 
         ref={typingBubbleRef} 
         className={`typing-indicator-wrapper ${activeContactIsTyping && !hasJustReceivedMessage ? 'visible' : ''}`}
@@ -404,7 +430,7 @@ const MessageList = React.memo(({
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 });
 
@@ -432,9 +458,13 @@ const ChatArea = React.memo(function ChatArea({
   const selectionCancelRef = useRef(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectionCount, setSelectionCount] = useState(0);
-  const handleSelectionModeChange = ({ active, count }) => {
+  const [selectionCanCopy, setSelectionCanCopy] = useState(false);
+  const selectionModeRef = useRef(false);
+  selectionModeRef.current = selectionMode;
+  const handleSelectionModeChange = ({ active, count, canCopy }) => {
     setSelectionMode(active);
     setSelectionCount(count);
+    setSelectionCanCopy(Boolean(canCopy));
   };
   const handleChatBack = () => {
     if (selectionMode) {
@@ -1531,7 +1561,9 @@ const ChatArea = React.memo(function ChatArea({
 
       let element;
       if (isImage) {
-        element = <ImagePreviewLoader fileMetadata={file} onImageClick={selectionMode ? undefined : onImageClick} onImageLoad={isLast ? handleImageLoad : undefined} />;
+        element = <ImagePreviewLoader fileMetadata={file} onImageClick={onImageClick ? (src) => {
+          if (!selectionModeRef.current) onImageClick(src);
+        } : undefined} onImageLoad={isLast ? handleImageLoad : undefined} />;
       } else if (isVideo) {
         element = <VideoPreviewLoader fileMetadata={file} />;
       } else {
@@ -1577,7 +1609,7 @@ const ChatArea = React.memo(function ChatArea({
         <div className="voice-note-player">
           <button 
             className="play-pause-btn" 
-            onClick={() => { if (!selectionMode) togglePlayAudio(msg.id, file); }}
+            onClick={() => { if (!selectionModeRef.current) togglePlayAudio(msg.id, file); }}
             title={isPlaying ? "Pause voice note" : "Play voice note"}
             aria-label={isPlaying ? "Pause voice note" : "Play voice note"}
           >
@@ -1595,7 +1627,7 @@ const ChatArea = React.memo(function ChatArea({
               onChange={(e) => {
                 const seekPct = parseFloat(e.target.value) / 100;
                 // Navigate/seek audio without auto-playing if currently paused
-                if (!selectionMode) togglePlayAudio(msg.id, file, seekPct, false);
+                if (!selectionModeRef.current) togglePlayAudio(msg.id, file, seekPct, false);
               }}
               style={{
                 background: `linear-gradient(to right, var(--accent-color) ${progress}%, rgba(255, 255, 255, 0.15) ${progress}%)`
@@ -1682,12 +1714,9 @@ const ChatArea = React.memo(function ChatArea({
         </div>
       );
     }
-
     // Default plaintext
     return msg.text;
-  }, [playingAudioId, audioProgress, playbackRate, selectionMode, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick]);
-
-  // Native 120fps GPU compositor scrolling enabled
+  }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick]);
 
   return (
     <div className={`chat-area ${isNavigatingBack ? 'navigating-back' : ''}`}>
@@ -1695,7 +1724,9 @@ const ChatArea = React.memo(function ChatArea({
       <div className="chat-header glass">
         <div className="chat-header-info">
           <button className={`back-btn ${selectionMode ? 'selection-back-btn' : ''}`} onClick={handleChatBack} title={selectionMode ? 'Cancel selection' : 'Back to menu'} aria-label={selectionMode ? 'Cancel selection' : 'Back to menu'}>
-            {selectionMode ? <X size={18} /> : <ArrowLeft size={18} />}
+            <div className="btn-icon-wrapper" key={selectionMode ? 'cancel-icon' : 'back-icon'}>
+              {selectionMode ? <X size={18} /> : <ArrowLeft size={18} />}
+            </div>
           </button>
           {renderAvatar(activeContact.username, activeContact.displayName, activeContact.avatarIcon)}
           <div className="chat-header-name">
@@ -1717,39 +1748,40 @@ const ChatArea = React.memo(function ChatArea({
         <div className={`chat-header-actions ${selectionMode ? 'selection-header-actions' : ''}`}>
           {selectionMode ? (
             <>
-              <span className="selection-count-label" aria-label={`${selectionCount} selected`}>{selectionCount}</span>
+              <span className="selection-count-label" aria-label={`${selectionCount} selected`}>
+                <span key={selectionCount} className="selection-count-number">{selectionCount}</span>
+              </span>
+              {selectionCount === 1 && selectionCanCopy && (
+                <button 
+                  className="header-action-btn selection-copy-header-btn" 
+                  onClick={() => selectionCancelRef.current?.copy?.()} 
+                  title="Copy text" 
+                  aria-label="Copy text"
+                >
+                  <Copy size={19} />
+                </button>
+              )}
               <button className="header-action-btn selection-delete-header-btn" onClick={() => selectionCancelRef.current?.delete?.()} title="Delete selected messages" aria-label="Delete selected messages"><Trash2 size={20} /></button>
             </>
           ) : (
-          <>
-          {/* E2EE Safety Verification Button (temporarily hidden)
-          <button 
-            className={`header-action-btn ${activeContact.isVerified ? 'verified' : ''}`}
-            onClick={onOpenSafetyModal}
-            title="E2EE Verification & Safety"
-            aria-label="E2EE Verification & Safety"
-            style={activeContact.isVerified ? { color: 'var(--accent-color)' } : {}}
-          >
-            <ShieldCheck size={20} />
-          </button>
-          */}
-          <button 
-            className="header-action-btn" 
-            onClick={() => onInitiateCall('voice')}
-            title="Secure Voice Call"
-            aria-label="Secure Voice Call"
-          >
-            <Phone size={20} />
-          </button>
-          <button 
-            className="header-action-btn" 
-            onClick={() => onInitiateCall('video')}
-            title="Secure Video Call"
-            aria-label="Secure Video Call"
-          >
-            <Video size={20} />
-          </button>
-          </>
+            <>
+              <button 
+                className="header-action-btn" 
+                onClick={() => onInitiateCall('voice')}
+                title="Secure Voice Call"
+                aria-label="Secure Voice Call"
+              >
+                <Phone size={20} />
+              </button>
+              <button 
+                className="header-action-btn" 
+                onClick={() => onInitiateCall('video')}
+                title="Secure Video Call"
+                aria-label="Secure Video Call"
+              >
+                <Video size={20} />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1780,9 +1812,6 @@ const ChatArea = React.memo(function ChatArea({
         </div>
       )}
 
-
-
-      {/* Messages */}
       <div 
         className="messages-container" 
         key={activeContact.username} 
