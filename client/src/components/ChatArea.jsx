@@ -1537,8 +1537,12 @@ const ChatArea = React.memo(function ChatArea({
         setPlayingAudioId(null);
       }
     } catch (err) {
-      console.error(err);
-      alert('Failed to decrypt and play voice note.');
+      console.error('Voice note error:', err);
+      if (err.message && (err.message.includes('404') || err.message.includes('expired') || err.message.includes('Failed to fetch'))) {
+        alert('This voice note is no longer available on the server (expired or deleted).');
+      } else {
+        alert('Failed to decrypt and play voice note.');
+      }
     }
   }, [playbackRate, audioProgress]);
 
@@ -1612,11 +1616,10 @@ const ChatArea = React.memo(function ChatArea({
 
       return (
         <div className="voice-note-player">
+          <VoiceNotePreloader fileMetadata={file} />
           <button 
             className="play-pause-btn" 
             onClick={() => { if (!selectionModeRef.current) togglePlayAudio(msg.id, file); }}
-            title={isPlaying ? "Pause voice note" : "Play voice note"}
-            aria-label={isPlaying ? "Pause voice note" : "Play voice note"}
           >
             {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" style={{ marginLeft: '2px' }} />}
           </button>
@@ -2288,4 +2291,19 @@ function VideoPreviewLoader({ fileMetadata }) {
   if (error) return <span style={{ color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={14} /> Video Decryption Failed</span>;
   if (!videoSrc) return <span style={{ color: 'var(--text-subtle)' }}>Decrypting Video...</span>;
   return <video className="message-video" src={videoSrc} controls />;
+}
+
+// ==========================================
+// Helper component: Background voice note pre-cache loader
+// ==========================================
+function VoiceNotePreloader({ fileMetadata }) {
+  useEffect(() => {
+    if (fileMetadata && fileMetadata.url) {
+      loadOrFetchDecryptedMedia(fileMetadata).catch((err) => {
+        console.warn('Voice note pre-cache warning:', err);
+      });
+    }
+  }, [fileMetadata]);
+
+  return null;
 }
