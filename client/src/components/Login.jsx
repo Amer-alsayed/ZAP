@@ -154,6 +154,7 @@ export default function Login({ onAuthSuccess }) {
           username: data.user.username,
           displayName: data.user.displayName || null,
           avatarIcon: data.user.avatarIcon || null,
+          themeColor: data.user.themeColor || null,
           token: data.token,
           encryptedPrivateKeys: data.user.encryptedPrivateKeys,
           keys: {

@@ -186,6 +186,13 @@ export const initDb = async () => {
       // Column already exists
     }
 
+    try {
+      await dbRun('ALTER TABLE users ADD COLUMN theme_color TEXT');
+      logger.info('Database migration: Added theme_color column to users table.');
+    } catch (e) {
+      // Column already exists
+    }
+
     // Database indexes for high performance query resolution
     await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender, recipient)');
     await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_pending ON messages(recipient, delivered)');

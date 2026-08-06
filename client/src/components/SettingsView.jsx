@@ -193,11 +193,13 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
       }
       
       const cleanedDisplayName = displayName.trim();
-      await emitUpdateProfile(cleanedDisplayName || null, avatarIconString);
+      // Also save the current theme color to server so it syncs across devices
+      await emitUpdateProfile(cleanedDisplayName || null, avatarIconString, appThemeRgb || null);
       
       onProfileUpdate({
         displayName: cleanedDisplayName || null,
-        avatarIcon: avatarIconString
+        avatarIcon: avatarIconString,
+        themeColor: appThemeRgb || null
       });
       
       setSuccess(true);

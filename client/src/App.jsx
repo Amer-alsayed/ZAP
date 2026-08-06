@@ -142,7 +142,7 @@ export default function App() {
     }
   }, []);
 
-  // Persist currentUser details to localStorage
+  // Persist currentUser details to localStorage and apply theme
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('chatra_username', currentUser.username);
@@ -160,6 +160,12 @@ export default function App() {
         localStorage.setItem('chatra_avatar_icon', currentUser.avatarIcon);
       } else {
         localStorage.removeItem('chatra_avatar_icon');
+      }
+
+      // Apply and persist theme color from server (cross-device sync)
+      if (currentUser.themeColor) {
+        localStorage.setItem('chatra_theme_rgb', currentUser.themeColor);
+        document.documentElement.style.setProperty('--accent-rgb', currentUser.themeColor);
       }
       
       if (currentUser.encryptedPrivateKeys) {
@@ -595,14 +601,14 @@ export default function App() {
       }
     });
 
-    const syncOfflineMessages = async () => {
-      if (!currentUser) return;
-      const list = contactsRef.current;
-      for (const contact of list) {
+    // Sync messages for a given list of contacts (populates sidebar previews)
+    const syncMessagesForContacts = async (contactList) => {
+      if (!currentUser || !contactList || contactList.length === 0) return;
+      for (const contact of contactList) {
         try {
           const encryptedHistory = await emitGetChatHistory(contact.username);
           const decryptedMessages = await decryptMessagesBatch(encryptedHistory, contact);
-          const isActive = activeContactRef.current && 
+          const isActive = activeContactRef.current &&
             activeContactRef.current.username.toLowerCase() === contact.username.toLowerCase();
 
           let unreadCount = 0;
@@ -620,11 +626,7 @@ export default function App() {
 
           setContacts(prev => prev.map(c => {
             if (c.username.toLowerCase() === contact.username.toLowerCase()) {
-              return {
-                ...c,
-                unreadCount: unreadCount,
-                messages: processedMessages
-              };
+              return { ...c, unreadCount, messages: processedMessages };
             }
             return c;
           }));
@@ -632,31 +634,33 @@ export default function App() {
           if (isActive) {
             setActiveContact(prev => {
               if (prev && prev.username.toLowerCase() === contact.username.toLowerCase()) {
-                return {
-                  ...prev,
-                  messages: processedMessages
-                };
+                return { ...prev, messages: processedMessages };
               }
               return prev;
             });
             emitMarkAsRead(contact.username);
           }
         } catch (err) {
-          console.error('Failed to background sync chat history for:', contact.username, err);
+          console.error('Failed to sync chat history for:', contact.username, err);
         }
       }
+    };
+
+    const syncOfflineMessages = async () => {
+      await syncMessagesForContacts(contactsRef.current);
     };
 
     const handleConnect = async () => {
       setIsSocketConnected(true);
 
       // Auto-load all contacts from server (cross-device sync)
+      let freshServerContacts = [];
       try {
-        const serverContacts = await emitGetContacts();
-        if (serverContacts && serverContacts.length > 0) {
+        freshServerContacts = await emitGetContacts();
+        if (freshServerContacts && freshServerContacts.length > 0) {
           setContacts(prev => {
             const existing = new Map(prev.map(c => [c.username.toLowerCase(), c]));
-            for (const sc of serverContacts) {
+            for (const sc of freshServerContacts) {
               const key = sc.username.toLowerCase();
               if (!existing.has(key)) {
                 existing.set(key, {
@@ -670,7 +674,6 @@ export default function App() {
                   unreadCount: 0
                 });
               } else {
-                // Update profile info from server for existing contacts
                 const c = existing.get(key);
                 existing.set(key, {
                   ...c,
@@ -690,7 +693,8 @@ export default function App() {
       }
 
       // Refresh status & profile for each contact
-      contactsRef.current.forEach(async (c) => {
+      const allContacts = freshServerContacts.length > 0 ? freshServerContacts : contactsRef.current;
+      allContacts.forEach(async (c) => {
         try {
           const res = await emitGetUserStatus(c.username);
           updateContactProfileAndStatus(c.username, res.status, res.displayName, res.avatarIcon);
@@ -698,7 +702,15 @@ export default function App() {
           console.error('Failed to fetch status for contact:', c.username, e);
         }
       });
-      syncOfflineMessages();
+
+      // Sync full message history for all contacts (populates sidebar previews)
+      // Use the fresh server list first for brand-new contacts, then existing
+      const existingUsernames = new Set(contactsRef.current.map(c => c.username.toLowerCase()));
+      const newContacts = freshServerContacts.filter(sc => !existingUsernames.has(sc.username.toLowerCase()));
+      // Sync new contacts immediately with their fetched profile data
+      await syncMessagesForContacts(newContacts);
+      // Sync existing contacts
+      await syncOfflineMessages();
     };
 
     const handleDisconnect = () => {

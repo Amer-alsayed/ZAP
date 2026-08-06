@@ -175,8 +175,8 @@ export const unsubscribeFromUserStatus = (callback) => {
 /**
  * Emit profile update (display name and custom avatar emoji/color).
  */
-export const emitUpdateProfile = (displayName, avatarIcon) => {
-  return emitWithTimeout('update-profile', { displayName, avatarIcon });
+export const emitUpdateProfile = (displayName, avatarIcon, themeColor) => {
+  return emitWithTimeout('update-profile', { displayName, avatarIcon, themeColor });
 };
 
 /**

@@ -178,13 +178,14 @@ export const socketHandler = (io) => {
           return;
         }
         const isOnline = isUserOnline(targetUsername);
-        const user = await dbGet('SELECT display_name, avatar_icon FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
+        const user = await dbGet('SELECT display_name, avatar_icon, theme_color FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
         if (typeof callback === 'function') {
           callback({ 
             username: targetUsername, 
             status: isOnline ? 'online' : 'offline',
             displayName: user ? user.display_name : null,
-            avatarIcon: user ? user.avatar_icon : null
+            avatarIcon: user ? user.avatar_icon : null,
+            themeColor: user ? user.theme_color : null
           });
         }
       } catch (err) {
@@ -198,7 +199,7 @@ export const socketHandler = (io) => {
     // Handle profile updates (display name, avatar icon color/emoji)
     socket.on('update-profile', async (data, callback) => {
       try {
-        const { displayName, avatarIcon } = data || {};
+        const { displayName, avatarIcon, themeColor } = data || {};
         const username = socket.user.username;
 
         // Security payload validation
@@ -210,10 +211,14 @@ export const socketHandler = (io) => {
           if (typeof callback === 'function') callback({ error: 'Avatar payload exceeds 1MB limit' });
           return;
         }
+        if (themeColor && (typeof themeColor !== 'string' || themeColor.length > 50)) {
+          if (typeof callback === 'function') callback({ error: 'Invalid theme color' });
+          return;
+        }
 
         await dbRun(
-          'UPDATE users SET display_name = ?, avatar_icon = ? WHERE LOWER(username) = LOWER(?)',
-          [displayName || null, avatarIcon || null, username]
+          'UPDATE users SET display_name = ?, avatar_icon = ?, theme_color = ? WHERE LOWER(username) = LOWER(?)',
+          [displayName || null, avatarIcon || null, themeColor || null, username]
         );
 
         if (typeof callback === 'function') callback({ success: true });
@@ -221,7 +226,8 @@ export const socketHandler = (io) => {
         socket.broadcast.emit('user-profile-updated', {
           username,
           displayName: displayName || null,
-          avatarIcon: avatarIcon || null
+          avatarIcon: avatarIcon || null,
+          themeColor: themeColor || null
         });
       } catch (err) {
         logger.error('Error updating user profile:', err);
@@ -321,7 +327,7 @@ export const socketHandler = (io) => {
         for (const contactUsername of contactUsernames) {
           try {
             const user = await dbGet(
-              'SELECT username, display_name, avatar_icon, public_identity_key, public_signing_key FROM users WHERE LOWER(username) = LOWER(?)',
+              'SELECT username, display_name, avatar_icon, theme_color, public_identity_key, public_signing_key FROM users WHERE LOWER(username) = LOWER(?)',
               [contactUsername]
             );
             if (user) {
@@ -329,6 +335,7 @@ export const socketHandler = (io) => {
                 username: user.username,
                 displayName: user.display_name || null,
                 avatarIcon: user.avatar_icon || null,
+                themeColor: user.theme_color || null,
                 publicIdentityKey: user.public_identity_key ? JSON.parse(user.public_identity_key) : null,
                 publicSigningKey: user.public_signing_key ? JSON.parse(user.public_signing_key) : null,
                 status: isUserOnline(user.username) ? 'online' : 'offline'
