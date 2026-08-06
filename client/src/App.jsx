@@ -2051,30 +2051,39 @@ export default function App() {
         try { stream.removeTrack(track); } catch (e) {}
       });
 
-      // 3. Find target device: prioritize primary main 1.0x camera over ultrawide/macro lenses
+      // 3. Find target device: prioritize primary main 1.0x camera over ultrawide (camera2 0) / macro lenses
       let targetDeviceId = null;
       if (videoDevices.length > 1) {
         if (nextFacingMode === 'environment') {
+          // Filter all rear / back cameras (exclude front cameras)
           const rearDevices = videoDevices.filter(d => {
             const label = d.label.toLowerCase();
-            return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('0') || label.includes('2');
+            const isFront = label.includes('front') || label.includes('user') || label.includes('selfie') || label.includes('1, facing front');
+            return !isFront;
           });
 
           if (rearDevices.length > 0) {
-            // Exclude ultra-wide (0.5x), aux, depth, macro, telephoto lenses
+            // Exclude ultra-wide (0.5x), camera2 0, aux, depth, macro, telephoto lenses
             const mainBackCamera = rearDevices.find(d => {
               const label = d.label.toLowerCase();
-              const isUltraWide = label.includes('ultra') || label.includes('0.5') || label.includes('wide 0') || label.includes('aux');
+              const isUltraWide = label.includes('ultra') || label.includes('0.5') || label.includes('wide 0') || label.includes('aux') || label.includes('camera2 0') || label.includes('camera 0') || label.includes(' 0,');
               const isMacroOrDepth = label.includes('macro') || label.includes('depth') || label.includes('tof');
               return !isUltraWide && !isMacroOrDepth;
             });
 
-            targetDeviceId = mainBackCamera ? mainBackCamera.deviceId : rearDevices[rearDevices.length - 1].deviceId;
+            // If found main camera use it, else pick the non-zero rear camera (last element in rearDevices)
+            if (mainBackCamera) {
+              targetDeviceId = mainBackCamera.deviceId;
+            } else if (rearDevices.length > 1) {
+              targetDeviceId = rearDevices[rearDevices.length - 1].deviceId;
+            } else {
+              targetDeviceId = rearDevices[0].deviceId;
+            }
           }
         } else {
           const frontCamera = videoDevices.find(d => {
             const label = d.label.toLowerCase();
-            return label.includes('front') || label.includes('user') || label.includes('selfie') || label.includes('1');
+            return label.includes('front') || label.includes('user') || label.includes('selfie') || label.includes('1, facing front');
           });
           if (frontCamera) {
             targetDeviceId = frontCamera.deviceId;
@@ -2084,7 +2093,7 @@ export default function App() {
 
       let videoConstraintConfig;
       if (targetDeviceId) {
-        videoConstraintConfig = { deviceId: { ideal: targetDeviceId }, facingMode: { ideal: nextFacingMode } };
+        videoConstraintConfig = { deviceId: { exact: targetDeviceId } };
       } else {
         videoConstraintConfig = { facingMode: { ideal: nextFacingMode } };
       }
@@ -2099,12 +2108,12 @@ export default function App() {
         try {
           newStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: { facingMode: nextFacingMode }
+            video: targetDeviceId ? { deviceId: { ideal: targetDeviceId } } : { facingMode: nextFacingMode }
           });
         } catch (e2) {
           newStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: true
+            video: { facingMode: nextFacingMode }
           });
         }
       }
