@@ -80,9 +80,41 @@ const MessageList = React.memo(({
   setReplyingTo,
   textareaRef,
   renderMessageContent
+  , onDeleteMessages
+  , selectionCancelRef
+  , onSelectionModeChange
 }) => {
   const [swipeState, setSwipeState] = useState({ msgId: null, offset: 0, isSwiping: false });
   const swipeStartRef = useRef(null);
+  const longPressTimerRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [deletingIds, setDeletingIds] = useState([]);
+  const selectionMode = selectedIds.length > 0;
+  useEffect(() => {
+    onSelectionModeChange?.({ active: selectionMode, count: selectedIds.length });
+    if (selectionCancelRef) {
+      selectionCancelRef.current = () => setSelectedIds([]);
+      selectionCancelRef.current.delete = () => {
+        const ids = [...selectedIds];
+        setDeletingIds(ids);
+        setSelectedIds([]);
+        window.setTimeout(() => { onDeleteMessages(ids); setDeletingIds([]); }, 220);
+      };
+    }
+    return () => { if (selectionCancelRef) selectionCancelRef.current = null; };
+  }, [selectionMode, selectedIds, onDeleteMessages, onSelectionModeChange, selectionCancelRef]);
+
+  const toggleSelected = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  const startLongPress = (id) => {
+    window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      toggleSelected(id);
+      if (navigator.vibrate) navigator.vibrate(18);
+    }, 480);
+  };
+  const cancelLongPress = () => window.clearTimeout(longPressTimerRef.current);
 
   const hasJustReceivedMessage = justReceivedId !== null && 
     messages && 
@@ -177,14 +209,52 @@ const MessageList = React.memo(({
             )}
             <div 
               className={`message-row ${isSent ? 'sent' : 'received'}`}
+              onContextMenu={(e) => e.preventDefault()}
+              onClickCapture={(e) => {
+                // Capture before media controls receive the click. This is
+                // essential on mobile where a long-press is followed by a
+                // synthetic click on the original image target.
+                if (longPressTriggeredRef.current) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  longPressTriggeredRef.current = false;
+                  return;
+                }
+                if (selectionMode) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleSelected(msg.id);
+                }
+              }}
+              onMouseDown={(e) => {
+                if (e.button !== 0 || selectionMode) return;
+                startLongPress(msg.id);
+              }}
+              onMouseUp={cancelLongPress}
+              onMouseLeave={cancelLongPress}
               onTouchStart={(e) => {
+                if (selectionMode) {
+                  e.preventDefault();
+                  return;
+                }
+                startLongPress(msg.id);
                 // Only process touch drag gestures on true touch devices (coarse pointer)
                 if (window.matchMedia && !window.matchMedia('(pointer: coarse)').matches) return;
                 const touch = e.touches[0];
                 swipeStartRef.current = { x: touch.clientX, y: touch.clientY, msgId: msg.id };
-                setSwipeState({ msgId: msg.id, offset: 0, isSwiping: true });
+                // Wait for confirmed horizontal movement before updating
+                // swipe state, so a long press does not lock the view.
+              }}
+              onClick={() => {
+                if (longPressTriggeredRef.current) {
+                  longPressTriggeredRef.current = false;
+                  return;
+                }
+                if (selectionMode) toggleSelected(msg.id);
               }}
               onTouchMove={(e) => {
+                if (selectionMode) return;
+                cancelLongPress();
                 if (!swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
                 const touch = e.touches[0];
                 const deltaX = touch.clientX - swipeStartRef.current.x;
@@ -197,6 +267,8 @@ const MessageList = React.memo(({
                 }
               }}
               onTouchEnd={() => {
+                if (selectionMode) return;
+                cancelLongPress();
                 if (swipeStartRef.current?.msgId === msg.id) {
                   if (swipeState.offset >= 30) { // Extremely responsive 30px swipe threshold
                     setReplyingTo({
@@ -223,6 +295,8 @@ const MessageList = React.memo(({
                 setSwipeState({ msgId: null, offset: 0, isSwiping: false });
               }}
               onTouchCancel={() => {
+                if (selectionMode) return;
+                cancelLongPress();
                 swipeStartRef.current = null;
                 setSwipeState({ msgId: null, offset: 0, isSwiping: false });
               }}
@@ -231,7 +305,7 @@ const MessageList = React.memo(({
                 id={`msg-${msg.id}`} 
                 ref={index === messages.length - 1 ? lastMessageRef : null}
                 data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
-                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''}`}
+                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${selectedIds.includes(msg.id) ? 'is-selected' : ''} ${deletingIds.includes(msg.id) ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
                 style={{
                   transform: swipeState.msgId === msg.id && swipeState.offset > 0 ? `translateX(${swipeState.offset}px)` : 'translateX(0px)',
                   transition: swipeState.msgId === msg.id && swipeState.isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
@@ -311,6 +385,12 @@ const MessageList = React.memo(({
           </React.Fragment>
         );
       })}
+      {selectionMode && (
+        <div className="message-selection-toolbar glass">
+          <span>{selectedIds.length} selected</span>
+          <button aria-label="Delete selected messages" className="selection-delete-btn" onClick={() => { const ids = [...selectedIds]; setDeletingIds(ids); setSelectedIds([]); window.setTimeout(() => { onDeleteMessages(ids); setDeletingIds([]); }, 220); }}><Trash2 size={18} /></button>
+        </div>
+      )}
       <div 
         ref={typingBubbleRef} 
         className={`typing-indicator-wrapper ${activeContactIsTyping && !hasJustReceivedMessage ? 'visible' : ''}`}
@@ -344,10 +424,31 @@ const ChatArea = React.memo(function ChatArea({
   onVerifyContact,
   onSaveContact,
   onBlockContact,
+  onDeleteMessages,
+  selectionCancelCallbackRef,
   onOpenSafetyModal,
   replyingTo,
   setReplyingTo
 }) {
+  const selectionCancelRef = useRef(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectionCount, setSelectionCount] = useState(0);
+  const handleSelectionModeChange = ({ active, count }) => {
+    setSelectionMode(active);
+    setSelectionCount(count);
+  };
+  const handleChatBack = () => {
+    if (selectionMode) {
+      selectionCancelRef.current?.();
+      return true;
+    }
+    onBack();
+    return false;
+  };
+  useEffect(() => {
+    if (selectionCancelCallbackRef) selectionCancelCallbackRef.current = handleChatBack;
+    return () => { if (selectionCancelCallbackRef) selectionCancelCallbackRef.current = null; };
+  }, [selectionCancelCallbackRef, selectionMode]);
   const [inputText, setInputText] = useState('');
   const [swipeState, setSwipeState] = useState({ msgId: null, offset: 0, isSwiping: false });
   const swipeStartRef = useRef(null);
@@ -356,8 +457,18 @@ const ChatArea = React.memo(function ChatArea({
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [isClosingAttachMenu, setIsClosingAttachMenu] = useState(false);
   const attachMenuRef = useRef(null);
   const attachBtnRef = useRef(null);
+
+  const closeAttachMenu = () => {
+    if (!showAttachMenu) return;
+    setIsClosingAttachMenu(true);
+    window.setTimeout(() => {
+      setShowAttachMenu(false);
+      setIsClosingAttachMenu(false);
+    }, 180);
+  };
 
   // Close attach popover menu on outside click or Escape key
   useEffect(() => {
@@ -368,12 +479,12 @@ const ChatArea = React.memo(function ChatArea({
         attachBtnRef.current &&
         !attachBtnRef.current.contains(e.target)
       ) {
-        setShowAttachMenu(false);
+        closeAttachMenu();
       }
     };
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        setShowAttachMenu(false);
+        closeAttachMenu();
       }
     };
     if (showAttachMenu) {
@@ -389,7 +500,7 @@ const ChatArea = React.memo(function ChatArea({
   }, [showAttachMenu]);
 
   const openFilePicker = (acceptType = '*/*', captureType = null) => {
-    setShowAttachMenu(false);
+    closeAttachMenu();
     const fileInput = document.getElementById('file-input');
     if (fileInput) {
       fileInput.accept = acceptType;
@@ -1421,7 +1532,7 @@ const ChatArea = React.memo(function ChatArea({
 
       let element;
       if (isImage) {
-        element = <ImagePreviewLoader fileMetadata={file} onImageClick={onImageClick} onImageLoad={isLast ? handleImageLoad : undefined} />;
+        element = <ImagePreviewLoader fileMetadata={file} onImageClick={selectionMode ? undefined : onImageClick} onImageLoad={isLast ? handleImageLoad : undefined} />;
       } else if (isVideo) {
         element = <VideoPreviewLoader fileMetadata={file} />;
       } else {
@@ -1467,7 +1578,7 @@ const ChatArea = React.memo(function ChatArea({
         <div className="voice-note-player">
           <button 
             className="play-pause-btn" 
-            onClick={() => togglePlayAudio(msg.id, file)}
+            onClick={() => { if (!selectionMode) togglePlayAudio(msg.id, file); }}
             title={isPlaying ? "Pause voice note" : "Play voice note"}
             aria-label={isPlaying ? "Pause voice note" : "Play voice note"}
           >
@@ -1485,7 +1596,7 @@ const ChatArea = React.memo(function ChatArea({
               onChange={(e) => {
                 const seekPct = parseFloat(e.target.value) / 100;
                 // Navigate/seek audio without auto-playing if currently paused
-                togglePlayAudio(msg.id, file, seekPct, false);
+                if (!selectionMode) togglePlayAudio(msg.id, file, seekPct, false);
               }}
               style={{
                 background: `linear-gradient(to right, var(--accent-color) ${progress}%, rgba(255, 255, 255, 0.15) ${progress}%)`
@@ -1575,7 +1686,7 @@ const ChatArea = React.memo(function ChatArea({
 
     // Default plaintext
     return msg.text;
-  }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick]);
+  }, [playingAudioId, audioProgress, playbackRate, selectionMode, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick]);
 
   // Native 120fps GPU compositor scrolling enabled
 
@@ -1584,8 +1695,8 @@ const ChatArea = React.memo(function ChatArea({
       {/* Header */}
       <div className="chat-header glass">
         <div className="chat-header-info">
-          <button className="back-btn" onClick={onBack} title="Back to menu" aria-label="Back to menu">
-            <ArrowLeft size={18} />
+          <button className={`back-btn ${selectionMode ? 'selection-back-btn' : ''}`} onClick={handleChatBack} title={selectionMode ? 'Cancel selection' : 'Back to menu'} aria-label={selectionMode ? 'Cancel selection' : 'Back to menu'}>
+            {selectionMode ? <X size={18} /> : <ArrowLeft size={18} />}
           </button>
           {renderAvatar(activeContact.username, activeContact.displayName, activeContact.avatarIcon)}
           <div className="chat-header-name">
@@ -1604,7 +1715,14 @@ const ChatArea = React.memo(function ChatArea({
             </span>
           </div>
         </div>
-        <div className="chat-header-actions">
+        <div className={`chat-header-actions ${selectionMode ? 'selection-header-actions' : ''}`}>
+          {selectionMode ? (
+            <>
+              <span className="selection-count-label" aria-label={`${selectionCount} selected`}>{selectionCount}</span>
+              <button className="header-action-btn selection-delete-header-btn" onClick={() => selectionCancelRef.current?.delete?.()} title="Delete selected messages" aria-label="Delete selected messages"><Trash2 size={20} /></button>
+            </>
+          ) : (
+          <>
           {/* E2EE Safety Verification Button (temporarily hidden)
           <button 
             className={`header-action-btn ${activeContact.isVerified ? 'verified' : ''}`}
@@ -1632,6 +1750,8 @@ const ChatArea = React.memo(function ChatArea({
           >
             <Video size={20} />
           </button>
+          </>
+          )}
         </div>
       </div>
 
@@ -1687,6 +1807,9 @@ const ChatArea = React.memo(function ChatArea({
             setReplyingTo={setReplyingTo}
             textareaRef={textareaRef}
             renderMessageContent={renderMessageContent}
+            onDeleteMessages={onDeleteMessages}
+            selectionCancelRef={selectionCancelRef}
+            onSelectionModeChange={handleSelectionModeChange}
           />
           <div ref={messagesEndRef} />
         </div>
@@ -1786,8 +1909,8 @@ const ChatArea = React.memo(function ChatArea({
             onChange={handleFileSelect}
           />
 
-          {showAttachMenu && !isRecording && (
-            <div ref={attachMenuRef} className="attach-menu-popover glass">
+          {(showAttachMenu || isClosingAttachMenu) && !isRecording && (
+            <div ref={attachMenuRef} className={`attach-menu-popover glass ${isClosingAttachMenu ? 'is-closing' : ''}`}>
               <div className="attach-menu-header">
                 <span>Share Media & Files</span>
               </div>
@@ -1851,7 +1974,7 @@ const ChatArea = React.memo(function ChatArea({
             <button 
               ref={attachBtnRef}
               className={`input-action-btn ${showAttachMenu ? 'active-menu' : ''}`}
-              onClick={() => setShowAttachMenu(prev => !prev)}
+              onClick={() => showAttachMenu ? closeAttachMenu() : setShowAttachMenu(true)}
               title={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
               aria-label={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
               disabled={isRecording}

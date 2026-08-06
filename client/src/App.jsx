@@ -45,6 +45,7 @@ import {
   connectSocket, 
   disconnectSocket, 
   emitSendMessage, 
+  emitDeleteMessages,
   emitGetChatHistory, 
   emitGetContacts,
   emitMarkAsRead,
@@ -451,6 +452,7 @@ export default function App() {
   }, [activeContact]);
 
   const showSafetyModalRef = useRef(false);
+  const selectionBackRef = useRef(null);
 
   useEffect(() => {
     showSettingsRef.current = showSettings;
@@ -495,6 +497,11 @@ export default function App() {
       // 4. Minimize full-screen WebRTC call if active
       if (callStateRef.current === 'connected' && !isCallMinimizedRef.current) {
         setIsCallMinimized(true);
+        return;
+      }
+
+      // Cancel message selection before leaving the conversation.
+      if (selectionBackRef.current?.()) {
         return;
       }
       
@@ -815,6 +822,12 @@ export default function App() {
       }
     });
 
+    socket.on('messages-deleted', ({ messageIds = [] }) => {
+      const ids = new Set(messageIds);
+      setContacts(prev => prev.map(c => ({ ...c, messages: c.messages.filter(m => !ids.has(m.id)) })));
+      setActiveContact(prev => prev ? { ...prev, messages: prev.messages.filter(m => !ids.has(m.id)) } : prev);
+    });
+
     // ==========================================
     // WebRTC Socket Signaling listeners
     // ==========================================
@@ -898,6 +911,7 @@ export default function App() {
       socket.off('user-typing');
       socket.off('messages-delivered');
       socket.off('messages-read');
+      socket.off('messages-deleted');
       socket.off('call-made');
       socket.off('call-ringing');
       socket.off('answer-made');
@@ -1327,6 +1341,13 @@ export default function App() {
         messages: prev.messages.map(m => m.id === targetId ? { ...m, status: 2 } : m)
       };
     });
+  }, []);
+
+  const deleteMessagesLocal = useCallback((messageIds) => {
+    const ids = new Set(messageIds);
+    setContacts(prev => prev.map(c => ({ ...c, messages: c.messages.filter(m => !ids.has(m.id)) })));
+    setActiveContact(prev => prev ? { ...prev, messages: prev.messages.filter(m => !ids.has(m.id)) } : prev);
+    emitDeleteMessages(messageIds).catch(err => console.warn('Failed to delete messages remotely:', err));
   }, []);
 
   const markAllMessagesAsReadLocal = useCallback((contactUsername) => {
@@ -2373,6 +2394,8 @@ export default function App() {
                 onVerifyContact={handleVerifyContact}
                 onSaveContact={handleSaveContact}
                 onBlockContact={handleBlockContact}
+                onDeleteMessages={deleteMessagesLocal}
+                selectionCancelCallbackRef={selectionBackRef}
                 onOpenSafetyModal={handleOpenSafetyModal}
                 replyingTo={replyingTo}
                 setReplyingTo={setReplyingTo}

@@ -115,6 +115,9 @@ export const emitSendMessage = (recipient, ciphertext, iv, signature) => {
   return emitWithTimeout('send-message', { recipient, ciphertext, iv, signature });
 };
 
+export const emitDeleteMessages = (messageIds) =>
+  emitWithTimeout('delete-messages', { messageIds });
+
 /**
  * Fetch chat history with a specific user.
  */

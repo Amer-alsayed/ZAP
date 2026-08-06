@@ -304,6 +304,34 @@ export const socketHandler = (io) => {
         if (typeof callback === 'function') callback({ error: 'Failed to send message' });
       }
     });
+
+    socket.on('delete-messages', async (data, callback) => {
+      try {
+        const ids = Array.isArray(data?.messageIds)
+          ? data.messageIds.map(Number).filter(Number.isInteger).slice(0, 100)
+          : [];
+        if (!ids.length) return callback?.({ error: 'No messages selected' });
+        const placeholders = ids.map(() => '?').join(',');
+        const rows = await dbAll(
+          `SELECT id, sender, recipient FROM messages WHERE id IN (${placeholders})`, ids
+        );
+        const allowed = rows.filter(row =>
+          row.sender.toLowerCase() === username.toLowerCase() ||
+          row.recipient.toLowerCase() === username.toLowerCase()
+        );
+        if (allowed.length) {
+          const allowedIds = allowed.map(row => row.id);
+          const allowedPlaceholders = allowedIds.map(() => '?').join(',');
+          await dbRun(`DELETE FROM messages WHERE id IN (${allowedPlaceholders})`, allowedIds);
+          const participants = [...new Set(allowed.flatMap(row => [row.sender, row.recipient]))];
+          participants.forEach(participant => io.to(participant.toLowerCase()).emit('messages-deleted', { messageIds: allowedIds }));
+        }
+        callback?.({ success: true });
+      } catch (error) {
+        logger.error('Error deleting messages:', error);
+        callback?.({ error: 'Failed to delete messages' });
+      }
+    });
     // Fetch all conversation partners (contacts) for the authenticated user
     socket.on('get-contacts', async (_, callback) => {
       try {
