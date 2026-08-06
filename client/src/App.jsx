@@ -235,6 +235,8 @@ export default function App() {
   const [remoteMuted, setRemoteMuted] = useState(false);
   const [cameraFacingMode, setCameraFacingMode] = useState('user'); // 'user' (front) | 'environment' (back)
   const cameraDeviceIdRef = useRef(null);
+  const selfieCameraDeviceIdRef = useRef(null);
+  const mainRearCameraDeviceIdRef = useRef(null);
 
   const [isCallMinimized, setIsCallMinimized] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
@@ -2075,20 +2077,24 @@ export default function App() {
             return !/ultra[- ]?wide|0\.5x|0\.5|ultrawide|camera2?\s*0\b|camera\s*0\b|back camera\s*0\b|wide\s*0\b/.test(label);
           });
       const frontDevices = videoDevices.filter(isFront);
-      // Expose exactly one selfie and one rear camera in the switch cycle.
-      // Android often reports multiple selfie/auxiliary entries; the last
-      // remaining rear entry is the primary lens on those devices.
-      const orderedDevices = [
-        frontDevices[0],
-        rearDevices[rearDevices.length - 1]
-      ].filter(Boolean).filter((device, index, all) =>
-        all.findIndex(item => item.deviceId === device.deviceId) === index
-      );
-      const currentIndex = orderedDevices.findIndex(device => device.deviceId === currentDeviceId);
-      const targetDevice = orderedDevices.length
-        ? orderedDevices[(currentIndex + 1 + orderedDevices.length) % orderedDevices.length]
+      const isAndroid = /android/i.test(navigator.userAgent);
+      if (cameraFacingMode === 'user' && currentDeviceId) {
+        selfieCameraDeviceIdRef.current = currentDeviceId;
+      }
+
+      // On the affected Android devices, Chrome exposes the camera sequence
+      // as selfie -> ultra-wide -> main. Prefer the confirmed third entry,
+      // then remember it so the toggle remains strictly selfie <-> main.
+      const androidMainCandidate = isAndroid && videoDevices.length >= 3
+        ? videoDevices[2]
         : null;
-      const targetDeviceId = targetDevice?.deviceId || null;
+      const preferredRear = androidMainCandidate || rearDevices.find(isPrimaryRear) || rearDevices[rearDevices.length - 1];
+      if (preferredRear) mainRearCameraDeviceIdRef.current = preferredRear.deviceId;
+
+      const targetDeviceId = cameraFacingMode === 'user'
+        ? mainRearCameraDeviceIdRef.current
+        : (selfieCameraDeviceIdRef.current || frontDevices[0]?.deviceId);
+      const targetDevice = videoDevices.find(device => device.deviceId === targetDeviceId) || null;
       const nextFacingMode = targetDevice && isFront(targetDevice) ? 'user' : 'environment';
       const videoConstraintConfig = targetDeviceId
         ? {
@@ -2146,6 +2152,8 @@ export default function App() {
         newVideoTrack.contentHint = 'motion';
       }
       cameraDeviceIdRef.current = actualDeviceId || targetDeviceId;
+      if (nextFacingMode === 'user') selfieCameraDeviceIdRef.current = cameraDeviceIdRef.current;
+      else mainRearCameraDeviceIdRef.current = cameraDeviceIdRef.current;
 
       // 4. Attach new track to localStream
       stream.addTrack(newVideoTrack);
