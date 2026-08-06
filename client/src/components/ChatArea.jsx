@@ -891,14 +891,24 @@ const ChatArea = React.memo(function ChatArea({
         for (let idx = 0; idx < filesToUpload.length; idx++) {
           const fileToUpload = filesToUpload[idx];
           
-          // 1. Read file as ArrayBuffer
-          const reader = new FileReader();
-          const fileBufferPromise = new Promise((resolve, reject) => {
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = () => reject(new Error(`Failed to read file "${fileToUpload.name}"`));
-          });
-          reader.readAsArrayBuffer(fileToUpload);
-          const fileBuffer = await fileBufferPromise;
+          // 1. Read file as ArrayBuffer safely (supporting Android content URI files)
+          let fileBuffer;
+          try {
+            if (typeof fileToUpload.arrayBuffer === 'function') {
+              fileBuffer = await fileToUpload.arrayBuffer();
+            } else {
+              const reader = new FileReader();
+              const fileBufferPromise = new Promise((resolve, reject) => {
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (err) => reject(err || new Error('Device read failed'));
+              });
+              reader.readAsArrayBuffer(fileToUpload);
+              fileBuffer = await fileBufferPromise;
+            }
+          } catch (readErr) {
+            console.error('File read error:', readErr);
+            throw new Error(`Device permissions blocked reading "${fileToUpload.name}". Please re-select the file.`);
+          }
 
           // 2. Generate AES-GCM session key
           const fileSessionKey = await window.crypto.subtle.generateKey(
@@ -1750,7 +1760,7 @@ const ChatArea = React.memo(function ChatArea({
               <div className="attach-menu-options">
                 <button 
                   className="attach-menu-item"
-                  onClick={() => openFilePicker('image/*,video/*,image/heic,image/heif')}
+                  onClick={() => openFilePicker('image/*,video/*')}
                 >
                   <div className="attach-icon-badge photos">
                     <Image size={18} />
@@ -1763,20 +1773,20 @@ const ChatArea = React.memo(function ChatArea({
 
                 <button 
                   className="attach-menu-item"
-                  onClick={() => openFilePicker('*/*')}
+                  onClick={() => openFilePicker('.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.tar,.gz,.csv,.json,.apk')}
                 >
                   <div className="attach-icon-badge document">
                     <FileText size={18} />
                   </div>
                   <div className="attach-item-text">
                     <span className="attach-title">Document</span>
-                    <span className="attach-desc">Share any file format or PDF</span>
+                    <span className="attach-desc">Share documents, PDFs, or archives</span>
                   </div>
                 </button>
 
                 <button 
                   className="attach-menu-item"
-                  onClick={() => openFilePicker('audio/*,.mp3,.m4a,.wav,.aac,.ogg,.flac')}
+                  onClick={() => openFilePicker('audio/*')}
                 >
                   <div className="attach-icon-badge audio">
                     <Music size={18} />
