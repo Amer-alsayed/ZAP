@@ -471,8 +471,9 @@ export default function App() {
   // Handle native back gestures (Android back button & mobile browser back)
   useEffect(() => {
     const handlePopState = (e) => {
-      // 0. Ignore popstate if it's from voice recording
-      if (window.__isChatraRecording || window.__isPoppingRecording) {
+      // 0. Ignore popstate if it's from voice recording or call termination cleanup
+      if (window.__isChatraRecording || window.__isPoppingRecording || window.__isPoppingCall) {
+        window.__isPoppingCall = false;
         return;
       }
 
@@ -548,7 +549,11 @@ export default function App() {
       }
     } else {
       if (window.history.state === 'call-maximized') {
+        window.__isPoppingCall = true;
         window.history.back();
+        setTimeout(() => {
+          window.__isPoppingCall = false;
+        }, 100);
       }
     }
   }, [callState, isCallMinimized]);
