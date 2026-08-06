@@ -2113,15 +2113,22 @@ export default function App() {
           video: videoConstraintConfig
         });
       } catch (e1) {
-        try {
+        if (targetDeviceId) {
+          // Never fall back to facingMode after choosing a device: Chrome may
+          // silently substitute an Ultra-Wide or duplicate selfie sensor.
           newStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: targetDeviceId ? { deviceId: { ideal: targetDeviceId } } : { facingMode: nextFacingMode }
+            video: { deviceId: { exact: targetDeviceId } }
           });
-        } catch (e2) {
+        } else {
           newStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: { facingMode: nextFacingMode }
+            video: {
+              facingMode: { ideal: nextFacingMode },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              aspectRatio: { ideal: 16 / 9 }
+            }
           });
         }
       }
@@ -2129,10 +2136,16 @@ export default function App() {
       const newVideoTrack = newStream.getVideoTracks()[0];
       if (!newVideoTrack) throw new Error('No new video track produced.');
 
+      const actualDeviceId = newVideoTrack.getSettings?.().deviceId;
+      if (targetDeviceId && actualDeviceId && actualDeviceId !== targetDeviceId) {
+        newVideoTrack.stop();
+        throw new Error('Browser selected a different camera than requested.');
+      }
+
       if ('contentHint' in newVideoTrack) {
         newVideoTrack.contentHint = 'motion';
       }
-      cameraDeviceIdRef.current = newVideoTrack.getSettings?.().deviceId || targetDeviceId;
+      cameraDeviceIdRef.current = actualDeviceId || targetDeviceId;
 
       // 4. Attach new track to localStream
       stream.addTrack(newVideoTrack);
