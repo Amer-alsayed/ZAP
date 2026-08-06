@@ -3067,8 +3067,13 @@ textarea {
 .remote-video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   background-color: #0A0C12;
+}
+
+.remote-video.back-camera,
+.local-video.back-camera {
+  transform: none !important;
 }
 
 .remote-video-avatar-container {

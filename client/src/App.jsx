@@ -233,6 +233,7 @@ export default function App() {
   const [remoteScreenSharing, setRemoteScreenSharing] = useState(false);
   const [remoteCameraOff, setRemoteCameraOff] = useState(false);
   const [remoteMuted, setRemoteMuted] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // 'user' (front) | 'environment' (back)
 
   const [isCallMinimized, setIsCallMinimized] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
@@ -2026,6 +2027,67 @@ export default function App() {
     }
   };
 
+  const handleSwitchCamera = async () => {
+    const stream = localStreamRef.current;
+    if (!stream || isCameraOff) return;
+
+    try {
+      const nextFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+
+      // 1. Request video track with the target facing mode
+      let newStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { exact: nextFacingMode },
+            ...getVideoConstraints()
+          }
+        });
+      } catch (e) {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: nextFacingMode,
+            ...getVideoConstraints()
+          }
+        });
+      }
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) return;
+
+      if ('contentHint' in newVideoTrack) {
+        newVideoTrack.contentHint = 'motion';
+      }
+
+      // 2. Stop old video tracks and swap on stream
+      const oldVideoTracks = stream.getVideoTracks();
+      oldVideoTracks.forEach(track => {
+        track.stop();
+        stream.removeTrack(track);
+      });
+
+      stream.addTrack(newVideoTrack);
+
+      // 3. Replace video track on WebRTC PeerConnection sender
+      if (peerConnectionRef.current) {
+        const senders = peerConnectionRef.current.getSenders();
+        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(newVideoTrack);
+          await optimizeSenderParameters(videoSender, isScreenSharing);
+        }
+      }
+
+      setCameraFacingMode(nextFacingMode);
+      setLocalStream(new MediaStream(stream.getTracks()));
+    } catch (err) {
+      console.error('Failed to switch camera:', err);
+      alert('Could not switch camera device or back camera unavailable.');
+    }
+  };
+
   const handleToggleScreenShare = async () => {
     const stream = localStreamRef.current;
     if (!stream || !peerConnectionRef.current) return;
@@ -2251,6 +2313,7 @@ export default function App() {
     setRemoteScreenSharing(false);
     setRemoteCameraOff(false);
     setRemoteMuted(false);
+    setCameraFacingMode('user');
   };
 
   // Secure sign out
@@ -2491,6 +2554,8 @@ export default function App() {
             onToggleMute={handleToggleMute}
             onToggleCamera={handleToggleCamera}
             onToggleScreenShare={handleToggleScreenShare}
+            onSwitchCamera={handleSwitchCamera}
+            cameraFacingMode={cameraFacingMode}
             isCallMinimized={isCallMinimized}
             setIsCallMinimized={setIsCallMinimized}
           />

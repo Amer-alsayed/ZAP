@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Phone, PhoneOff, Video, Mic, MicOff, VideoOff, Volume2, ShieldCheck, Minimize2, Maximize2, Monitor, MonitorOff, Maximize, Minimize } from 'lucide-react';
+import { Phone, PhoneOff, Video, Mic, MicOff, VideoOff, Volume2, ShieldCheck, Minimize2, Maximize2, Monitor, MonitorOff, Maximize, Minimize, RefreshCw } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 import { soundEngine } from '../services/soundEffects';
 
@@ -23,7 +23,9 @@ export default function CallWindow({
   remoteMuted,
   onToggleMute,
   onToggleCamera,
-  onToggleScreenShare
+  onToggleScreenShare,
+  onSwitchCamera,
+  cameraFacingMode = 'user'
 }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -547,7 +549,7 @@ export default function CallWindow({
                       /* Main View: Local Stream */
                       hasLocalVideoTrack ? (
                         <video 
-                          className={`remote-video ${isScreenSharing ? 'screen-sharing local-screen-share' : 'local-screen-share'}`} 
+                          className={`remote-video ${isScreenSharing ? 'screen-sharing local-screen-share' : 'local-screen-share'} ${cameraFacingMode === 'environment' ? 'back-camera' : ''}`} 
                           ref={bindLocalVideo} 
                           autoPlay 
                           playsInline 
@@ -575,7 +577,7 @@ export default function CallWindow({
                         {activeThumbnailStream === 'local' ? (
                           <>
                             <video 
-                              className={isScreenSharing ? "local-video local-screen-share" : "local-video"} 
+                              className={`${isScreenSharing ? "local-video local-screen-share" : "local-video"} ${cameraFacingMode === 'environment' ? 'back-camera' : ''}`} 
                               ref={bindLocalVideo} 
                               autoPlay 
                               playsInline 
@@ -631,6 +633,20 @@ export default function CallWindow({
                 >
                   {isCameraOff ? <VideoOff size={18} /> : <Video size={18} />}
                 </button>
+
+                {!isCameraOff && onSwitchCamera && (
+                  <button 
+                    className="call-btn switch-camera" 
+                    onClick={() => {
+                      soundEngine.playToggleMute(false);
+                      onSwitchCamera();
+                    }}
+                    title={cameraFacingMode === 'user' ? "Switch to Back Camera" : "Switch to Front Camera"}
+                    aria-label={cameraFacingMode === 'user' ? "Switch to Back Camera" : "Switch to Front Camera"}
+                  >
+                    <RefreshCw size={18} />
+                  </button>
+                )}
 
                 {!!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && (
                   <button 
