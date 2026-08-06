@@ -2099,18 +2099,16 @@ export default function App() {
       const nextFacingMode = targetDevice && isFront(targetDevice) ? 'user' : 'environment';
       const videoConstraintConfig = targetDeviceId
         ? {
-            deviceId: { exact: targetDeviceId },
+            deviceId: { ideal: targetDeviceId },
             width: { ideal: 1920 },
             height: { ideal: 1080 },
-            aspectRatio: { ideal: 16 / 9 },
-            frameRate: { ideal: 30 }
+            aspectRatio: { ideal: 16 / 9 }
           }
         : {
             facingMode: { ideal: nextFacingMode },
             width: { ideal: 1920 },
             height: { ideal: 1080 },
-            aspectRatio: { ideal: 16 / 9 },
-            frameRate: { ideal: 30 }
+            aspectRatio: { ideal: 16 / 9 }
           };
 
       let newStream;
@@ -2120,22 +2118,15 @@ export default function App() {
           video: videoConstraintConfig
         });
       } catch (e1) {
-        if (targetDeviceId) {
-          // Never fall back to facingMode after choosing a device: Chrome may
-          // silently substitute an Ultra-Wide or duplicate selfie sensor.
+        try {
           newStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: { deviceId: { exact: targetDeviceId } }
+            video: targetDeviceId ? { deviceId: targetDeviceId } : { facingMode: nextFacingMode }
           });
-        } else {
+        } catch (e2) {
           newStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: {
-              facingMode: { ideal: nextFacingMode },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              aspectRatio: { ideal: 16 / 9 }
-            }
+            video: { facingMode: nextFacingMode }
           });
         }
       }
@@ -2143,16 +2134,10 @@ export default function App() {
       const newVideoTrack = newStream.getVideoTracks()[0];
       if (!newVideoTrack) throw new Error('No new video track produced.');
 
-      const actualDeviceId = newVideoTrack.getSettings?.().deviceId;
-      if (targetDeviceId && actualDeviceId && actualDeviceId !== targetDeviceId) {
-        newVideoTrack.stop();
-        throw new Error('Browser selected a different camera than requested.');
-      }
-
       if ('contentHint' in newVideoTrack) {
         newVideoTrack.contentHint = 'motion';
       }
-      cameraDeviceIdRef.current = actualDeviceId || targetDeviceId;
+      cameraDeviceIdRef.current = targetDeviceId;
       if (nextFacingMode === 'user') selfieCameraDeviceIdRef.current = cameraDeviceIdRef.current;
       else mainRearCameraDeviceIdRef.current = cameraDeviceIdRef.current;
 
