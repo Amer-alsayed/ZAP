@@ -2892,8 +2892,8 @@ body.dragging-pip * {
 }
 
 @keyframes chatAreaFadeOut {
-  0% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(0.985); }
+  0% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* Responsive Mobile Rules */
@@ -2908,18 +2908,20 @@ body.dragging-pip * {
     flex-shrink: 0 !important;
     display: flex !important;
     background: #000000 !important;
-    transition: transform 0.32s cubic-bezier(0.25, 1, 0.5, 1);
-    transform: translateX(0);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    transform: translate3d(0, 0, 0);
     will-change: transform;
+    touch-action: pan-y;
   }
 
   .main-content-pane {
     width: 100% !important;
     min-width: 100% !important;
     flex-shrink: 0 !important;
-    transition: transform 0.32s cubic-bezier(0.25, 1, 0.5, 1);
-    transform: translateX(0);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    transform: translate3d(0, 0, 0);
     will-change: transform;
+    touch-action: pan-y;
   }
 
   .chat-area,
@@ -2928,12 +2930,12 @@ body.dragging-pip * {
   }
 
   .app-container.chat-active .sidebar {
-    transform: translateX(-100%);
+    transform: translate3d(-100%, 0, 0);
     display: flex !important; /* Keep mounted for animation */
   }
 
   .app-container.chat-active .main-content-pane {
-    transform: translateX(-100%);
+    transform: translate3d(-100%, 0, 0);
   }
 
   .back-btn {

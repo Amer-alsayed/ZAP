@@ -2130,7 +2130,12 @@ export default function App() {
     }
   };
 
+  const isNavigatingBackRef = useRef(false);
+
   const handleBackToMenu = (isFromPopState = false) => {
+    if (isNavigatingBackRef.current) return;
+    isNavigatingBackRef.current = true;
+
     if (document.activeElement && typeof document.activeElement.blur === 'function') {
       document.activeElement.blur();
     }
@@ -2143,6 +2148,7 @@ export default function App() {
     if (previousActiveContactRef.current && (showSettingsRef.current || showRecentsRef.current)) {
       const prevContact = previousActiveContactRef.current;
       previousActiveContactRef.current = null;
+      isNavigatingBackRef.current = false;
       handleSelectContact(prevContact);
       return;
     }
@@ -2153,7 +2159,8 @@ export default function App() {
       setShowSettings(false);
       setShowRecents(false);
       setIsNavigatingBack(false);
-    }, 320); // Smooth 320ms slide-back transition
+      isNavigatingBackRef.current = false;
+    }, 300); // Smooth 300ms slide-back transition
   };
 
   return (
