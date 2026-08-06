@@ -823,9 +823,17 @@ export default function App() {
     });
 
     socket.on('messages-deleted', ({ messageIds = [] }) => {
-      const ids = new Set(messageIds);
-      setContacts(prev => prev.map(c => ({ ...c, messages: c.messages.filter(m => !ids.has(m.id)) })));
-      setActiveContact(prev => prev ? { ...prev, messages: prev.messages.filter(m => !ids.has(m.id)) } : prev);
+      // Normalize IDs because SQLite/socket payloads and locally decrypted
+      // messages can represent the same ID as either a number or a string.
+      const ids = new Set(messageIds.map(id => String(id)));
+      setContacts(prev => prev.map(c => ({
+        ...c,
+        messages: c.messages.filter(m => !ids.has(String(m.id)))
+      })));
+      setActiveContact(prev => prev ? {
+        ...prev,
+        messages: prev.messages.filter(m => !ids.has(String(m.id)))
+      } : prev);
     });
 
     // ==========================================
