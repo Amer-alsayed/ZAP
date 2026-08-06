@@ -142,7 +142,12 @@ const MessageList = React.memo(({
   };
   const cancelLongPress = () => window.clearTimeout(longPressTimerRef.current);
 
-    messages[messages.length - 1].id === justReceivedId;
+  const hasJustReceivedMessage = Boolean(
+    justReceivedId !== null && 
+    messages && 
+    messages.length > 0 && 
+    messages[messages.length - 1]?.id === justReceivedId
+  );
 
   return (
     <div className="message-list">
