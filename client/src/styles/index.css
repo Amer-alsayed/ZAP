@@ -147,6 +147,11 @@ button {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes fadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.99); }
+}
+
 @keyframes slideIn {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
@@ -4528,6 +4533,10 @@ textarea {
     animation: none !important;
   }
 
+  .settings-view.navigating-back {
+    animation: none !important;
+  }
+
   .app-container.chat-active .sidebar {
     transform: translate3d(-100%, 0, 0);
     display: flex !important; /* Keep mounted for animation */
@@ -5805,6 +5814,7 @@ textarea {
 }
 
 .settings-view.navigating-back {
+  animation: fadeOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   pointer-events: none;
 }
 
