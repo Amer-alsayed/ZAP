@@ -4604,6 +4604,136 @@ textarea {
     height: 72px !important; /* Exact same height as sidebar-header on mobile for perfect top-bottom symmetry */
   }
 
+  /* 1. Mobile Chat Input & Floating Controls */
+  .chat-input-wrapper {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 12px !important;
+    min-height: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .chat-input-row {
+    gap: 6px !important;
+  }
+
+  .input-circle-btn {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+
+  .input-action-pill-wrapper {
+    height: 44px !important;
+  }
+
+  .input-action-pill-wrapper.attach-pill-wrapper {
+    width: 44px !important;
+  }
+
+  .chat-input-pill {
+    min-height: 44px !important;
+    border-radius: 22px !important;
+    padding: 2px 14px !important;
+  }
+
+  .chat-input-pill.is-recording-mode {
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    padding: 2px 10px !important;
+  }
+
+  .message-textarea {
+    font-size: 16px !important; /* Prevents auto-zoom on iOS mobile browsers */
+    line-height: 22px !important;
+  }
+
+  /* 2. Floating Reply & Attachment Banners on Mobile */
+  .reply-preview-bar {
+    border-radius: 18px !important;
+  }
+
+  .reply-preview-bar.visible {
+    min-height: 50px !important;
+    max-height: 50px !important;
+    margin-bottom: 8px !important;
+    padding: 4px 8px 4px 12px !important;
+  }
+
+  .reply-preview-close {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+  }
+
+  .attachment-preview-bar {
+    border-radius: 18px !important;
+  }
+
+  .attachment-preview-bar.visible {
+    min-height: 48px !important;
+    max-height: 48px !important;
+    margin-bottom: 8px !important;
+    padding: 4px 6px 4px 10px !important;
+  }
+
+  .file-preview-pill {
+    max-width: 140px !important;
+    padding: 3px 6px 3px 8px !important;
+    font-size: 11.5px !important;
+  }
+
+  .clear-all-files-btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    border-radius: 12px !important;
+  }
+
+  .attach-menu-popover {
+    left: 0 !important;
+    bottom: 52px !important;
+    width: min(240px, 75vw) !important;
+  }
+
+  /* 3. Mobile Chat Header */
+  .chat-header {
+    height: 64px !important;
+    min-height: 64px !important;
+    padding: 0 12px !important;
+  }
+
+  .chat-header-name h2 {
+    font-size: 15.5px !important;
+  }
+
+  .back-btn {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    min-height: 38px !important;
+  }
+
+  /* 4. Mobile Messages List & Spacing */
+  .messages-container {
+    padding: 12px 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px !important;
+  }
+
+  .message-bubble {
+    font-size: 15px !important;
+    padding: 8px 12px !important;
+  }
+
+  .media-album-grid {
+    max-width: 100% !important;
+  }
+
+  /* 5. Mobile Modals */
+  .contact-action-modal {
+    max-width: calc(100vw - 32px) !important;
+    padding: 18px !important;
+    border-radius: 20px !important;
+  }
+
   /* Segmented control centering and header adjustment in mobile mode */
   .recents-header {
     display: flex !important;
