@@ -1549,10 +1549,10 @@ button {
   justify-content: center;
   box-sizing: border-box;
   z-index: 10;
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none !important;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.8) 75%, transparent 100%) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5) !important;
 }
 
 /* Upload & Encryption Progress Banner */
