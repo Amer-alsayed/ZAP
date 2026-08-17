@@ -62,6 +62,7 @@ import {
   subscribeToProfileUpdates,
   unsubscribeFromProfileUpdates
 } from './services/socket';
+import { warmupMediaCache } from './services/mediaCache';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null); // { username, token, keys }
@@ -677,6 +678,8 @@ export default function App() {
             }
             return c;
           }));
+
+          warmupMediaCache(processedMessages);
 
           if (isActive) {
             setActiveContact(prev => {
@@ -1401,6 +1404,8 @@ export default function App() {
           ? { ...m, status: 2 }
           : m
       );
+
+      warmupMediaCache(readMessages);
 
       // 4. Update the state with the fully loaded messages in a single batch update
       setContacts(prev => prev.map(c => {

@@ -54,6 +54,31 @@ function base64ToBuffer(base64) {
   return bytes;
 }
 
+// In-memory instant media cache (URL -> { blob, fullUrl, thumbUrl })
+const memoryBlobCache = new Map();
+
+/**
+ * Get instant memory media URL if available (0ms synchronous lookup)
+ */
+export function getMemoryMediaUrl(url, isFullRes = false) {
+  if (!url || !memoryBlobCache.has(url)) return null;
+  const entry = memoryBlobCache.get(url);
+  return isFullRes ? entry.fullUrl : (entry.thumbUrl || entry.fullUrl);
+}
+
+/**
+ * Set memory media entry
+ */
+export function setMemoryMedia(url, fullUrl, thumbUrl = null, blob = null, thumbBlob = null) {
+  if (!url) return;
+  memoryBlobCache.set(url, {
+    blob,
+    thumbBlob: thumbBlob || blob,
+    fullUrl,
+    thumbUrl: thumbUrl || fullUrl
+  });
+}
+
 /**
  * Get a cached media Blob from IndexedDB by file URL
  * @param {string} url 
@@ -61,6 +86,9 @@ function base64ToBuffer(base64) {
  */
 export async function getCachedMedia(url) {
   if (!url) return null;
+  if (memoryBlobCache.has(url) && memoryBlobCache.get(url).blob) {
+    return memoryBlobCache.get(url).blob;
+  }
   try {
     const db = await getDB();
     return new Promise((resolve) => {
@@ -70,7 +98,12 @@ export async function getCachedMedia(url) {
 
       request.onsuccess = () => {
         if (request.result && request.result.blob) {
-          resolve(request.result.blob);
+          const blob = request.result.blob;
+          const thumbBlob = request.result.thumbBlob || blob;
+          const fullUrl = URL.createObjectURL(blob);
+          const thumbUrl = (thumbBlob === blob) ? fullUrl : URL.createObjectURL(thumbBlob);
+          setMemoryMedia(url, fullUrl, thumbUrl, blob, thumbBlob);
+          resolve(blob);
         } else {
           resolve(null);
         }
@@ -87,13 +120,22 @@ export async function getCachedMedia(url) {
 }
 
 /**
- * Save a decrypted media Blob into IndexedDB
+ * Save a decrypted media Blob into IndexedDB and memory cache
  * @param {string} url 
  * @param {Blob} blob 
  * @param {string} mimeType 
+ * @param {Blob} thumbBlob
  */
-export async function setCachedMedia(url, blob, mimeType = '') {
+export async function setCachedMedia(url, blob, mimeType = '', thumbBlob = null) {
   if (!url || !blob) return;
+  
+  // Instantly cache in memory with created ObjectURL
+  if (!memoryBlobCache.has(url)) {
+    const fullUrl = URL.createObjectURL(blob);
+    const thumbUrl = thumbBlob ? URL.createObjectURL(thumbBlob) : fullUrl;
+    setMemoryMedia(url, fullUrl, thumbUrl, blob, thumbBlob);
+  }
+
   try {
     const db = await getDB();
     return new Promise((resolve) => {
@@ -102,6 +144,7 @@ export async function setCachedMedia(url, blob, mimeType = '') {
       const item = {
         url,
         blob,
+        thumbBlob: thumbBlob || blob,
         mimeType: mimeType || blob.type,
         timestamp: Date.now()
       };
@@ -120,7 +163,7 @@ export async function setCachedMedia(url, blob, mimeType = '') {
 
 /**
  * Load or fetch and decrypt media.
- * Checks IndexedDB first. If missing, fetches from server, decrypts, saves to IndexedDB, and returns Blob.
+ * Checks Memory first, then IndexedDB. If missing, fetches from server, decrypts, saves to IndexedDB & Memory, and returns Blob.
  * @param {Object} fileMetadata { url, keyJwk, iv, mimeType }
  * @returns {Promise<Blob>}
  */
@@ -128,13 +171,18 @@ export async function loadOrFetchDecryptedMedia(fileMetadata) {
   const { url, keyJwk, iv, mimeType } = fileMetadata;
   if (!url) throw new Error('Invalid file metadata: missing URL');
 
-  // 1. Check local IndexedDB cache first
+  // 1. Check in-memory instant cache (0ms)
+  if (memoryBlobCache.has(url) && memoryBlobCache.get(url).blob) {
+    return memoryBlobCache.get(url).blob;
+  }
+
+  // 2. Check local IndexedDB cache
   const cachedBlob = await getCachedMedia(url);
   if (cachedBlob) {
     return cachedBlob;
   }
 
-  // 2. Not cached locally — fetch encrypted buffer from server
+  // 3. Not cached locally — fetch encrypted buffer from server
   const response = await fetch(url);
   if (!response.ok) {
     if (response.status === 404) {
@@ -145,7 +193,7 @@ export async function loadOrFetchDecryptedMedia(fileMetadata) {
 
   const encryptedBuffer = await response.arrayBuffer();
 
-  // 3. Import AES-GCM decryption key
+  // 4. Import AES-GCM decryption key
   const fileSessionKey = await window.crypto.subtle.importKey(
     'jwk',
     keyJwk,
@@ -154,7 +202,7 @@ export async function loadOrFetchDecryptedMedia(fileMetadata) {
     ['decrypt']
   );
 
-  // 4. Decrypt payload
+  // 5. Decrypt payload
   const ivBuffer = base64ToBuffer(iv);
   const decryptedBuffer = await window.crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: ivBuffer },
@@ -162,9 +210,11 @@ export async function loadOrFetchDecryptedMedia(fileMetadata) {
     encryptedBuffer
   );
 
-  // 5. Build decrypted blob and store in IndexedDB for future instant offline access
+  // 6. Build decrypted blob and store in memory & IndexedDB for instant future access
   const targetMime = mimeType || 'application/octet-stream';
   const blob = new Blob([decryptedBuffer], { type: targetMime });
+  const fullUrl = URL.createObjectURL(blob);
+  setMemoryMedia(url, fullUrl, fullUrl, blob);
 
   // Async save into IndexedDB without blocking return
   setCachedMedia(url, blob, targetMime).catch((e) => console.warn('Cache store error:', e));
@@ -173,9 +223,23 @@ export async function loadOrFetchDecryptedMedia(fileMetadata) {
 }
 
 /**
+ * Preload and warm up all media attachments for a conversation in background
+ */
+export async function warmupMediaCache(messages) {
+  if (!messages || !messages.length) return;
+  const mediaList = messages
+    .filter(m => m.mediaType === 'file' && m.fileMetadata?.url && !memoryBlobCache.has(m.fileMetadata.url))
+    .map(m => m.fileMetadata);
+
+  if (!mediaList.length) return;
+  Promise.all(mediaList.map(file => loadOrFetchDecryptedMedia(file).catch(() => {}))).catch(() => {});
+}
+
+/**
  * Clear all cached media (e.g. on logout or user request)
  */
 export async function clearMediaCache() {
+  memoryBlobCache.clear();
   try {
     const db = await getDB();
     return new Promise((resolve) => {

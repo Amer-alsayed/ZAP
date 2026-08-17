@@ -10,7 +10,7 @@ import { uploadEncryptedFile } from '../services/api';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
 import { getSocket } from '../services/socket';
 import { renderAvatar } from './Sidebar';
-import { loadOrFetchDecryptedMedia, setCachedMedia } from '../services/mediaCache';
+import { loadOrFetchDecryptedMedia, setCachedMedia, getMemoryMediaUrl, warmupMediaCache } from '../services/mediaCache';
 import { soundEngine } from '../services/soundEffects';
 
 const getSafetyNumber = (keyA, keyB) => {
@@ -135,17 +135,41 @@ const groupMessagesWithAlbums = (rawMessages) => {
 // Fullscreen Interactive Album Gallery Modal
 const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
-  const [isClosing, setIsClosing] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const currentItem = items[activeIndex];
   const total = items.length;
   const touchStartRef = useRef(null);
+  const isClosingRef = useRef(false);
+
+  useEffect(() => {
+    // Trigger smooth fluid entrance animation on mount
+    const timer = requestAnimationFrame(() => setIsOpen(true));
+    return () => cancelAnimationFrame(timer);
+  }, []);
 
   const handleClose = useCallback(() => {
-    setIsClosing(true);
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    setIsOpen(false);
     setTimeout(() => {
       onClose();
-    }, 220);
+    }, 250);
   }, [onClose]);
+
+  const handleOverlayClick = useCallback((e) => {
+    // If click originated on an interactive element, do not dismiss
+    if (
+      e.target.closest('.gallery-nav-btn') ||
+      e.target.closest('.gallery-action-btn') ||
+      e.target.closest('.album-gallery-filmstrip') ||
+      e.target.closest('.message-image') ||
+      e.target.closest('.message-video') ||
+      e.target.closest('.gallery-caption-bar')
+    ) {
+      return;
+    }
+    handleClose();
+  }, [handleClose]);
 
   const handlePrev = useCallback(() => {
     setActiveIndex(prev => (prev > 0 ? prev - 1 : total - 1));
@@ -188,8 +212,8 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
 
   return createPortal(
     <div 
-      className={`album-gallery-modal-overlay ${isClosing ? 'is-closing' : ''}`}
-      onClick={handleClose}
+      className={`album-gallery-modal-overlay ${isOpen ? 'visible' : ''}`}
+      onClick={handleOverlayClick}
       onTouchStart={(e) => {
         touchStartRef.current = e.touches[0].clientX;
       }}
@@ -202,7 +226,7 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
       }}
     >
       {/* Top Navigation Bar */}
-      <div className="album-gallery-header" onClick={(e) => e.stopPropagation()}>
+      <div className="album-gallery-header">
         <div className="album-gallery-title-info">
           <span className="album-gallery-counter">{activeIndex + 1} of {total}</span>
           {file?.name && <span className="album-gallery-filename">{file.name}</span>}
@@ -228,11 +252,14 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
       </div>
 
       {/* Main Full-Size Media Container */}
-      <div className="album-gallery-main" onClick={(e) => e.stopPropagation()}>
+      <div className="album-gallery-main">
         {total > 1 && (
           <button 
             className="gallery-nav-btn prev-btn" 
-            onClick={handlePrev}
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePrev();
+            }}
             title="Previous (Left Arrow)"
             aria-label="Previous"
           >
@@ -259,7 +286,10 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
         {total > 1 && (
           <button 
             className="gallery-nav-btn next-btn" 
-            onClick={handleNext}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNext();
+            }}
             title="Next (Right Arrow)"
             aria-label="Next"
           >
@@ -550,6 +580,8 @@ const MessageList = React.memo(({
           );
         }
 
+        const staggerIndex = Math.max(0, index - (groupedMessages.length - 12));
+
         return (
           <React.Fragment key={msg.id}>
             {showDateSeparator && (
@@ -559,6 +591,7 @@ const MessageList = React.memo(({
             )}
             <div 
               className={`message-row ${isSent ? 'sent' : 'received'} ${(msg.isAlbum ? msg.allIds.some(id => deletingIds.includes(id)) : deletingIds.includes(msg.id)) || msg.isDeleting ? 'is-deleting' : ''} ${msg.isCollapsing ? 'is-collapsing' : ''}`}
+              style={{ '--msg-delay': staggerIndex }}
               onContextMenu={(e) => e.preventDefault()}
               onClickCapture={(e) => {
                 if (longPressTriggeredRef.current) {
@@ -806,7 +839,15 @@ const ChatArea = React.memo(function ChatArea({
    const [recordingDuration, setRecordingDuration] = useState(0);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(null); // { filename, current, total, status, percent }
+
+  // Warm up and pre-decode cached media for instant 0ms access across conversations
+  useEffect(() => {
+    if (activeContact?.messages?.length) {
+      warmupMediaCache(activeContact.messages);
+    }
+  }, [activeContact?.username, activeContact?.messages]);
+
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isClosingAttachMenu, setIsClosingAttachMenu] = useState(false);
   const attachMenuRef = useRef(null);
@@ -2735,7 +2776,10 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
   const fileUrl = fileMetadata?.url;
   
   const [imgSrc, setImgSrc] = useState(() => {
-    if (fileUrl && globalMediaSessionCache.has(fileUrl)) {
+    if (!fileUrl) return null;
+    const memoryUrl = getMemoryMediaUrl(fileUrl, isFullRes);
+    if (memoryUrl) return memoryUrl;
+    if (globalMediaSessionCache.has(fileUrl)) {
       const cached = globalMediaSessionCache.get(fileUrl);
       return isFullRes ? cached.fullUrl : cached.thumbUrl;
     }
@@ -2743,16 +2787,26 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
   });
   const [error, setError] = useState(null);
   const [isLoaded, setIsLoaded] = useState(() => {
-    return fileUrl ? globalMediaSessionCache.has(fileUrl) : false;
+    if (!fileUrl) return false;
+    return Boolean(getMemoryMediaUrl(fileUrl, isFullRes) || globalMediaSessionCache.has(fileUrl));
   });
   const fullResUrlRef = useRef(
-    fileUrl && globalMediaSessionCache.has(fileUrl)
-      ? globalMediaSessionCache.get(fileUrl).fullUrl
+    fileUrl
+      ? (getMemoryMediaUrl(fileUrl, true) || (globalMediaSessionCache.has(fileUrl) ? globalMediaSessionCache.get(fileUrl).fullUrl : null))
       : null
   );
 
   useEffect(() => {
     if (!fileUrl) return;
+
+    const memoryUrl = getMemoryMediaUrl(fileUrl, isFullRes);
+    if (memoryUrl) {
+      setImgSrc(memoryUrl);
+      fullResUrlRef.current = getMemoryMediaUrl(fileUrl, true) || memoryUrl;
+      setIsLoaded(true);
+      if (onImageLoad) onImageLoad();
+      return;
+    }
 
     // Instant hit from global session cache (0ms)
     if (globalMediaSessionCache.has(fileUrl)) {
@@ -2771,7 +2825,7 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
         const fullBlob = await loadOrFetchDecryptedMedia(fileMetadata);
         if (!active) return;
         
-        const fullUrl = URL.createObjectURL(fullBlob);
+        const fullUrl = getMemoryMediaUrl(fileUrl, true) || URL.createObjectURL(fullBlob);
 
         // Downscale for in-chat message bubble preview
         const thumbBlob = await createThumbnailBlob(fullBlob, 480);
@@ -2781,9 +2835,12 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
 
         const cacheEntry = { fullUrl, thumbUrl };
         globalMediaSessionCache.set(fileUrl, cacheEntry);
+        setCachedMedia(fileUrl, fullBlob, fileMetadata.mimeType, thumbBlob);
 
         fullResUrlRef.current = fullUrl;
         setImgSrc(isFullRes ? fullUrl : thumbUrl);
+        setIsLoaded(true);
+        if (onImageLoad) onImageLoad();
       } catch (err) {
         if (active) setError(err.message || 'Media loading failed');
       }
@@ -2799,16 +2856,23 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
   if (error) return <span style={{ color: 'var(--text-muted, #a0aec0)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}><AlertTriangle size={14} style={{ color: '#e53e3e' }} /> {error}</span>;
 
   return (
-    <div className="image-loader-container">
-      {/* Skeleton loader stays visible until image is fully loaded & decoded */}
+    <div className={`image-loader-container ${isLoaded ? 'is-ready' : 'is-decrypting'}`}>
+      {/* Minimalist & Premium Media Decryption Loading Card */}
       {!isLoaded && (
         <div className="image-skeleton-loader">
-          <Shield size={20} className="shield-shimmer" />
-          <span>Decrypting secure media...</span>
+          <div className="media-decrypt-spinner-badge">
+            <div className="media-decrypt-spinner-ring" />
+            <Shield size={16} className="media-decrypt-icon" />
+          </div>
+          {fileMetadata?.size && (
+            <span className="media-decrypt-size-pill">
+              {(fileMetadata.size / 1024).toFixed(0)} KB
+            </span>
+          )}
         </div>
       )}
       
-      {/* Image tag is mounted if imgSrc exists, but remains hidden until fully loaded */}
+      {/* Image tag with smooth blur-to-sharp cinematic crossfade */}
       {imgSrc && (
         <img 
           className={`message-image ${isLoaded ? 'loaded' : ''}`}
@@ -2821,8 +2885,6 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
             if (onImageLoad) onImageLoad();
           }}
           style={{
-            opacity: isLoaded ? 1 : 0,
-            pointerEvents: isLoaded ? 'auto' : 'none',
             cursor: onImageClick ? 'pointer' : 'default'
           }}
         />
