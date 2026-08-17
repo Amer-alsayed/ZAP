@@ -1308,8 +1308,11 @@ const ChatArea = React.memo(function ChatArea({
   const messagesContainerRef = useRef(null);
   const messagesBounceWrapperRef = useRef(null);
 
-  // Hook for elastic overscroll bounce (rubber-banding) in chat messages
+  // Hook for elastic overscroll bounce (rubber-banding) in chat messages (desktop only)
   useEffect(() => {
+    const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    if (isMobile) return;
+
     const container = messagesContainerRef.current;
     const wrapper = messagesBounceWrapperRef.current;
     if (!container || !wrapper) return;
