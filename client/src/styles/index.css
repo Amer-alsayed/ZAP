@@ -4935,17 +4935,29 @@ textarea {
   }
 
   .video-call-controls {
-    bottom: 24px !important;
-    padding: 8px 12px !important;
-    gap: 10px !important;
-    border-radius: 24px !important;
-    width: auto !important;
-    max-width: calc(100% - 32px) !important;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 6px 12px !important;
+    gap: 8px !important;
+    border-radius: 28px !important;
+    width: max-content !important;
+    max-width: calc(100vw - 20px) !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   .video-call-controls .call-btn {
     width: 36px !important;
     height: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   .video-call-controls .call-btn svg {
@@ -4955,7 +4967,34 @@ textarea {
 
   .video-call-controls .call-timer {
     font-size: 12px !important;
-    margin-right: 2px !important;
+    margin-right: 4px !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  @media (max-width: 420px) {
+    .video-call-controls {
+      padding: 5px 8px !important;
+      gap: 5px !important;
+      max-width: calc(100vw - 12px) !important;
+    }
+
+    .video-call-controls .call-btn {
+      width: 32px !important;
+      height: 32px !important;
+      min-width: 32px !important;
+      min-height: 32px !important;
+    }
+
+    .video-call-controls .call-btn svg {
+      width: 14px !important;
+      height: 14px !important;
+    }
+
+    .video-call-controls .call-timer {
+      font-size: 11px !important;
+      margin-right: 2px !important;
+    }
   }
 
   .incoming-call-pill-container {
