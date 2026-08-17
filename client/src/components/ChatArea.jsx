@@ -1427,31 +1427,13 @@ const ChatArea = React.memo(function ChatArea({
           }
         }
       }
-    } else if (activeContact?.isTyping) {
-      // Pin scroll to bottom dynamically at 60/120fps during the 300ms transition
-      if (isLastMessageVisible) {
-        const startTime = performance.now();
-        let frameId;
-        
-        const keepScrollAtBottom = (now) => {
-          if (messagesContainerRef.current) {
-            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-          }
-          if (now - startTime < 350) {
-            frameId = requestAnimationFrame(keepScrollAtBottom);
-          }
-        };
-        
-        frameId = requestAnimationFrame(keepScrollAtBottom);
-        return () => cancelAnimationFrame(frameId);
-      }
     } else if (currentCount > prevMessageCountRef.current) {
-      if (messagesContainerRef.current) {
+      if (messagesContainerRef.current && isLastMessageVisible) {
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
       }
     }
     prevMessageCountRef.current = currentCount;
-  }, [activeContact?.messages?.length, activeContact?.isTyping]);
+  }, [activeContact?.messages?.length]);
 
   const handleImageLoad = () => {
     // If the user was already looking at the bottom, pin the scroll position as the decrypted image loads
@@ -2524,7 +2506,7 @@ const ChatArea = React.memo(function ChatArea({
       <div className="chat-input-wrapper">
         {/* Floating Scroll-to-Bottom Button / Typing Indicator */}
         <button 
-          className={`scroll-to-bottom-btn glass ${(!isLastMessageVisible && !isInlineTypingVisible) ? 'visible' : ''} ${(activeContact.isTyping && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
+          className={`scroll-to-bottom-btn glass ${((isScrolledUp || !isLastMessageVisible) && !isInlineTypingVisible) ? 'visible' : ''} ${(activeContact.isTyping && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
           onClick={scrollToBottom} 
           title="Scroll to bottom"
           aria-label="Scroll to bottom"
