@@ -343,6 +343,13 @@ export default function App() {
     lightboxRef.current = lightboxImageSrc;
     if (lightboxImageSrc) {
       setActiveLightboxSrc(lightboxImageSrc);
+      window.__isMediaModalOpen = true;
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+    } else {
+      window.__isMediaModalOpen = false;
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
     }
   }, [lightboxImageSrc]);
 

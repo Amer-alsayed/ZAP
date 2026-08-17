@@ -180,6 +180,46 @@ const groupMessagesWithAlbums = (rawMessages) => {
   return result;
 };
 
+// Resilient buffer reader for cross-platform and scoped Android storage
+const readBlobBufferSafely = async (blob) => {
+  if (!blob) return null;
+  if (blob._preloadedBuffer && blob._preloadedBuffer.byteLength > 0) {
+    return blob._preloadedBuffer;
+  }
+  // Tier 1: direct arrayBuffer
+  if (typeof blob.arrayBuffer === 'function') {
+    try {
+      const buf = await blob.arrayBuffer();
+      if (buf && buf.byteLength > 0) return buf;
+    } catch (e) {}
+  }
+  // Tier 2: Response stream (bypasses Chrome/Android content lock)
+  try {
+    const res = new Response(blob);
+    const buf = await res.arrayBuffer();
+    if (buf && buf.byteLength > 0) return buf;
+  } catch (e) {}
+  // Tier 3: Sliced blob
+  try {
+    const sliced = blob.slice(0, blob.size, blob.type);
+    if (typeof sliced.arrayBuffer === 'function') {
+      const buf = await sliced.arrayBuffer();
+      if (buf && buf.byteLength > 0) return buf;
+    }
+  } catch (e) {}
+  // Tier 4: FileReader fallback
+  return new Promise((resolve) => {
+    try {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result || new ArrayBuffer(0));
+      reader.onerror = () => resolve(new ArrayBuffer(0));
+      reader.readAsArrayBuffer(blob);
+    } catch (e) {
+      resolve(new ArrayBuffer(0));
+    }
+  });
+};
+
 // Fullscreen Interactive Album Gallery Modal
 const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
@@ -190,9 +230,16 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
   const isClosingRef = useRef(false);
 
   useEffect(() => {
-    // Trigger smooth fluid entrance animation on mount
+    window.__isMediaModalOpen = true;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
     const timer = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(timer);
+    return () => {
+      cancelAnimationFrame(timer);
+      window.__isMediaModalOpen = false;
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    };
   }, []);
 
   const handleClose = useCallback(() => {
@@ -655,12 +702,15 @@ const MessageList = React.memo(({
                 }
               }}
               onMouseDown={(e) => {
-                if (e.button !== 0 || selectionMode) return;
+                if (window.__isMediaModalOpen || e.button !== 0 || selectionMode) return;
                 startLongPress(msg);
               }}
               onMouseUp={cancelLongPress}
               onMouseLeave={cancelLongPress}
               onTouchStart={(e) => {
+                if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
+                  return;
+                }
                 if (selectionMode) {
                   e.preventDefault();
                   return;
@@ -678,6 +728,9 @@ const MessageList = React.memo(({
                 if (selectionMode) toggleSelected(msg);
               }}
               onTouchMove={(e) => {
+                if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
+                  return;
+                }
                 if (selectionMode) return;
                 cancelLongPress();
                 if (!swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
@@ -691,6 +744,11 @@ const MessageList = React.memo(({
                 }
               }}
               onTouchEnd={() => {
+                if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
+                  swipeStartRef.current = null;
+                  setSwipeState({ msgId: null, offset: 0, isSwiping: false });
+                  return;
+                }
                 if (selectionMode) return;
                 cancelLongPress();
                 if (swipeStartRef.current?.msgId === msg.id) {
@@ -1634,22 +1692,11 @@ const ChatArea = React.memo(function ChatArea({
           });
 
           // 1. Read file as ArrayBuffer safely (supporting Android content URI files)
-          let fileBuffer;
-          try {
-            if (typeof fileToUpload.arrayBuffer === 'function') {
-              fileBuffer = await fileToUpload.arrayBuffer();
-            } else {
-              const reader = new FileReader();
-              const fileBufferPromise = new Promise((resolve, reject) => {
-                reader.onload = (e) => resolve(e.target.result);
-                reader.onerror = (err) => reject(err || new Error('Device read failed'));
-              });
-              reader.readAsArrayBuffer(fileToUpload);
-              fileBuffer = await fileBufferPromise;
-            }
-          } catch (readErr) {
-            console.error('File read error:', readErr);
-            throw new Error(`Device permissions blocked reading "${fileToUpload.name}". Please re-select the file.`);
+          let fileBuffer = fileToUpload._preloadedBuffer || await readBlobBufferSafely(fileToUpload);
+          if (!fileBuffer || fileBuffer.byteLength === 0) {
+            try {
+              fileBuffer = await new Response(fileToUpload).arrayBuffer();
+            } catch (e) {}
           }
 
           setUploadProgress({
@@ -1782,40 +1829,23 @@ const ChatArea = React.memo(function ChatArea({
     const validFiles = [];
     for (const f of files) {
       if (f.size > 15 * 1024 * 1024) {
-        alert(`File "${f.name}" exceeds 15MB limit.`);
-      } else {
-        // Android photo pickers may return a content-URI backed File whose
-        // permission is revoked once the picker closes. Snapshot the bytes
-        // now so encryption can safely happen after the user presses Send.
-        try {
-          let buffer;
-          if (typeof f.arrayBuffer === 'function') {
-            try {
-              buffer = await f.arrayBuffer();
-            } catch {
-              buffer = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = () => reject(reader.error || new Error('Device read failed'));
-                reader.readAsArrayBuffer(f);
-              });
-            }
-          } else {
-            buffer = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result);
-              reader.onerror = () => reject(reader.error || new Error('Device read failed'));
-              reader.readAsArrayBuffer(f);
-            });
-          }
-          validFiles.push(new File([buffer], f.name, {
+        continue;
+      }
+      try {
+        const buffer = await readBlobBufferSafely(f);
+        if (buffer && buffer.byteLength > 0) {
+          const safeFile = new File([buffer], f.name, {
             type: f.type || 'application/octet-stream',
-            lastModified: f.lastModified
-          }));
-        } catch (readErr) {
-          console.error('File selection read error:', readErr);
-          alert(`Device permissions blocked reading "${f.name}". Please re-select the file.`);
+            lastModified: f.lastModified || Date.now()
+          });
+          safeFile._preloadedBuffer = buffer;
+          validFiles.push(safeFile);
+        } else {
+          validFiles.push(f);
         }
+      } catch (readErr) {
+        console.warn('File selection buffer fallback:', readErr);
+        validFiles.push(f);
       }
     }
 
