@@ -7114,9 +7114,9 @@ textarea {
   text-overflow: ellipsis;
 }
 
-/* Softened coral text for missed calls */
+/* Red text for missed calls */
 .recents-name.missed-red {
-  color: #fb7185 !important;
+  color: #ff3b30 !important;
 }
 
 .recents-count-badge {
