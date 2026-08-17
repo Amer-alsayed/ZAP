@@ -233,17 +233,7 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
     }
   };
 
-  const [expandedCallKeys, setExpandedCallKeys] = useState({});
-
-  const toggleExpand = (key, e) => {
-    e.stopPropagation();
-    setExpandedCallKeys(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
-
-  // Group call logs by day and aggregate consecutive calls from the same user
+  // Group call logs by day
   const groupedCalls = useMemo(() => {
     const groups = {};
     filteredCalls.forEach(log => {
@@ -251,23 +241,7 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
       if (!groups[title]) {
         groups[title] = [];
       }
-      const list = groups[title];
-      const prev = list.length > 0 ? list[list.length - 1] : null;
-
-      const isSameUser = prev && prev.contact?.username?.toLowerCase() === log.contact?.username?.toLowerCase();
-      const isSameType = prev && prev.callType === log.callType;
-      const isSameDirection = prev && prev.isSentByMe === log.isSentByMe;
-
-      if (isSameUser && isSameType && isSameDirection) {
-        prev.count = (prev.count || 1) + 1;
-        prev.attempts.push(log);
-      } else {
-        list.push({
-          ...log,
-          count: 1,
-          attempts: [log]
-        });
-      }
+      groups[title].push(log);
     });
     return groups;
   }, [filteredCalls]);
@@ -327,93 +301,60 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
                   <div className="recents-group-header">{groupTitle}</div>
                   {logs.map((log) => {
                     const isMissed = (log.status === 'missed' || log.status === 'cancelled' || log.status === 'declined') && !log.isSentByMe;
-                    const isExpanded = !!expandedCallKeys[log.id];
                     return (
-                      <div className={`recents-row-wrapper ${isExpanded ? 'is-expanded' : ''}`} key={log.id}>
-                        <div className="recents-row">
-                          {/* Clickable Area: Opens conversation */}
-                          <div className="recents-row-clickable" onClick={() => onSelectContact(log.contact)}>
-                            <div className="recents-avatar">
-                              {renderAvatar(log.contact?.username, log.contact?.displayName, log.contact?.avatarIcon)}
-                            </div>
-                            
-                            <div className="recents-details">
-                              <div className="recents-name-row">
-                                <span className={`recents-name ${isMissed ? 'missed-red' : ''}`}>
-                                  {log.contact?.displayName || log.contact?.username || 'Unknown'}
-                                  {log.count > 1 && <span className="recents-count-badge"> ({log.count})</span>}
-                                </span>
-                                {log.contact?.isVerified && (
-                                  <ShieldCheck size={16} style={{ color: 'var(--success-color)', flexShrink: 0 }} />
-                                )}
-                              </div>
-                              
-                              <div className="recents-subtitle-row">
-                                {log.callType === 'video' ? (
-                                  <Video size={14} className="recents-type-icon" />
-                                ) : (
-                                  <Phone size={14} className="recents-type-icon" />
-                                )}
-                                <span className="recents-subtitle">
-                                  {log.isSentByMe ? (
-                                    log.status === 'declined'
-                                      ? `Declined ${log.callType === 'video' ? 'Video Call' : 'Voice Call'}`
-                                      : `Outgoing ${log.callType === 'video' ? 'Video Call' : 'Voice Call'}`
-                                  ) : (
-                                    log.status === 'declined'
-                                      ? `Declined ${log.callType === 'video' ? 'Video Call' : 'Voice Call'}`
-                                      : `${(log.status === 'missed' || log.status === 'cancelled') ? 'Missed' : 'Incoming'} ${log.callType === 'video' ? 'Video Call' : 'Voice Call'}`
-                                  )}
-                                </span>
-                                {log.count > 1 && (
-                                  <button 
-                                    className="recents-expand-toggle-btn"
-                                    onClick={(e) => toggleExpand(log.id, e)}
-                                    title={isExpanded ? "Hide attempts" : "Show all attempts"}
-                                  >
-                                    {isExpanded ? "Hide" : "Details"}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
+                      <div className="recents-row" key={log.id}>
+                        {/* Clickable Area: Opens conversation */}
+                        <div className="recents-row-clickable" onClick={() => onSelectContact(log.contact)}>
+                          <div className="recents-avatar">
+                            {renderAvatar(log.contact?.username, log.contact?.displayName, log.contact?.avatarIcon)}
                           </div>
-
-                          {/* Right Side: Timestamp and Callback Actions */}
-                          <div className="recents-right">
-                            <span className="recents-time">{formatCallTimeOnly(log.timestamp)}</span>
+                          
+                          <div className="recents-details">
+                            <div className="recents-name-row">
+                              <span className={`recents-name ${isMissed ? 'missed-red' : ''}`}>
+                                {log.contact?.displayName || log.contact?.username || 'Unknown'}
+                              </span>
+                              {log.contact?.isVerified && (
+                                <ShieldCheck size={16} style={{ color: 'var(--success-color)', flexShrink: 0 }} />
+                              )}
+                            </div>
                             
-                            <div className="recents-actions">
-                              {/* Direct Call Back button */}
-                              <button 
-                                className="recents-icon-btn call" 
-                                title={`Call back ${log.callType}`}
-                                onClick={() => onInitiateCall(log.callType, log.contact?.username)}
-                              >
-                                {log.callType === 'video' ? <Video size={17} /> : <Phone size={17} />}
-                              </button>
+                            <div className="recents-subtitle-row">
+                              {log.callType === 'video' ? (
+                                <Video size={14} className="recents-type-icon" />
+                              ) : (
+                                <Phone size={14} className="recents-type-icon" />
+                              )}
+                              <span className="recents-subtitle">
+                                {log.isSentByMe ? (
+                                  log.status === 'declined'
+                                    ? `Declined ${log.callType === 'video' ? 'Video Call' : 'Voice Call'}`
+                                    : `Outgoing ${log.callType === 'video' ? 'Video Call' : 'Voice Call'}`
+                                ) : (
+                                  log.status === 'declined'
+                                    ? `Declined ${log.callType === 'video' ? 'Video Call' : 'Voice Call'}`
+                                    : `${(log.status === 'missed' || log.status === 'cancelled') ? 'Missed' : 'Incoming'} ${log.callType === 'video' ? 'Video Call' : 'Voice Call'}`
+                                )}
+                              </span>
                             </div>
                           </div>
                         </div>
 
-                        {/* Expandable attempt details drawer */}
-                        {log.count > 1 && isExpanded && (
-                          <div className="recents-expanded-drawer">
-                            {log.attempts.map((att, attIdx) => (
-                              <div className="recents-attempt-item" key={att.id || attIdx}>
-                                <div className="attempt-left">
-                                  <span className="attempt-bullet">•</span>
-                                  <span className="attempt-status">
-                                    {att.isSentByMe ? 'Outgoing' : (att.status === 'missed' || att.status === 'cancelled') ? 'Missed' : 'Incoming'}
-                                  </span>
-                                  {att.duration > 0 && (
-                                    <span className="attempt-duration">({formatDuration(att.duration)})</span>
-                                  )}
-                                </div>
-                                <span className="attempt-time">{formatCallTimeOnly(att.timestamp)}</span>
-                              </div>
-                            ))}
+                        {/* Right Side: Timestamp and Callback Actions */}
+                        <div className="recents-right">
+                          <span className="recents-time">{formatCallTimeOnly(log.timestamp)}</span>
+                          
+                          <div className="recents-actions">
+                            {/* Direct Call Back button */}
+                            <button 
+                              className="recents-icon-btn call" 
+                              title={`Call back ${log.callType}`}
+                              onClick={() => onInitiateCall(log.callType, log.contact?.username)}
+                            >
+                              {log.callType === 'video' ? <Video size={18} /> : <Phone size={18} />}
+                            </button>
                           </div>
-                        )}
+                        </div>
                       </div>
                     );
                   })}

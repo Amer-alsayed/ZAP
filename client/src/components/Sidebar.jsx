@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Phone, PhoneOff, Video, VideoOff, Mic, Image, FileText, PanelLeftClose, PanelLeftOpen, Trash2, Ban, X, AlertTriangle, Pencil } from 'lucide-react';
 import { searchUser } from '../services/api';
 import { emitGetUserStatus } from '../services/socket';
@@ -534,9 +533,7 @@ const Sidebar = React.memo(function Sidebar({
           {renderAvatar(currentUser.username, currentUser.displayName, currentUser.avatarIcon)}
           <div className="username-display">
             <h3>{currentUser.displayName || currentUser.username}</h3>
-            {currentUser.displayName && (
-              <span className="user-handle">@{currentUser.username}</span>
-            )}
+            <span><ShieldCheck size={14} /> Encrypted Session</span>
           </div>
         </div>
       </div>
@@ -729,7 +726,7 @@ const Sidebar = React.memo(function Sidebar({
       </div>
 
       {/* Contact Action & Confirmation Unified Modal Flow */}
-      {(modalDialog || isModalClosing) && modalDialog && createPortal(
+      {(modalDialog || isModalClosing) && modalDialog && (
         <div className={`modal-overlay contact-action-overlay ${isModalClosing ? 'closing' : ''}`} onClick={closeModal}>
           <div className="contact-action-modal glass" onClick={(e) => e.stopPropagation()}>
             {modalDialog.step === 'menu' ? (
@@ -881,8 +878,7 @@ const Sidebar = React.memo(function Sidebar({
               </div>
             )}
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );
