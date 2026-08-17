@@ -1503,7 +1503,12 @@ button {
    ========================================== */
 .chat-input-wrapper {
   position: relative; /* Anchor for the centered scroll button */
-  padding: 20px 24px;
+  padding: 18px 20px;
+  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
   z-index: 10;
   background: rgba(0, 0, 0, 0.75) !important;
   backdrop-filter: blur(16px) saturate(180%) !important;
@@ -1648,49 +1653,72 @@ button {
 
 /* Media preview attachment bar */
 .attachment-preview-bar {
-  border: none !important;
-  border-top-left-radius: 14px;
-  border-top-right-radius: 14px;
-  padding: 0 16px;
+  border-radius: 20px !important;
+  margin-bottom: 0;
+  padding: 0 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   
   /* Smooth collapse transitions */
   max-height: 0;
   opacity: 0;
   overflow: hidden;
   visibility: hidden;
+  box-sizing: border-box !important;
+  border: 1px solid transparent !important;
   transition: 
-    max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.25s ease,
-    padding 0.3s ease,
-    border-color 0.3s ease,
-    visibility 0.3s ease;
+    max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.22s ease,
+    margin-bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    padding 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s ease,
+    visibility 0.28s ease;
 }
 
 .attachment-preview-bar.visible {
-  max-height: 60px;
+  min-height: 52px;
+  max-height: 52px;
   opacity: 1;
-  padding: 8px 12px;
-  background: rgba(18, 18, 18, 0.85) !important;
-  border: 1px solid var(--border-color) !important;
-  border-bottom: none !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  margin-bottom: 10px;
+  padding: 6px 8px 6px 12px;
+  background: rgba(18, 18, 22, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   visibility: visible;
+  animation: previewPillEntrance 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.attachment-preview-bar.is-exiting {
+  animation: previewPillExit 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+  pointer-events: none !important;
+}
+
+.attachment-preview-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
 }
 
 .multi-file-preview-container {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
-  padding-bottom: 2px;
+  overflow-y: hidden;
+  padding: 2px 0;
   scrollbar-width: none;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
 }
 
 .multi-file-preview-container::-webkit-scrollbar {
@@ -1701,14 +1729,84 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 4px 8px 4px 10px;
+  border-radius: 14px;
+  padding: 5px 8px 5px 10px;
   font-size: 12px;
   color: var(--text-primary);
   flex-shrink: 0;
   max-width: 180px;
+  box-sizing: border-box;
+  animation: filePillPopIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: 
+    background 0.15s ease, 
+    border-color 0.15s ease,
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.18s ease,
+    max-width 0.18s ease,
+    padding 0.18s ease,
+    margin 0.18s ease;
+}
+
+.file-preview-pill.is-removing {
+  opacity: 0 !important;
+  transform: scale(0.6) translateY(-4px) !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-width: 0 !important;
+  overflow: hidden !important;
+}
+
+@keyframes filePillPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes previewPillEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    max-height: 60px;
+    margin-bottom: 10px;
+  }
+}
+
+@keyframes previewPillExit {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    max-height: 60px;
+    margin-bottom: 10px;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+.file-preview-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .file-pill-name {
@@ -1721,39 +1819,53 @@ button {
 .remove-pill-btn {
   width: 18px;
   height: 18px;
+  min-width: 18px;
+  min-height: 18px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.12);
   border: none;
-  color: white;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  transition: background 0.15s ease;
+  margin-left: 2px;
+  transition: all 0.15s ease;
 }
 
 .remove-pill-btn:hover {
-  background: rgba(244, 63, 94, 0.6);
+  background: rgba(255, 69, 58, 0.25);
+  color: #ff453a;
+  transform: scale(1.1);
 }
 
 .clear-all-files-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 69, 58, 0.12) !important;
+  border: 1px solid rgba(255, 69, 58, 0.25) !important;
+  color: #ff453a !important;
+  font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
+  padding: 6px 12px;
+  border-radius: 14px;
   flex-shrink: 0;
-  margin-left: auto;
-  transition: color 0.15s ease;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .clear-all-files-btn:hover {
-  color: #f43f5e;
+  background: rgba(255, 69, 58, 0.22) !important;
+  border-color: rgba(255, 69, 58, 0.4) !important;
+  transform: scale(1.04);
+}
+
+.clear-all-files-btn:active {
+  transform: scale(0.96);
 }
 
 .attachment-info {
@@ -1801,10 +1913,11 @@ button {
    ========================================== */
 .chat-input-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   width: 100%;
   position: relative;
+  box-sizing: border-box;
 }
 
 .chat-input-pill {
@@ -1830,8 +1943,7 @@ button {
 }
 
 .chat-input-pill.with-preview {
-  border-top-left-radius: 0 !important;
-  border-top-right-radius: 0 !important;
+  /* Retain continuous pill shape */
 }
 
 .chat-input-pill:focus-within {
@@ -3217,14 +3329,14 @@ button {
   50% { height: 16px; opacity: 1; }
 }
 
-/* Danger Glass Recording Cancel Button (matches message delete button) */
+/* Danger Glass Recording Cancel Button (matches app button aesthetics) */
 .recording-cancel-btn {
-  width: 38px !important;
-  min-width: 38px !important;
-  max-width: 38px !important;
-  height: 38px !important;
-  min-height: 38px !important;
-  max-height: 38px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
   border-radius: 50% !important;
   display: flex !important;
   justify-content: center !important;
@@ -3248,11 +3360,12 @@ button {
   border-color: rgba(255, 69, 58, 0.4) !important;
   color: #ff453a !important;
   transform: scale(1.06) !important;
-  box-shadow: 0 2px 10px rgba(255, 69, 58, 0.2) !important;
+  box-shadow: none !important;
 }
 
 .recording-cancel-btn:active {
   transform: scale(0.94) !important;
+  box-shadow: none !important;
 }
 
 /* ==========================================
@@ -4695,57 +4808,91 @@ textarea {
 
 /* Reply Preview Bar above input box */
 .reply-preview-bar {
-  border: none !important;
-  border-top-left-radius: 18px;
-  border-top-right-radius: 18px;
-  padding: 0 12px;
+  border-radius: 20px !important;
+  margin-bottom: 0;
+  padding: 0 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   
   /* Smooth collapse transitions */
   max-height: 0;
   opacity: 0;
   overflow: hidden;
   visibility: hidden;
+  box-sizing: border-box !important;
+  border: 1px solid transparent !important;
   transition: 
-    max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.25s ease,
-    padding 0.3s ease,
-    border-color 0.3s ease,
-    visibility 0.3s ease;
+    max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.22s ease,
+    margin-bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    padding 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s ease,
+    visibility 0.28s ease;
 }
 
 .reply-preview-bar.visible {
-  min-height: 58px;
-  max-height: 58px;
+  min-height: 56px;
+  max-height: 56px;
   opacity: 1;
-  padding: 8px 12px;
-  background: rgba(18, 18, 18, 0.8) !important;
-  border: 1px solid var(--border-color) !important;
-  border-left: 1px solid var(--border-color) !important;
-  border-bottom: none !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  margin-bottom: 10px;
+  padding: 6px 10px 6px 14px;
+  background: rgba(18, 18, 22, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   visibility: visible;
-  box-sizing: border-box !important;
+  animation: previewPillEntrance 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.reply-preview-info {
+.reply-preview-bar.is-exiting {
+  animation: previewPillExit 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+  pointer-events: none !important;
+}
+
+.reply-preview-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.reply-preview-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.reply-preview-text-block {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  text-align: left;
-  padding-left: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.reply-preview-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent-color);
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-bottom: 1px;
+}
+
+.reply-preview-icon {
+  flex-shrink: 0;
 }
 
 .reply-preview-label {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--accent-color);
-  margin-bottom: 2px;
 }
 
 .reply-preview-text {
@@ -4759,12 +4906,12 @@ textarea {
 
 .reply-preview-close {
   color: var(--text-muted);
-  width: 44px !important;
-  min-width: 44px !important;
-  max-width: 44px !important;
-  height: 44px !important;
-  min-height: 44px !important;
-  max-height: 44px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  max-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
   border-radius: 50% !important;
   display: flex !important;
   justify-content: center !important;
@@ -4773,7 +4920,7 @@ textarea {
   flex-shrink: 0 !important;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: var(--transition-smooth);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
   box-sizing: border-box !important;
   outline: none;
@@ -4784,12 +4931,12 @@ textarea {
     color: var(--danger-color);
     background: rgba(255, 69, 58, 0.15);
     border-color: rgba(255, 69, 58, 0.3);
-    transform: scale(1.05);
+    transform: scale(1.08);
   }
 }
 
 .reply-preview-close:active {
-  transform: scale(0.95);
+  transform: scale(0.92);
 }
 
 .swipe-reply-indicator {
@@ -5288,9 +5435,10 @@ textarea {
 
 /* Sidebar footer settings button */
 .sidebar-footer {
-  height: 98px;
-  min-height: 98px;
-  padding: 0 24px;
+  height: 84px;
+  min-height: 84px;
+  max-height: 84px;
+  padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -5301,8 +5449,10 @@ textarea {
 
 .sidebar-settings-btn, .sidebar-calls-btn, .minimize-btn {
   color: var(--text-muted);
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
   border-radius: 50%;
   display: flex;
   justify-content: center;
@@ -6552,7 +6702,7 @@ textarea {
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
-  padding: 16px 0 27px 0;
+  padding: 16px 0 18px 0;
   height: auto;
   gap: 12px;
   box-sizing: border-box;
