@@ -1154,12 +1154,26 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, [activeContact?.messages?.length, activeContact.username]);
 
-  // Immediately lift the fusion block if the partner resumes typing
+  // Automatically smooth-scroll down as the typing indicator appears if the user is at the bottom
   useEffect(() => {
     if (activeContact?.isTyping) {
       setJustReceivedId(null);
+      if (isLastMessageVisible && !isScrolledUp) {
+        const startTime = performance.now();
+        let frameId;
+        const keepBottomInView = (now) => {
+          if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+          }
+          if (now - startTime < 320) {
+            frameId = requestAnimationFrame(keepBottomInView);
+          }
+        };
+        frameId = requestAnimationFrame(keepBottomInView);
+        return () => cancelAnimationFrame(frameId);
+      }
     }
-  }, [activeContact?.isTyping]);
+  }, [activeContact?.isTyping, isLastMessageVisible, isScrolledUp]);
 
   const highlightTimersRef = useRef({});
 
