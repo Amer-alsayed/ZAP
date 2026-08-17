@@ -13,6 +13,8 @@
 
   /* Color Palette - Pure Black Dark Mode (#000000 base, #cccccc text) */
   --bg-main: #000000;                     /* Pure Black background */
+  --bg-sidebar: #000000;                  /* Pure Black Sidebar */
+  --bg-chat-canvas: #000000;              /* Pure Black Canvas */
   --bg-card: rgba(18, 18, 18, 0.75);      /* Dark Card Glass Base */
   --bg-card-solid: #121212;               /* Solid Dark Surface */
   --bg-input: rgba(26, 26, 26, 0.9);      /* Dark Input Background */
@@ -30,7 +32,7 @@
 
   --accent-glow: rgba(var(--accent-rgb), 0.25);
   --danger-color: #FF453A;                /* Dark Mode Red */
-  --success-color: #30D158;               /* Dark Mode Green */
+  --success-color: #30D158;               /* Apple Secure Green */
   --warning-color: #FF9F0A;               /* Dark Mode Orange */
 
   --blur-amount: 20px;
@@ -53,6 +55,16 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* High-Contrast Accessible Placeholder Text */
+input::placeholder,
+textarea::placeholder,
+.search-box input::placeholder,
+.message-textarea::placeholder,
+.rename-input-field::placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
+  opacity: 1 !important;
 }
 
 /* Custom Scrollbar */
@@ -574,14 +586,17 @@ button {
   display: flex;
   flex-direction: column;
   z-index: 20;
-  border: none !important;
-  background: #090909 !important;
+  border-top-right-radius: 20px !important;
+  border-bottom-right-radius: 20px !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  background: #0d1012 !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  border-top-right-radius: 24px;
-  border-bottom-right-radius: 24px;
   overflow: hidden;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+  box-shadow: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-left: none !important;
   transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), min-width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), max-width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: width, min-width, max-width, border-radius;
   transform: translateZ(0);
@@ -607,7 +622,7 @@ button {
 
 .sidebar-header {
   height: 80px;
-  padding: 0 22px;
+  padding: 0 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -972,7 +987,7 @@ button {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 150ms ease;
   z-index: 0;
 }
 
@@ -988,12 +1003,12 @@ button {
   position: absolute;
   inset: 0;
   border-radius: 16px;
-  background-color: rgba(var(--accent-rgb), 0.16);
-  border: 1px solid rgba(var(--accent-rgb), 0.38);
+  background-color: rgba(var(--accent-rgb), 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 8px rgba(0, 0, 0, 0.25);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 150ms ease;
   z-index: 0;
 }
 
@@ -1067,7 +1082,8 @@ button {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2.5px solid var(--bg-main);
+  border: 2px solid #0d1012 !important;
+  box-sizing: content-box;
 }
 
 .status-dot.online {
@@ -1232,17 +1248,17 @@ button {
 
 .chat-header {
   height: 80px;
-  padding: 0 26px;
+  padding: 0 28px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   z-index: 10;
   box-sizing: border-box;
   border: none !important;
-  background: rgba(0, 0, 0, 0.75) !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
 }
 
 .chat-header-info {
@@ -1533,10 +1549,10 @@ button {
   justify-content: center;
   box-sizing: border-box;
   z-index: 10;
-  background: rgba(0, 0, 0, 0.75) !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
 }
 
 /* Upload & Encryption Progress Banner */
@@ -4669,7 +4685,51 @@ textarea {
   }
 
   .media-album-grid {
-    max-width: 100% !important;
+    max-width: min(78vw, 320px) !important;
+    border-radius: 14px !important;
+  }
+
+  /* Mobile Image View & Lightbox Optimization */
+  .image-loader-container {
+    width: 100% !important;
+    max-width: min(76vw, 300px) !important;
+    aspect-ratio: 4 / 3 !important;
+    height: auto !important;
+    min-height: 160px !important;
+    max-height: 320px !important;
+    border-radius: 12px !important;
+  }
+
+  .message-image {
+    border-radius: 12px !important;
+  }
+
+  .album-grid-cell .image-loader-container {
+    width: 100% !important;
+    max-width: none !important;
+    aspect-ratio: unset !important;
+    height: 100% !important;
+    min-height: 80px !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+  }
+
+  .lightbox-image {
+    max-width: 95vw !important;
+    max-height: 86vh !important;
+    max-height: 86dvh !important;
+    border-radius: 10px !important;
+  }
+
+  .lightbox-close-btn {
+    top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+    right: 16px !important;
+    width: 42px !important;
+    height: 42px !important;
+    background: rgba(22, 22, 26, 0.8) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
   }
 
   /* 5. Mobile Modals */
@@ -7054,9 +7114,76 @@ textarea {
   text-overflow: ellipsis;
 }
 
-/* Red text for missed calls */
+/* Softened coral text for missed calls */
 .recents-name.missed-red {
-  color: #ff3b30 !important;
+  color: #fb7185 !important;
+}
+
+.recents-count-badge {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.recents-expand-toggle-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 10px;
+  cursor: pointer;
+  margin-left: 6px;
+  transition: all 150ms ease;
+}
+
+.recents-expand-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.recents-row-wrapper {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.recents-expanded-drawer {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 16px 10px 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: modalStepTransition 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.recents-attempt-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.attempt-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.attempt-bullet {
+  color: var(--accent-color);
+}
+
+.attempt-duration {
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+.attempt-time {
+  font-size: 11.5px;
+  color: var(--text-muted);
 }
 
 .recents-subtitle-row {
@@ -7098,27 +7225,27 @@ textarea {
 }
 
 .recents-icon-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 150ms ease;
   box-sizing: border-box;
 }
 
 .recents-icon-btn.call {
-  background: rgba(48, 209, 88, 0.1);
-  border: 1px solid rgba(48, 209, 88, 0.2);
-  color: #30d158;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
 }
 
 .recents-icon-btn.call:hover {
-  background: rgba(48, 209, 88, 0.18);
-  border-color: rgba(48, 209, 88, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
   color: #ffffff;
 }
 
