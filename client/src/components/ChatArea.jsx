@@ -65,6 +65,54 @@ const formatSeparatorDate = (timestamp) => {
   }
 };
 
+// Format text with clickable links
+const renderFormattedText = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  
+  const URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|www\.[^\s<]+[^<.,:;"')\]\s])/gi;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+
+    const rawUrl = match[0];
+    const href = rawUrl.startsWith('http://') || rawUrl.startsWith('https://') 
+      ? rawUrl 
+      : `https://${rawUrl}`;
+
+    parts.push(
+      <a
+        key={`link-${match.index}`}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="chat-text-link"
+        onClick={(e) => {
+          if (window.__isChatraSelectionMode) {
+            e.preventDefault();
+          } else {
+            e.stopPropagation();
+          }
+        }}
+      >
+        {rawUrl}
+      </a>
+    );
+
+    lastIndex = URL_REGEX.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
+};
+
 // Group consecutive image/video media messages from the same sender into visual albums
 const groupMessagesWithAlbums = (rawMessages) => {
   if (!rawMessages || !rawMessages.length) return [];
@@ -2179,7 +2227,7 @@ const ChatArea = React.memo(function ChatArea({
             isLast={isLast}
             handleImageLoad={handleImageLoad}
           />
-          {msg.text && <p className="media-caption">{msg.text}</p>}
+          {msg.text && <p className="media-caption">{renderFormattedText(msg.text)}</p>}
         </div>
       );
     }
@@ -2219,7 +2267,7 @@ const ChatArea = React.memo(function ChatArea({
       return (
         <div className="media-container">
           {element}
-          {msg.text && <p className="media-caption">{msg.text}</p>}
+          {msg.text && <p className="media-caption">{renderFormattedText(msg.text)}</p>}
         </div>
       );
     }
@@ -2344,7 +2392,7 @@ const ChatArea = React.memo(function ChatArea({
       );
     }
     // Default plaintext
-    return msg.text;
+    return renderFormattedText(msg.text);
   }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick]);
 
   return (
