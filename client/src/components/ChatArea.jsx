@@ -836,7 +836,9 @@ const ChatArea = React.memo(function ChatArea({
   const [swipeState, setSwipeState] = useState({ msgId: null, offset: 0, isSwiping: false });
   const swipeStartRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
-   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordingExitMode, setRecordingExitMode] = useState(null); // 'cancel' | 'send' | null
+  const [isSendingVoice, setIsSendingVoice] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // { filename, current, total, status, percent }
@@ -1815,7 +1817,7 @@ const ChatArea = React.memo(function ChatArea({
       setIsRecording(true);
       recordingDurationRef.current = 0;
       setRecordingDuration(0);
-      mediaRecorderRef.current.start();
+      mediaRecorderRef.current.start(250);
       soundEngine.playVoiceRecordStart();
 
       recordingTimerRef.current = setInterval(() => {
@@ -1914,27 +1916,42 @@ const ChatArea = React.memo(function ChatArea({
           mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
         }
       }
+      setRecordingExitMode('cancel');
+      setTimeout(() => {
+        setIsRecording(false);
+        setRecordingExitMode(null);
+      }, 200);
     } else {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try {
+          if (mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.requestData();
+          }
           mediaRecorderRef.current.stop();
-        } catch (e) {}
+        } catch (e) {
+          console.error('Error stopping recorder:', e);
+        }
       }
+      setRecordingExitMode('send');
+      setTimeout(() => {
+        setIsRecording(false);
+        setRecordingExitMode(null);
+      }, 140);
     }
-    
-    setIsRecording(false);
   };
 
   const processAndSendVoiceNote = async (audioBlob) => {
-    setUploading(true);
-    setUploadProgress({
-      filename: 'Voice Message',
-      current: 1,
-      total: 1,
-      percent: 25,
-      status: 'Encrypting voice note (AES-256)...'
-    });
+    if (!audioBlob || audioBlob.size === 0) {
+      console.warn('Empty voice audio blob, skipping send.');
+      return;
+    }
+    setIsSendingVoice(true);
     try {
+      const token = currentUserToken || currentUser?.token || localStorage.getItem('chatra_token') || localStorage.getItem('token');
+      if (!token) {
+        throw new Error('User session token is missing. Please re-login.');
+      }
+
       // 1. Read audio blob as ArrayBuffer
       const arrayBuffer = await audioBlob.arrayBuffer();
 
@@ -1953,31 +1970,20 @@ const ChatArea = React.memo(function ChatArea({
         arrayBuffer
       );
 
-      setUploadProgress({
-        filename: 'Voice Message',
-        current: 1,
-        total: 1,
-        percent: 68,
-        status: 'Uploading encrypted audio...'
-      });
-
       // 4. Convert encrypted audio to Base64
       const encryptedBase64 = bufferToBase64(encryptedAudioBuffer);
 
       // 5. Upload encrypted audio to server
-      const extension = audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
-      const { fileUrl } = await uploadEncryptedFile(`voice-note.${extension}`, encryptedBase64, currentUserToken);
-
-      setUploadProgress({
-        filename: 'Voice Message',
-        current: 1,
-        total: 1,
-        percent: 94,
-        status: 'Finalizing secure message...'
-      });
+      const mime = audioBlob.type || 'audio/webm';
+      const extension = mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'mp4' : 'webm';
+      const { fileUrl } = await uploadEncryptedFile(`voice-note.${extension}`, encryptedBase64, token);
 
       // Save original voice blob in local IndexedDB so sender keeps voice note permanently
-      setCachedMedia(fileUrl, audioBlob, audioBlob.type || 'audio/webm');
+      try {
+        setCachedMedia(fileUrl, audioBlob, mime);
+      } catch (cacheErr) {
+        console.warn('Cache write warning:', cacheErr);
+      }
 
       // 6. Export session key to JWK
       const audioKeyJwk = await window.crypto.subtle.exportKey('jwk', audioKey);
@@ -1991,27 +1997,28 @@ const ChatArea = React.memo(function ChatArea({
         fileMetadata: replyingTo.fileMetadata || null
       } : null;
 
-      onSendMessage({
+      const durationSec = Math.max(1, recordingDurationRef.current || recordingDuration || 1);
+
+      await onSendMessage({
         type: 'voice',
         fileMetadata: {
           url: fileUrl,
           name: 'Voice Note',
           size: audioBlob.size,
-          mimeType: audioBlob.type || 'audio/webm',
+          mimeType: mime,
           keyJwk: audioKeyJwk,
           iv: bufferToBase64(iv),
-          duration: recordingDurationRef.current
+          duration: durationSec
         },
         replyTo: replyContext
       });
       setReplyingTo(null);
       soundEngine.playMessageSent();
     } catch (err) {
-      console.error(err);
-      alert('Failed to send encrypted voice note.');
+      console.error('Error sending voice note:', err);
+      alert(`Failed to send encrypted voice note: ${err?.message || err}`);
     } finally {
-      setUploadProgress(null);
-      setUploading(false);
+      setIsSendingVoice(false);
     }
   };
 
@@ -2543,9 +2550,8 @@ const ChatArea = React.memo(function ChatArea({
           )}
         </div>
 
-        {/* Input container */}
-        <div className={`chat-input-container ${(selectedFiles.length > 0 || replyingTo) ? 'with-preview' : ''} ${isRecording ? 'is-recording-mode' : ''} glass`}>
-          
+        {/* Separated Pill-Style Input Controls */}
+        <div className="chat-input-row">
           <input
             type="file"
             id="file-input"
@@ -2554,71 +2560,72 @@ const ChatArea = React.memo(function ChatArea({
             onChange={handleFileSelect}
           />
 
-          {(showAttachMenu || isClosingAttachMenu) && !isRecording && (
-            <div ref={attachMenuRef} className={`attach-menu-popover glass ${isClosingAttachMenu ? 'is-closing' : ''}`}>
-              <div className="attach-menu-header">
-                <span>Share Media & Files</span>
+          {/* 1. Left: Separated Media Attachment Pill Button */}
+          <div className={`input-action-pill-wrapper attach-pill-wrapper ${(isRecording && !recordingExitMode) ? 'is-hidden' : ''}`}>
+            {(showAttachMenu || isClosingAttachMenu) && !isRecording && (
+              <div ref={attachMenuRef} className={`attach-menu-popover glass ${isClosingAttachMenu ? 'is-closing' : ''}`}>
+                <div className="attach-menu-header">
+                  <span>Share Media & Files</span>
+                </div>
+                <div className="attach-menu-options">
+                  <button 
+                    className="attach-menu-item"
+                    onClick={() => openFilePicker('image/*,video/*')}
+                  >
+                    <div className="attach-icon-badge photos">
+                      <Image size={18} />
+                    </div>
+                    <div className="attach-item-text">
+                      <span className="attach-title">Photos & Videos</span>
+                      <span className="attach-desc">Share images or video clips</span>
+                    </div>
+                  </button>
+
+                  <button 
+                    className="attach-menu-item"
+                    onClick={() => openFilePicker('.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.tar,.gz,.csv,.json,.apk')}
+                  >
+                    <div className="attach-icon-badge document">
+                      <FileText size={18} />
+                    </div>
+                    <div className="attach-item-text">
+                      <span className="attach-title">Document</span>
+                      <span className="attach-desc">Share documents, PDFs, or archives</span>
+                    </div>
+                  </button>
+
+                  <button 
+                    className="attach-menu-item"
+                    onClick={() => openFilePicker('audio/*')}
+                  >
+                    <div className="attach-icon-badge audio">
+                      <Music size={18} />
+                    </div>
+                    <div className="attach-item-text">
+                      <span className="attach-title">Audio & Music</span>
+                      <span className="attach-desc">Share audio tracks or sound</span>
+                    </div>
+                  </button>
+
+                  <button 
+                    className="attach-menu-item"
+                    onClick={() => openFilePicker('image/*', 'environment')}
+                  >
+                    <div className="attach-icon-badge camera">
+                      <Camera size={18} />
+                    </div>
+                    <div className="attach-item-text">
+                      <span className="attach-title">Camera</span>
+                      <span className="attach-desc">Capture a photo or selfie</span>
+                    </div>
+                  </button>
+                </div>
               </div>
-              <div className="attach-menu-options">
-                <button 
-                  className="attach-menu-item"
-                  onClick={() => openFilePicker('image/*,video/*')}
-                >
-                  <div className="attach-icon-badge photos">
-                    <Image size={18} />
-                  </div>
-                  <div className="attach-item-text">
-                    <span className="attach-title">Photos & Videos</span>
-                    <span className="attach-desc">Share images or video clips</span>
-                  </div>
-                </button>
+            )}
 
-                <button 
-                  className="attach-menu-item"
-                  onClick={() => openFilePicker('.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.tar,.gz,.csv,.json,.apk')}
-                >
-                  <div className="attach-icon-badge document">
-                    <FileText size={18} />
-                  </div>
-                  <div className="attach-item-text">
-                    <span className="attach-title">Document</span>
-                    <span className="attach-desc">Share documents, PDFs, or archives</span>
-                  </div>
-                </button>
-
-                <button 
-                  className="attach-menu-item"
-                  onClick={() => openFilePicker('audio/*')}
-                >
-                  <div className="attach-icon-badge audio">
-                    <Music size={18} />
-                  </div>
-                  <div className="attach-item-text">
-                    <span className="attach-title">Audio & Music</span>
-                    <span className="attach-desc">Share audio tracks or sound</span>
-                  </div>
-                </button>
-
-                <button 
-                  className="attach-menu-item"
-                  onClick={() => openFilePicker('image/*', 'environment')}
-                >
-                  <div className="attach-icon-badge camera">
-                    <Camera size={18} />
-                  </div>
-                  <div className="attach-item-text">
-                    <span className="attach-title">Camera</span>
-                    <span className="attach-desc">Capture a photo or selfie</span>
-                  </div>
-                </button>
-              </div>
-            </div>
-          )}
-          
-          {!isRecording && (
             <button 
               ref={attachBtnRef}
-              className={`input-action-btn ${showAttachMenu ? 'active-menu' : ''}`}
+              className={`input-circle-btn attach-btn ${showAttachMenu ? 'active-menu' : ''}`}
               onClick={() => showAttachMenu ? closeAttachMenu() : setShowAttachMenu(true)}
               title={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
               aria-label={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
@@ -2626,84 +2633,103 @@ const ChatArea = React.memo(function ChatArea({
             >
               <Plus size={20} strokeWidth={2.5} />
             </button>
-          )}
+          </div>
 
-          {isRecording ? (
-            <div className="recording-banner">
-              <div className="recording-indicator">
-                <div className="recording-dot" />
-                <span className="recording-timer">{formatTime(recordingDuration)}</span>
+          {/* 2. Center: Dedicated Pill-Shaped Typing Bar */}
+          <div className={`chat-input-pill ${(selectedFiles.length > 0 || replyingTo) ? 'with-preview' : ''} ${(isRecording && !recordingExitMode) ? 'is-recording-mode' : ''} glass`}>
+            {isRecording ? (
+              <div className={`recording-banner ${recordingExitMode ? `is-exiting-${recordingExitMode}` : ''}`}>
+                <div className="recording-indicator">
+                  <div className="recording-dot" />
+                  <span className="recording-timer">{formatTime(recordingDuration)}</span>
+                </div>
+                <div className="recording-waveform-bars">
+                  <span className="wave-bar bar-1" />
+                  <span className="wave-bar bar-2" />
+                  <span className="wave-bar bar-3" />
+                  <span className="wave-bar bar-4" />
+                  <span className="wave-bar bar-5" />
+                </div>
+                <button 
+                  className="recording-cancel-btn" 
+                  onClick={() => stopRecording(false)} 
+                  title="Cancel recording" 
+                  aria-label="Cancel recording"
+                >
+                  <Trash2 size={18} />
+                </button>
               </div>
-              <div className="recording-waveform-bars">
-                <span className="wave-bar bar-1" />
-                <span className="wave-bar bar-2" />
-                <span className="wave-bar bar-3" />
-                <span className="wave-bar bar-4" />
-                <span className="wave-bar bar-5" />
-              </div>
-              <button className="recording-cancel-btn" onClick={() => stopRecording(false)} title="Cancel recording" aria-label="Cancel recording">
-                <Trash2 size={18} />
+            ) : (
+              <textarea
+                ref={textareaRef}
+                className="message-textarea"
+                placeholder="Write a secure message..."
+                value={inputText}
+                onChange={handleTextareaChange}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                disabled={uploading}
+              />
+            )}
+          </div>
+
+          {/* 3. Right: Separated Action Pill Button (Mic / Send / Loading) */}
+          <div className="input-action-pill-wrapper">
+            {isSendingVoice ? (
+              <button 
+                className="input-circle-btn send-btn voice-sending-active" 
+                disabled 
+                title="Encrypting & sending voice note..."
+                aria-label="Encrypting & sending voice note..."
+              >
+                <Loader2 size={18} className="spinner-rotating" />
               </button>
-            </div>
-          ) : (
-            <textarea
-              ref={textareaRef}
-              className="message-textarea"
-              placeholder="Write a secure message..."
-              value={inputText}
-              onChange={handleTextareaChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              disabled={uploading}
-            />
-          )}
-
-          {uploading ? (
-            <button 
-              className="send-message-btn uploading-active" 
-              disabled 
-              title="Encrypting & sending payload..."
-              aria-label="Encrypting & sending payload..."
-            >
-              <Loader2 size={18} className="spinner-rotating" />
-            </button>
-          ) : isRecording ? (
-            <button 
-              className="send-message-btn voice-send" 
-              onClick={() => stopRecording(true)} 
-              title="Stop and send voice note"
-              aria-label="Stop and send voice note"
-            >
-              <ArrowUp size={18} strokeWidth={2.5} />
-            </button>
-          ) : (inputText.trim() || selectedFiles.length > 0) ? (
-            <button 
-              className="send-message-btn" 
-              onPointerDown={(e) => {
-                // Prevent focus transfer away from textarea to keep keyboard up
-                e.preventDefault();
-              }}
-              onClick={() => {
-                handleSendMessage();
-              }} 
-              disabled={(!inputText.trim() && selectedFiles.length === 0) || uploading}
-              title="Send Encrypted Message"
-              aria-label="Send Encrypted Message"
-            >
-              <ArrowUp size={16} strokeWidth={3} />
-            </button>
-          ) : (
-            <button 
-              className="voice-record-btn idle"
-              onClick={startRecording}
-              title="Record voice note"
-              aria-label="Record voice note"
-              disabled={uploading}
-            >
-              <Mic size={19} />
-            </button>
-          )}
-
+            ) : uploading ? (
+              <button 
+                className="input-circle-btn send-btn uploading-active" 
+                disabled 
+                title="Encrypting & sending payload..."
+                aria-label="Encrypting & sending payload..."
+              >
+                <Loader2 size={18} className="spinner-rotating" />
+              </button>
+            ) : isRecording ? (
+              <button 
+                className={`input-circle-btn send-btn voice-send ${recordingExitMode === 'send' ? 'is-sending-blink' : ''}`}
+                onClick={() => stopRecording(true)} 
+                title="Stop and send voice note"
+                aria-label="Stop and send voice note"
+              >
+                <ArrowUp size={18} strokeWidth={2.5} />
+              </button>
+            ) : (inputText.trim() || selectedFiles.length > 0) ? (
+              <button 
+                className="input-circle-btn send-btn send-active" 
+                onPointerDown={(e) => {
+                  // Prevent focus transfer away from textarea to keep keyboard up
+                  e.preventDefault();
+                }}
+                onClick={() => {
+                  handleSendMessage();
+                }} 
+                disabled={(!inputText.trim() && selectedFiles.length === 0) || uploading}
+                title="Send Encrypted Message"
+                aria-label="Send Encrypted Message"
+              >
+                <ArrowUp size={18} strokeWidth={2.8} />
+              </button>
+            ) : (
+              <button 
+                className="input-circle-btn mic-btn"
+                onClick={startRecording}
+                title="Record voice note"
+                aria-label="Record voice note"
+                disabled={uploading}
+              >
+                <Mic size={19} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

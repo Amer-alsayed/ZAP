@@ -118,14 +118,14 @@ export const socketHandler = (io) => {
     const wentOnline = addUserSocket(username, socket.id);
     socket.join(username.toLowerCase()); // Case-insensitive room name subscription
 
-    // Per-socket event rate limiting (max 60 event packets per second per connection)
+    // Per-socket event rate limiting (max 120 event packets per second per connection)
     let eventCount = 0;
     const resetTimer = setInterval(() => { eventCount = 0; }, 1000);
     resetTimer.unref();
 
     socket.use((packet, next) => {
       eventCount++;
-      if (eventCount > 60) {
+      if (eventCount > 120) {
         logger.warn(`Rate limit exceeded on socket ${socket.id} (user: ${username}). Throttling excess packet.`);
         return; // Throttle excess packets cleanly without disconnecting the client socket
       }
