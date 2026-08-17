@@ -1323,7 +1323,7 @@ button {
 /* Messages area */
 .messages-container {
   flex: 1;
-  padding: 26px 30px 20px 30px;
+  padding: 26px 30px 28px 30px;
   overflow-y: auto;
   scrollbar-gutter: stable;
   min-height: 0;
@@ -1333,8 +1333,8 @@ button {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
   overflow-anchor: none;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 16px, black 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, black 16px, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%);
   animation: chatThreadFluidIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
@@ -4688,7 +4688,7 @@ textarea {
 
   /* 4. Mobile Messages List & Spacing */
   .messages-container {
-    padding: 12px 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px !important;
+    padding: 12px 10px calc(24px + env(safe-area-inset-bottom, 0px)) 10px !important;
   }
 
   .message-bubble {
