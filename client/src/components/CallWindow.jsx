@@ -420,7 +420,7 @@ export default function CallWindow({
           <div className="incoming-pill-info">
             <div className="incoming-pill-name">
               <span>{activeDisplayName}</span>
-              {isVerified && <ShieldCheck size={12} style={{ color: 'var(--success-color)', marginLeft: '3px' }} />}
+              {isVerified && <ShieldCheck size={14} style={{ color: 'var(--success-color)', marginLeft: '4px' }} />}
             </div>
             <div className="incoming-pill-type">
               {mediaType === 'video' ? 'Incoming Video Call...' : 'Incoming Voice Call...'}
@@ -429,10 +429,10 @@ export default function CallWindow({
 
           <div className="incoming-pill-actions">
             <button className="pill-btn accept" onClick={onAccept} title="Accept Call">
-              {mediaType === 'video' ? <Video size={16} /> : <Phone size={16} />}
+              {mediaType === 'video' ? <Video size={18} /> : <Phone size={18} />}
             </button>
             <button className="pill-btn decline" onClick={onDecline} title="Decline Call">
-              <PhoneOff size={16} />
+              <PhoneOff size={18} />
             </button>
           </div>
         </div>
@@ -718,17 +718,17 @@ export default function CallWindow({
                 {renderAvatar(activeUsername, activeDisplayName, activeAvatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '40px' })}
               </div>
               <div>
-                <h2 style={{ fontSize: '22px', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <h2 style={{ fontSize: '24px', marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                   {activeDisplayName}
-                  {isVerified && <ShieldCheck size={18} style={{ color: 'var(--accent-color)' }} />}
+                  {isVerified && <ShieldCheck size={20} style={{ color: 'var(--accent-color)' }} />}
                 </h2>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '0', marginBottom: '12px', fontFamily: 'monospace' }}>
+                <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', marginTop: '0', marginBottom: '14px', fontWeight: '400' }}>
                   @{activeUsername}
                 </p>
-                <p style={{ color: 'var(--success-color)', fontWeight: '500', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '14px' }}>
-                  <Volume2 size={16} /> Secure E2EE Connection
+                <p style={{ color: 'var(--success-color)', fontWeight: '500', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '15px' }}>
+                  <Volume2 size={18} /> Secure E2EE Connection
                 </p>
-                <div className="pip-duration-text" style={{ marginTop: '10px', fontSize: '15px', color: 'var(--text-muted)' }}>
+                <div className="pip-duration-text" style={{ marginTop: '12px', fontSize: '15.5px', color: 'var(--text-muted)' }}>
                   Duration: {formatDuration(callDuration)}
                 </div>
               </div>
@@ -741,50 +741,56 @@ export default function CallWindow({
                   className={`call-btn mute ${isMuted ? 'active' : ''}`} 
                   onClick={onToggleMute}
                   title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
+                  aria-label={isMuted ? "Unmute Microphone" : "Mute Microphone"}
                 >
-                  {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+                  {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
                 </button>
 
                 <button 
                   className={`call-btn mute ${isCameraOff ? 'active' : ''}`} 
                   onClick={onToggleCamera}
                   title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
+                  aria-label={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
                 >
-                  {isCameraOff ? <VideoOff size={24} /> : <Video size={24} />}
+                  {isCameraOff ? <VideoOff size={20} /> : <Video size={20} />}
                 </button>
 
-                <button 
-                  className={`call-btn mute ${isScreenSharing ? 'active' : ''}`} 
-                  onClick={onToggleScreenShare}
-                  title={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
-                >
-                  {isScreenSharing ? <MonitorOff size={24} /> : <Monitor size={24} />}
-                </button>
+                {!!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && (
+                  <button 
+                    className={`call-btn mute ${isScreenSharing ? 'active' : ''}`} 
+                    onClick={onToggleScreenShare}
+                    title={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
+                    aria-label={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
+                  >
+                    {isScreenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
+                  </button>
+                )}
 
                 {!isCallMinimized && (
                   <button 
                     className={`call-btn mute ${isFullscreen ? 'active' : ''}`} 
                     onClick={toggleBrowserFullscreen}
                     title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Mode"}
+                    aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen Mode"}
                   >
-                    {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
+                    {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
                   </button>
                 )}
 
                 {/* Hide PiP minimize button when in Browser Fullscreen mode to prevent UI conflict */}
                 {!isFullscreen && (
                   isCallMinimized ? (
-                    <button className="call-btn maximize" onClick={() => setIsCallMinimized(false)} title="Maximize Call">
-                      <Maximize2 size={24} />
+                    <button className="call-btn maximize" onClick={() => setIsCallMinimized(false)} title="Maximize Call" aria-label="Maximize Call">
+                      <Maximize2 size={20} />
                     </button>
                   ) : (
-                    <button className="call-btn minimize" onClick={() => setIsCallMinimized(true)} title="Minimize Call">
-                      <Minimize2 size={24} />
+                    <button className="call-btn minimize" onClick={() => setIsCallMinimized(true)} title="Minimize Call" aria-label="Minimize Call">
+                      <Minimize2 size={20} />
                     </button>
                   )
                 )}
-                <button className="call-btn decline" onClick={onHangUp} title="Hang up">
-                  <PhoneOff size={24} />
+                <button className="call-btn decline" onClick={onHangUp} title="Hang up" aria-label="Hang up">
+                  <PhoneOff size={20} />
                 </button>
               </div>
             </div>

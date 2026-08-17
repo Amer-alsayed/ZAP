@@ -202,11 +202,22 @@ export const initDb = async () => {
       )
     `);
 
+    // Create Blocked Users Table
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS blocked_users (
+        username TEXT NOT NULL,
+        blocked_username TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (username, blocked_username)
+      )
+    `);
+
     // Database indexes for high performance query resolution
     await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender, recipient)');
     await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_pending ON messages(recipient, delivered)');
     await dbRun('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
     await dbRun('CREATE INDEX IF NOT EXISTS idx_deleted_messages_user ON deleted_messages_user(username, message_id)');
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_blocked_users ON blocked_users(username, blocked_username)');
 
     logger.info('Database tables and performance indexes initialized successfully.');
   } catch (error) {

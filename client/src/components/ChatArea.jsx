@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Send, Shield, Phone, Video, Paperclip, Mic, X, Play, Pause, 
   FileText, Image, Video as VideoIcon, Download, AlertTriangle,
-  ArrowLeft, CornerUpLeft, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck, Trash2, Camera, Music, Check, Copy
+  ArrowLeft, CornerUpLeft, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck, Trash2, Camera, Music, Check, Copy, Ban, Unlock, Loader2,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { uploadEncryptedFile } from '../services/api';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
@@ -63,6 +65,312 @@ const formatSeparatorDate = (timestamp) => {
   }
 };
 
+// Group consecutive image/video media messages from the same sender into visual albums
+const groupMessagesWithAlbums = (rawMessages) => {
+  if (!rawMessages || !rawMessages.length) return [];
+  
+  const result = [];
+  let currentAlbum = [];
+
+  const flushAlbum = () => {
+    if (!currentAlbum.length) return;
+    if (currentAlbum.length === 1) {
+      result.push(currentAlbum[0]);
+    } else {
+      const first = currentAlbum[0];
+      const last = currentAlbum[currentAlbum.length - 1];
+      const allIds = currentAlbum.map(m => m.id);
+      const captionMsg = currentAlbum.find(m => m.text && m.text.trim());
+      
+      result.push({
+        ...first,
+        id: `album-${allIds.join('-')}`,
+        isAlbum: true,
+        albumItems: [...currentAlbum],
+        allIds,
+        timestamp: last.timestamp,
+        status: Math.min(...currentAlbum.map(m => m.status ?? 0)),
+        text: captionMsg ? captionMsg.text : null,
+        isNew: currentAlbum.some(m => m.isNew),
+        isDeleting: currentAlbum.some(m => m.isDeleting)
+      });
+    }
+    currentAlbum = [];
+  };
+
+  for (let i = 0; i < rawMessages.length; i++) {
+    const msg = rawMessages[i];
+    const isMedia = msg.mediaType === 'file' && msg.fileMetadata && (
+      msg.fileMetadata.mimeType?.startsWith('image/') ||
+      msg.fileMetadata.mimeType?.startsWith('video/')
+    );
+
+    if (isMedia) {
+      if (currentAlbum.length === 0) {
+        currentAlbum.push(msg);
+      } else {
+        const prev = currentAlbum[currentAlbum.length - 1];
+        const sameSender = prev.sender === msg.sender;
+        const timeDiff = Math.abs(new Date(msg.timestamp) - new Date(prev.timestamp));
+        const withinTime = isNaN(timeDiff) || timeDiff < 120000;
+        const noSeparateReply = !msg.replyTo || (prev.replyTo && msg.replyTo.id === prev.replyTo.id);
+
+        if (sameSender && withinTime && noSeparateReply) {
+          currentAlbum.push(msg);
+        } else {
+          flushAlbum();
+          currentAlbum.push(msg);
+        }
+      }
+    } else {
+      flushAlbum();
+      result.push(msg);
+    }
+  }
+
+  flushAlbum();
+  return result;
+};
+
+// Fullscreen Interactive Album Gallery Modal
+const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
+  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  const [isClosing, setIsClosing] = useState(false);
+  const currentItem = items[activeIndex];
+  const total = items.length;
+  const touchStartRef = useRef(null);
+
+  const handleClose = useCallback(() => {
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 220);
+  }, [onClose]);
+
+  const handlePrev = useCallback(() => {
+    setActiveIndex(prev => (prev > 0 ? prev - 1 : total - 1));
+  }, [total]);
+
+  const handleNext = useCallback(() => {
+    setActiveIndex(prev => (prev < total - 1 ? prev + 1 : 0));
+  }, [total]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') handleClose();
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'ArrowRight') handleNext();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleClose, handlePrev, handleNext]);
+
+  const file = currentItem?.fileMetadata;
+  const isImage = file?.mimeType?.startsWith('image/');
+  const isVideo = file?.mimeType?.startsWith('video/');
+
+  const handleDownloadCurrent = async () => {
+    if (!file) return;
+    try {
+      const blob = await loadOrFetchDecryptedMedia(file);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name || 'media';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return createPortal(
+    <div 
+      className={`album-gallery-modal-overlay ${isClosing ? 'is-closing' : ''}`}
+      onClick={handleClose}
+      onTouchStart={(e) => {
+        touchStartRef.current = e.touches[0].clientX;
+      }}
+      onTouchEnd={(e) => {
+        if (touchStartRef.current === null) return;
+        const deltaX = e.changedTouches[0].clientX - touchStartRef.current;
+        if (deltaX > 45) handlePrev();
+        else if (deltaX < -45) handleNext();
+        touchStartRef.current = null;
+      }}
+    >
+      {/* Top Navigation Bar */}
+      <div className="album-gallery-header" onClick={(e) => e.stopPropagation()}>
+        <div className="album-gallery-title-info">
+          <span className="album-gallery-counter">{activeIndex + 1} of {total}</span>
+          {file?.name && <span className="album-gallery-filename">{file.name}</span>}
+        </div>
+        <div className="album-gallery-actions">
+          <button 
+            className="gallery-action-btn" 
+            onClick={handleDownloadCurrent}
+            title="Download file"
+            aria-label="Download file"
+          >
+            <Download size={19} />
+          </button>
+          <button 
+            className="gallery-action-btn close-btn" 
+            onClick={handleClose}
+            title="Close viewer"
+            aria-label="Close viewer"
+          >
+            <X size={20} />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Full-Size Media Container */}
+      <div className="album-gallery-main" onClick={(e) => e.stopPropagation()}>
+        {total > 1 && (
+          <button 
+            className="gallery-nav-btn prev-btn" 
+            onClick={handlePrev}
+            title="Previous (Left Arrow)"
+            aria-label="Previous"
+          >
+            <ChevronLeft size={28} />
+          </button>
+        )}
+
+        <div className="album-gallery-stage">
+          {isImage ? (
+            <ImagePreviewLoader 
+              fileMetadata={file} 
+            />
+          ) : isVideo ? (
+            <VideoPreviewLoader fileMetadata={file} />
+          ) : null}
+          {currentItem?.text && (
+            <div className="gallery-caption-bar">
+              <p>{currentItem.text}</p>
+            </div>
+          )}
+        </div>
+
+        {total > 1 && (
+          <button 
+            className="gallery-nav-btn next-btn" 
+            onClick={handleNext}
+            title="Next (Right Arrow)"
+            aria-label="Next"
+          >
+            <ChevronRight size={28} />
+          </button>
+        )}
+      </div>
+
+      {/* Bottom Filmstrip Carousel */}
+      {total > 1 && (
+        <div className="album-gallery-filmstrip" onClick={(e) => e.stopPropagation()}>
+          <div className="filmstrip-track">
+            {items.map((item, idx) => {
+              const itemFile = item.fileMetadata;
+              const isActive = idx === activeIndex;
+              return (
+                <button
+                  key={item.id || idx}
+                  className={`filmstrip-thumb ${isActive ? 'active' : ''}`}
+                  onClick={() => setActiveIndex(idx)}
+                  title={`Photo ${idx + 1}`}
+                >
+                  <ImagePreviewLoader fileMetadata={itemFile} />
+                  {isActive && <div className="active-thumb-glow" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body
+  );
+};
+
+// WhatsApp-style Media Collage Grid with Fullscreen Gallery Modal Support
+const MediaAlbumGrid = React.memo(function MediaAlbumGrid({ albumItems, onImageClick, selectionMode, isLast, handleImageLoad }) {
+  const [galleryIndex, setGalleryIndex] = useState(null);
+  const total = albumItems.length;
+
+  const displayItems = albumItems.slice(0, 4);
+  const remainingCount = total - 3;
+
+  let gridClass = 'album-grid-4';
+  if (total === 2) gridClass = 'album-grid-2';
+  else if (total === 3) gridClass = 'album-grid-3';
+
+  return (
+    <>
+      <div className="media-album-wrapper">
+        <div className={`media-album-grid ${gridClass}`}>
+          {displayItems.map((item, idx) => {
+            const isFourthWithMore = idx === 3 && total > 4;
+            const file = item.fileMetadata;
+            const isImage = file?.mimeType?.startsWith('image/');
+            const isVideo = file?.mimeType?.startsWith('video/');
+
+            return (
+              <div 
+                key={item.id || idx} 
+                className={`album-grid-cell cell-${idx + 1}`}
+                onClick={(e) => {
+                  if (selectionMode) return;
+                  e.stopPropagation();
+                  setGalleryIndex(idx);
+                }}
+              >
+                {isImage ? (
+                  <ImagePreviewLoader 
+                    fileMetadata={file} 
+                    onImageClick={() => {
+                      if (!selectionMode) setGalleryIndex(idx);
+                    }}
+                    onImageLoad={isLast && idx === 0 ? handleImageLoad : undefined} 
+                  />
+                ) : isVideo ? (
+                  <VideoPreviewLoader fileMetadata={file} />
+                ) : null}
+
+                {isFourthWithMore && (
+                  <div 
+                    className="album-more-overlay"
+                    role="button"
+                    title={`View all ${total} media items in full screen`}
+                    onClick={(e) => {
+                      if (selectionMode) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setGalleryIndex(3);
+                    }}
+                  >
+                    <span className="album-more-text">+{remainingCount}</span>
+                    <span className="album-more-sub">See all {total}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {galleryIndex !== null && (
+        <AlbumGalleryModal 
+          items={albumItems} 
+          initialIndex={galleryIndex} 
+          onClose={() => setGalleryIndex(null)} 
+        />
+      )}
+    </>
+  );
+});
+
 // ==========================================
 // MessageList Component (Memoized for peak performance)
 // ==========================================
@@ -88,6 +396,8 @@ const MessageList = React.memo(({
   const [selectedIds, setSelectedIds] = useState([]);
   const [deletingIds, setDeletingIds] = useState([]);
   const selectionMode = selectedIds.length > 0;
+
+  const groupedMessages = useMemo(() => groupMessagesWithAlbums(messages), [messages]);
 
   const selectedMsgForCopy = selectedIds.length === 1 ? messages.find(m => m.id === selectedIds[0]) : null;
   const canCopySelected = Boolean(
@@ -131,12 +441,23 @@ const MessageList = React.memo(({
     return () => { if (selectionCancelRef) selectionCancelRef.current = null; };
   }, [selectionMode, selectedIds, selectedMsgForCopy, canCopySelected, onDeleteMessages, onSelectionModeChange, selectionCancelRef]);
 
-  const toggleSelected = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
-  const startLongPress = (id) => {
+  const toggleSelected = (msg) => {
+    const ids = msg.isAlbum ? msg.allIds : [msg.id];
+    setSelectedIds(prev => {
+      const allSelected = ids.every(id => prev.includes(id));
+      if (allSelected) {
+        return prev.filter(id => !ids.includes(id));
+      } else {
+        return [...prev, ...ids.filter(id => !prev.includes(id))];
+      }
+    });
+  };
+
+  const startLongPress = (msg) => {
     window.clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = window.setTimeout(() => {
       longPressTriggeredRef.current = true;
-      toggleSelected(id);
+      toggleSelected(msg);
       if (navigator.vibrate) navigator.vibrate(18);
     }, 480);
   };
@@ -151,9 +472,9 @@ const MessageList = React.memo(({
 
   return (
     <div className="message-list">
-      {messages && messages.map((msg, index) => {
+      {groupedMessages && groupedMessages.map((msg, index) => {
         const isSent = msg.sender === activeContactUsername ? false : true;
-        const showDateSeparator = shouldShowDateSeparator(messages, index);
+        const showDateSeparator = shouldShowDateSeparator(groupedMessages, index);
 
         // Render call logs as centered E2EE system logs rather than message bubbles
         if (msg.mediaType === 'call') {
@@ -236,12 +557,9 @@ const MessageList = React.memo(({
               </div>
             )}
             <div 
-              className={`message-row ${isSent ? 'sent' : 'received'} ${deletingIds.includes(msg.id) || msg.isDeleting ? 'is-deleting' : ''} ${msg.isCollapsing ? 'is-collapsing' : ''}`}
+              className={`message-row ${isSent ? 'sent' : 'received'} ${(msg.isAlbum ? msg.allIds.some(id => deletingIds.includes(id)) : deletingIds.includes(msg.id)) || msg.isDeleting ? 'is-deleting' : ''} ${msg.isCollapsing ? 'is-collapsing' : ''}`}
               onContextMenu={(e) => e.preventDefault()}
               onClickCapture={(e) => {
-                // Capture before media controls receive the click. This is
-                // essential on mobile where a long-press is followed by a
-                // synthetic click on the original image target.
                 if (longPressTriggeredRef.current) {
                   e.preventDefault();
                   e.stopPropagation();
@@ -251,12 +569,12 @@ const MessageList = React.memo(({
                 if (selectionMode) {
                   e.preventDefault();
                   e.stopPropagation();
-                  toggleSelected(msg.id);
+                  toggleSelected(msg);
                 }
               }}
               onMouseDown={(e) => {
                 if (e.button !== 0 || selectionMode) return;
-                startLongPress(msg.id);
+                startLongPress(msg);
               }}
               onMouseUp={cancelLongPress}
               onMouseLeave={cancelLongPress}
@@ -265,20 +583,17 @@ const MessageList = React.memo(({
                   e.preventDefault();
                   return;
                 }
-                startLongPress(msg.id);
-                // Only process touch drag gestures on true touch devices (coarse pointer)
+                startLongPress(msg);
                 if (window.matchMedia && !window.matchMedia('(pointer: coarse)').matches) return;
                 const touch = e.touches[0];
                 swipeStartRef.current = { x: touch.clientX, y: touch.clientY, msgId: msg.id };
-                // Wait for confirmed horizontal movement before updating
-                // swipe state, so a long press does not lock the view.
               }}
               onClick={() => {
                 if (longPressTriggeredRef.current) {
                   longPressTriggeredRef.current = false;
                   return;
                 }
-                if (selectionMode) toggleSelected(msg.id);
+                if (selectionMode) toggleSelected(msg);
               }}
               onTouchMove={(e) => {
                 if (selectionMode) return;
@@ -288,7 +603,6 @@ const MessageList = React.memo(({
                 const deltaX = touch.clientX - swipeStartRef.current.x;
                 const deltaY = touch.clientY - swipeStartRef.current.y;
 
-                // Only trigger horizontal right swipe if user is swiping right and not scrolling vertically
                 if (deltaX > 0 && Math.abs(deltaX) > Math.abs(deltaY)) {
                   const clampedOffset = Math.min(deltaX * 0.6, 75);
                   setSwipeState({ msgId: msg.id, offset: clampedOffset, isSwiping: true });
@@ -298,18 +612,18 @@ const MessageList = React.memo(({
                 if (selectionMode) return;
                 cancelLongPress();
                 if (swipeStartRef.current?.msgId === msg.id) {
-                  if (swipeState.offset >= 30) { // Extremely responsive 30px swipe threshold
+                  if (swipeState.offset >= 30) {
+                    const targetMsg = msg.isAlbum ? msg.albumItems[0] : msg;
                     setReplyingTo({
-                      id: msg.id,
-                      sender: msg.sender,
-                      text: msg.mediaType ? `[${msg.mediaType}]` : msg.text,
-                      mediaType: msg.mediaType || null,
-                      fileMetadata: msg.fileMetadata || null
+                      id: targetMsg.id,
+                      sender: targetMsg.sender,
+                      text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                      mediaType: targetMsg.mediaType || null,
+                      fileMetadata: targetMsg.fileMetadata || null
                     });
                     if (window.navigator && window.navigator.vibrate) {
                       try { window.navigator.vibrate(15); } catch (err) {}
                     }
-                    // Guarantee keyboard popup on repeated mobile drags
                     setTimeout(() => {
                       if (textareaRef.current) {
                         textareaRef.current.blur();
@@ -331,9 +645,9 @@ const MessageList = React.memo(({
             >
               <div 
                 id={`msg-${msg.id}`} 
-                ref={index === messages.length - 1 ? lastMessageRef : null}
+                ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
                 data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
-                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${selectedIds.includes(msg.id) ? 'is-selected' : ''} ${deletingIds.includes(msg.id) || msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
+                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
                 style={{
                   transform: swipeState.msgId === msg.id && swipeState.offset > 0 ? `translateX(${swipeState.offset}px)` : 'translateX(0px)',
                   transition: swipeState.msgId === msg.id && swipeState.isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
@@ -351,8 +665,8 @@ const MessageList = React.memo(({
                     <CornerUpLeft size={16} color="var(--accent-color)" />
                   </div>
                 )}
-                <div className="message-bubble">
-                  {selectedIds.includes(msg.id) && (
+                <div className={`message-bubble ${msg.isAlbum ? 'album-bubble' : ''}`}>
+                  {(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) && (
                     <div className="selection-indicator-badge" aria-hidden="true">
                       <Check size={12} strokeWidth={2.8} />
                     </div>
@@ -364,12 +678,13 @@ const MessageList = React.memo(({
                         title="Reply"
                         aria-label="Reply to message"
                         onClick={() => {
+                          const targetMsg = msg.isAlbum ? msg.albumItems[0] : msg;
                           setReplyingTo({
-                            id: msg.id,
-                            sender: msg.sender,
-                            text: msg.mediaType ? `[${msg.mediaType}]` : msg.text,
-                            mediaType: msg.mediaType || null,
-                            fileMetadata: msg.fileMetadata || null
+                            id: targetMsg.id,
+                            sender: targetMsg.sender,
+                            text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                            mediaType: targetMsg.mediaType || null,
+                            fileMetadata: targetMsg.fileMetadata || null
                           });
                           setTimeout(() => {
                             if (textareaRef.current) {
@@ -402,7 +717,7 @@ const MessageList = React.memo(({
                       </div>
                     </div>
                   )}
-                  {renderMessageContent(msg, index === messages.length - 1)}
+                  {renderMessageContent(msg, index === groupedMessages.length - 1)}
                 </div>
                 <div className="message-meta">
                   <span>
@@ -487,13 +802,37 @@ const ChatArea = React.memo(function ChatArea({
   const [swipeState, setSwipeState] = useState({ msgId: null, offset: 0, isSwiping: false });
   const swipeStartRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
+   const [recordingDuration, setRecordingDuration] = useState(0);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isClosingAttachMenu, setIsClosingAttachMenu] = useState(false);
   const attachMenuRef = useRef(null);
   const attachBtnRef = useRef(null);
+
+  const [isBannerDismissing, setIsBannerDismissing] = useState(false);
+  const [dismissedBannerUser, setDismissedBannerUser] = useState(null);
+
+  const handleSaveContactWithAnimation = (username) => {
+    if (isBannerDismissing) return;
+    setIsBannerDismissing(true);
+    setTimeout(() => {
+      saveContactToPermanentList?.(username);
+      setDismissedBannerUser(username);
+      setIsBannerDismissing(false);
+    }, 280);
+  };
+
+  const handleBlockContactWithAnimation = (username) => {
+    if (isBannerDismissing) return;
+    setIsBannerDismissing(true);
+    setTimeout(() => {
+      onBlockContact?.(username);
+      setDismissedBannerUser(username);
+      setIsBannerDismissing(false);
+    }, 280);
+  };
 
   const closeAttachMenu = () => {
     if (!showAttachMenu) return;
@@ -772,6 +1111,134 @@ const ChatArea = React.memo(function ChatArea({
   const messagesContainerRef = useRef(null);
   const messagesBounceWrapperRef = useRef(null);
 
+  // Hook for elastic overscroll bounce (rubber-banding) in chat messages
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    const wrapper = messagesBounceWrapperRef.current;
+    if (!container || !wrapper) return;
+
+    let startY = 0;
+    let isDragging = false;
+    
+    // Physics engine state variables
+    let position = 0;
+    let velocity = 0;
+    const tension = 0.08; // Stiffness of the spring
+    const damping = 0.48;  // Critically damped friction coefficient
+    let rafId = null;
+
+    // Reset translations
+    wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
+    wrapper.style.transition = 'none';
+
+    const updatePhysics = () => {
+      if (isDragging) return;
+
+      const force = -tension * position;
+      const friction = -damping * velocity;
+      const acceleration = force + friction;
+      
+      velocity += acceleration;
+      position += velocity;
+
+      const maxVisualOverscroll = 85;
+      if (Math.abs(position) > maxVisualOverscroll) {
+        position = Math.sign(position) * maxVisualOverscroll;
+        velocity = 0; 
+      }
+
+      wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
+
+      if (Math.abs(position) > 0.05 || Math.abs(velocity) > 0.05) {
+        rafId = requestAnimationFrame(updatePhysics);
+      } else {
+        position = 0;
+        velocity = 0;
+        wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
+        rafId = null;
+      }
+    };
+
+    const handleTouchStart = (e) => {
+      if (e.touches.length !== 1) return;
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      startY = e.touches[0].clientY;
+      isDragging = true;
+    };
+
+    const handleTouchMove = (e) => {
+      if (!isDragging) return;
+
+      const currentY = e.touches[0].clientY;
+      const deltaY = currentY - startY;
+
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+
+      const atTop = scrollTop <= 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
+
+      if (atTop && deltaY > 0) {
+        if (e.cancelable) e.preventDefault();
+        position = Math.sign(deltaY) * Math.pow(Math.abs(deltaY), 0.75);
+        wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
+      } else if (atBottom && deltaY < 0) {
+        if (e.cancelable) e.preventDefault();
+        position = Math.sign(deltaY) * Math.pow(Math.abs(deltaY), 0.75);
+        wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
+      } else {
+        startY = currentY;
+        position = 0;
+        wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      velocity = 0;
+      if (!rafId) {
+        rafId = requestAnimationFrame(updatePhysics);
+      }
+    };
+
+    const handleWheel = (e) => {
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+
+      const atTop = scrollTop <= 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
+
+      if ((atTop && e.deltaY < 0) || (atBottom && e.deltaY > 0)) {
+        if (e.cancelable) e.preventDefault();
+        velocity -= e.deltaY * 0.045;
+        if (!rafId) {
+          rafId = requestAnimationFrame(updatePhysics);
+        }
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [activeContact.username]);
+
   // Scroll to bottom synchronously on mount / active contact change (runs before paint)
   useLayoutEffect(() => {
     if (messagesContainerRef.current) {
@@ -1037,6 +1504,14 @@ const ChatArea = React.memo(function ChatArea({
         for (let idx = 0; idx < filesToUpload.length; idx++) {
           const fileToUpload = filesToUpload[idx];
           
+          setUploadProgress({
+            filename: fileToUpload.name,
+            current: idx + 1,
+            total: filesToUpload.length,
+            percent: 15,
+            status: 'Reading file data...'
+          });
+
           // 1. Read file as ArrayBuffer safely (supporting Android content URI files)
           let fileBuffer;
           try {
@@ -1056,6 +1531,14 @@ const ChatArea = React.memo(function ChatArea({
             throw new Error(`Device permissions blocked reading "${fileToUpload.name}". Please re-select the file.`);
           }
 
+          setUploadProgress({
+            filename: fileToUpload.name,
+            current: idx + 1,
+            total: filesToUpload.length,
+            percent: 42,
+            status: 'Encrypting (AES-256-GCM)...'
+          });
+
           // 2. Generate AES-GCM session key
           const fileSessionKey = await window.crypto.subtle.generateKey(
             { name: 'AES-GCM', length: 256 },
@@ -1071,11 +1554,27 @@ const ChatArea = React.memo(function ChatArea({
             fileBuffer
           );
 
+          setUploadProgress({
+            filename: fileToUpload.name,
+            current: idx + 1,
+            total: filesToUpload.length,
+            percent: 74,
+            status: 'Uploading encrypted payload...'
+          });
+
           // 4. Base64 convert
           const encryptedBase64 = bufferToBase64(encryptedFileBuffer);
 
           // 5. Upload encrypted file payload
           const { fileUrl } = await uploadEncryptedFile(fileToUpload.name, encryptedBase64, currentUserToken);
+
+          setUploadProgress({
+            filename: fileToUpload.name,
+            current: idx + 1,
+            total: filesToUpload.length,
+            percent: 95,
+            status: 'Finalizing E2EE message...'
+          });
 
           // Save local copy in IndexedDB
           setCachedMedia(fileUrl, fileToUpload, fileToUpload.type || 'application/octet-stream');
@@ -1106,6 +1605,7 @@ const ChatArea = React.memo(function ChatArea({
         console.error("Encryption/Upload failed:", err);
         alert(`Failed to send encrypted file: ${err.message || 'Unknown upload error'}`);
       } finally {
+        setUploadProgress(null);
         setUploading(false);
       }
     } else {
@@ -1385,6 +1885,13 @@ const ChatArea = React.memo(function ChatArea({
 
   const processAndSendVoiceNote = async (audioBlob) => {
     setUploading(true);
+    setUploadProgress({
+      filename: 'Voice Message',
+      current: 1,
+      total: 1,
+      percent: 25,
+      status: 'Encrypting voice note (AES-256)...'
+    });
     try {
       // 1. Read audio blob as ArrayBuffer
       const arrayBuffer = await audioBlob.arrayBuffer();
@@ -1404,12 +1911,28 @@ const ChatArea = React.memo(function ChatArea({
         arrayBuffer
       );
 
+      setUploadProgress({
+        filename: 'Voice Message',
+        current: 1,
+        total: 1,
+        percent: 68,
+        status: 'Uploading encrypted audio...'
+      });
+
       // 4. Convert encrypted audio to Base64
       const encryptedBase64 = bufferToBase64(encryptedAudioBuffer);
 
       // 5. Upload encrypted audio to server
       const extension = audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const { fileUrl } = await uploadEncryptedFile(`voice-note.${extension}`, encryptedBase64, currentUserToken);
+
+      setUploadProgress({
+        filename: 'Voice Message',
+        current: 1,
+        total: 1,
+        percent: 94,
+        status: 'Finalizing secure message...'
+      });
 
       // Save original voice blob in local IndexedDB so sender keeps voice note permanently
       setCachedMedia(fileUrl, audioBlob, audioBlob.type || 'audio/webm');
@@ -1445,6 +1968,7 @@ const ChatArea = React.memo(function ChatArea({
       console.error(err);
       alert('Failed to send encrypted voice note.');
     } finally {
+      setUploadProgress(null);
       setUploading(false);
     }
   };
@@ -1561,8 +2085,23 @@ const ChatArea = React.memo(function ChatArea({
     return `${mins}:${remainder.toString().padStart(2, '0')}`;
   };
 
-  // Render message bubble content based on 
+  // Render message bubble content based on message type
   const renderMessageContent = useCallback((msg, isLast) => {
+    if (msg.isAlbum) {
+      return (
+        <div className="media-container media-album-container">
+          <MediaAlbumGrid 
+            albumItems={msg.albumItems} 
+            onImageClick={onImageClick} 
+            selectionMode={selectionModeRef.current} 
+            isLast={isLast}
+            handleImageLoad={handleImageLoad}
+          />
+          {msg.text && <p className="media-caption">{msg.text}</p>}
+        </div>
+      );
+    }
+
     if (msg.mediaType === 'file') {
       const file = msg.fileMetadata;
       const isImage = file.mimeType.startsWith('image/');
@@ -1736,11 +2275,11 @@ const ChatArea = React.memo(function ChatArea({
               {selectionMode ? <X size={18} /> : <ArrowLeft size={18} />}
             </div>
           </button>
-          {renderAvatar(activeContact.username, activeContact.displayName, activeContact.avatarIcon)}
+          {renderAvatar(activeContact.username, activeContact.customName || activeContact.displayName, activeContact.avatarIcon)}
           <div className="chat-header-name">
             <h2 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {activeContact.displayName || activeContact.username}
+                {activeContact.customName || activeContact.displayName || activeContact.username}
               </span>
               {activeContact.isVerified && <ShieldCheck size={15} style={{ color: 'var(--accent-color)', flexShrink: 0 }} title="Verified Identity" />}
             </h2>
@@ -1779,7 +2318,7 @@ const ChatArea = React.memo(function ChatArea({
                 title="Secure Voice Call"
                 aria-label="Secure Voice Call"
               >
-                <Phone size={20} />
+                <Phone size={19} />
               </button>
               <button 
                 className="header-action-btn" 
@@ -1787,17 +2326,17 @@ const ChatArea = React.memo(function ChatArea({
                 title="Secure Video Call"
                 aria-label="Secure Video Call"
               >
-                <Video size={20} />
+                <Video size={19} />
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Unsaved Sender warning banner overlay */}
-      {activeContact.isSaved === false && (
-        <div className="unsaved-contact-banner glass">
-          <div className="banner-content">
+      {/* Unsaved contact warning banner with smooth pill animation */}
+      {activeContact?.isSaved === false && dismissedBannerUser !== activeContact.username && (
+        <div className={`unsaved-contact-banner glass ${isBannerDismissing ? 'dismissing' : ''}`}>
+          <div className="banner-info">
             <AlertTriangle size={15} className="warning-icon" />
             <span>
               <strong>@{activeContact.username}</strong> is not in your contacts.
@@ -1806,15 +2345,15 @@ const ChatArea = React.memo(function ChatArea({
           <div className="banner-actions">
             <button 
               className="banner-btn add-btn"
-              onClick={() => onSaveContact(activeContact.username)}
+              onClick={() => handleSaveContactWithAnimation(activeContact.username)}
             >
               Add Chat
             </button>
             <button 
               className="banner-btn block-btn"
-              onClick={() => onBlockContact(activeContact.username)}
+              onClick={() => handleBlockContactWithAnimation(activeContact.username)}
             >
-              Delete
+              Block
             </button>
           </div>
         </div>
@@ -1908,13 +2447,40 @@ const ChatArea = React.memo(function ChatArea({
         </div>
         
         {/* Attachment preview / uploading progress bar */}
-        <div className={`attachment-preview-bar ${(selectedFiles.length > 0 || uploading) ? 'glass visible' : ''}`}>
-          {uploading ? (
-            <div className="attachment-info" style={{ color: 'var(--accent-color)' }}>
-              <Shield size={18} className="shield-shimmer" />
-              <span>Encrypting & uploading {selectedFiles.length > 1 ? `${selectedFiles.length} attachments` : 'attachment'}...</span>
+        {/* Upload & Encryption Progress Floating Overlay */}
+        {uploadProgress && (
+          <div className="upload-progress-banner glass">
+            <div className="upload-progress-header">
+              <div className="upload-progress-icon-badge">
+                <Loader2 size={15} className="spinner-rotating" />
+              </div>
+              <div className="upload-progress-text">
+                <div className="upload-progress-title-row">
+                  <span className="upload-progress-title">{uploadProgress.filename}</span>
+                  {uploadProgress.total > 1 && (
+                    <span className="upload-progress-counter">
+                      ({uploadProgress.current}/{uploadProgress.total})
+                    </span>
+                  )}
+                </div>
+                <span className="upload-progress-status">{uploadProgress.status}</span>
+              </div>
+              <div className="upload-progress-percent-badge">
+                {uploadProgress.percent !== null ? `${Math.round(uploadProgress.percent)}%` : ''}
+              </div>
             </div>
-          ) : selectedFiles.length > 0 ? (
+            <div className="upload-progress-track">
+              <div 
+                className={`upload-progress-fill ${uploadProgress.percent === null ? 'indeterminate' : ''}`}
+                style={uploadProgress.percent !== null ? { width: `${Math.min(100, Math.max(8, uploadProgress.percent))}%` } : {}}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Attachment preview bar */}
+        <div className={`attachment-preview-bar ${selectedFiles.length > 0 ? 'glass visible' : ''}`}>
+          {selectedFiles.length > 0 && (
             <div className="multi-file-preview-container">
               {selectedFiles.map((file, idx) => (
                 <div key={`${file.name}-${idx}`} className="file-preview-pill">
@@ -1924,6 +2490,7 @@ const ChatArea = React.memo(function ChatArea({
                     className="remove-pill-btn" 
                     onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
                     title="Remove file"
+                    aria-label="Remove file"
                   >
                     <X size={12} />
                   </button>
@@ -1931,7 +2498,7 @@ const ChatArea = React.memo(function ChatArea({
               ))}
               <button className="clear-all-files-btn" onClick={() => setSelectedFiles([])}>Clear All</button>
             </div>
-          ) : null}
+          )}
         </div>
 
         {/* Input container */}
@@ -2013,7 +2580,7 @@ const ChatArea = React.memo(function ChatArea({
               onClick={() => showAttachMenu ? closeAttachMenu() : setShowAttachMenu(true)}
               title={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
               aria-label={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
-              disabled={isRecording}
+              disabled={isRecording || uploading}
             >
               <Plus size={20} strokeWidth={2.5} />
             </button>
@@ -2049,7 +2616,16 @@ const ChatArea = React.memo(function ChatArea({
             />
           )}
 
-          {isRecording ? (
+          {uploading ? (
+            <button 
+              className="send-message-btn uploading-active" 
+              disabled 
+              title="Encrypting & sending payload..."
+              aria-label="Encrypting & sending payload..."
+            >
+              <Loader2 size={18} className="spinner-rotating" />
+            </button>
+          ) : isRecording ? (
             <button 
               className="send-message-btn voice-send" 
               onClick={() => stopRecording(true)} 

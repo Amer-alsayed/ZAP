@@ -253,7 +253,7 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {showBackButton && (
             <button className="back-btn" onClick={onBack} title="Back" aria-label="Back to conversations" style={{ marginRight: '8px' }}>
-              <ArrowLeft size={18} />
+              <ArrowLeft size={20} />
             </button>
           )}
           <h1 className="recents-title">Recents</h1>
@@ -315,15 +315,15 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
                                 {log.contact?.displayName || log.contact?.username || 'Unknown'}
                               </span>
                               {log.contact?.isVerified && (
-                                <ShieldCheck size={13} style={{ color: 'var(--success-color)', flexShrink: 0 }} />
+                                <ShieldCheck size={16} style={{ color: 'var(--success-color)', flexShrink: 0 }} />
                               )}
                             </div>
                             
                             <div className="recents-subtitle-row">
                               {log.callType === 'video' ? (
-                                <Video size={12} className="recents-type-icon" />
+                                <Video size={14} className="recents-type-icon" />
                               ) : (
-                                <Phone size={12} className="recents-type-icon" />
+                                <Phone size={14} className="recents-type-icon" />
                               )}
                               <span className="recents-subtitle">
                                 {log.isSentByMe ? (
@@ -351,7 +351,7 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
                               title={`Call back ${log.callType}`}
                               onClick={() => onInitiateCall(log.callType, log.contact?.username)}
                             >
-                              {log.callType === 'video' ? <Video size={16} /> : <Phone size={16} />}
+                              {log.callType === 'video' ? <Video size={18} /> : <Phone size={18} />}
                             </button>
                           </div>
                         </div>

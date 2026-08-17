@@ -46,6 +46,10 @@ import {
   disconnectSocket, 
   emitSendMessage, 
   emitDeleteMessages,
+  emitDeleteChat,
+  emitBlockUser,
+  emitUnblockUser,
+  emitGetBlockedUsers,
   emitGetChatHistory, 
   emitGetContacts,
   emitMarkAsRead,
@@ -179,6 +183,27 @@ export default function App() {
   useEffect(() => {
     contactsRef.current = contacts;
   }, [contacts]);
+
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const blockedUsersRef = useRef([]);
+  useEffect(() => {
+    blockedUsersRef.current = blockedUsers;
+  }, [blockedUsers]);
+
+  // Load blocked users from server upon authentication
+  useEffect(() => {
+    if (currentUser) {
+      emitGetBlockedUsers()
+        .then(list => {
+          if (Array.isArray(list)) {
+            setBlockedUsers(list.map(u => u.toLowerCase()));
+          }
+        })
+        .catch(err => console.warn('Failed to load blocked users:', err));
+    } else {
+      setBlockedUsers([]);
+    }
+  }, [currentUser]);
 
   const [activeContact, setActiveContact] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -396,35 +421,41 @@ export default function App() {
     if (currentUser) {
       const stored = localStorage.getItem(`contacts_${currentUser.username}`);
       if (stored) {
-        const parsed = JSON.parse(stored);
-        
-        // Deduplicate loaded contacts by lowercase username (heals old corrupt data)
-        const uniqueContacts = [];
-        const seen = new Set();
-        for (const contact of parsed) {
-          const lowerName = contact.username.toLowerCase();
-          if (!seen.has(lowerName)) {
-            seen.add(lowerName);
-            uniqueContacts.push(contact);
+        try {
+          const parsed = JSON.parse(stored);
+          const blocked = blockedUsersRef.current;
+          
+          // Deduplicate loaded contacts by lowercase username and filter blocked users
+          const uniqueContacts = [];
+          const seen = new Set();
+          for (const contact of parsed) {
+            const lowerName = contact.username.toLowerCase();
+            if (!seen.has(lowerName) && !blocked.includes(lowerName)) {
+              seen.add(lowerName);
+              uniqueContacts.push(contact);
+            }
           }
-        }
 
-        // Reset online status on load
-        const sanitized = uniqueContacts.map(c => ({ ...c, status: 'offline', messages: c.messages || [] }));
-        setContacts(sanitized);
+          // Reset online status on load
+          const sanitized = uniqueContacts.map(c => ({ ...c, status: 'offline', messages: c.messages || [] }));
+          setContacts(sanitized);
+        } catch (e) {
+          console.warn('Failed to parse cached contacts:', e);
+        }
       }
     }
   }, [currentUser]);
 
   // Persist contacts when they change
   useEffect(() => {
-    if (currentUser && contacts.length > 0) {
-      // Deduplicate before saving to localStorage
+    if (currentUser) {
+      const blocked = blockedUsersRef.current;
+      // Deduplicate and filter blocked contacts before saving to localStorage
       const uniqueContacts = [];
       const seen = new Set();
       for (const contact of contacts) {
         const lowerName = contact.username.toLowerCase();
-        if (!seen.has(lowerName)) {
+        if (!seen.has(lowerName) && !blocked.includes(lowerName)) {
           seen.add(lowerName);
           uniqueContacts.push(contact);
         }
@@ -669,15 +700,33 @@ export default function App() {
     const handleConnect = async () => {
       setIsSocketConnected(true);
 
-      // Auto-load all contacts from server (cross-device sync)
+      // Auto-load blocked users list from server upon connection
+      let currentBlocked = [];
+      try {
+        const blockedList = await emitGetBlockedUsers();
+        if (Array.isArray(blockedList)) {
+          currentBlocked = blockedList.map(u => u.toLowerCase());
+          setBlockedUsers(currentBlocked);
+        }
+      } catch (e) {
+        console.warn('Failed to load blocked users on connect:', e);
+      }
+
+      // Auto-load all contacts from server (cross-device sync), strictly excluding blocked users
       let freshServerContacts = [];
       try {
         freshServerContacts = await emitGetContacts();
         if (freshServerContacts && freshServerContacts.length > 0) {
+          freshServerContacts = freshServerContacts.filter(sc => !currentBlocked.includes(sc.username.toLowerCase()));
           setContacts(prev => {
-            const existing = new Map(prev.map(c => [c.username.toLowerCase(), c]));
+            const existing = new Map(
+              prev
+                .filter(c => !currentBlocked.includes(c.username.toLowerCase()))
+                .map(c => [c.username.toLowerCase(), c])
+            );
             for (const sc of freshServerContacts) {
               const key = sc.username.toLowerCase();
+              if (currentBlocked.includes(key)) continue;
               if (!existing.has(key)) {
                 existing.set(key, {
                   username: sc.username,
@@ -708,8 +757,9 @@ export default function App() {
         console.warn('Failed to load contacts from server:', e);
       }
 
-      // Refresh status & profile for each contact
-      const allContacts = freshServerContacts.length > 0 ? freshServerContacts : contactsRef.current;
+      // Refresh status & profile for each non-blocked contact
+      const allContacts = (freshServerContacts.length > 0 ? freshServerContacts : contactsRef.current)
+        .filter(c => !currentBlocked.includes(c.username.toLowerCase()));
       allContacts.forEach(async (c) => {
         try {
           const res = await emitGetUserStatus(c.username);
@@ -719,8 +769,7 @@ export default function App() {
         }
       });
 
-      // Sync full message history for all contacts (populates sidebar previews)
-      // Use the fresh server list first for brand-new contacts, then existing
+      // Sync full message history for all non-blocked contacts (populates sidebar previews)
       const existingUsernames = new Set(contactsRef.current.map(c => c.username.toLowerCase()));
       const newContacts = freshServerContacts.filter(sc => !existingUsernames.has(sc.username.toLowerCase()));
       // Sync new contacts immediately with their fetched profile data
@@ -743,6 +792,10 @@ export default function App() {
     // Subscribe to incoming E2EE messages
     const handleIncomingMessage = async (msg) => {
       try {
+        if (!msg || !msg.sender) return;
+        if (blockedUsersRef.current.includes(msg.sender.toLowerCase())) {
+          return; // Strictly ignore incoming messages from blocked users
+        }
         if (processAndAppendMessageRef.current) {
           await processAndAppendMessageRef.current(msg, false);
           soundEngine.playMessageReceived();
@@ -755,6 +808,9 @@ export default function App() {
 
     // Subscribe to online status changes
     const handleStatusChange = ({ username, status }) => {
+      if (blockedUsersRef.current.includes(username.toLowerCase())) {
+        return;
+      }
       if (status === 'online') {
         soundEngine.playUserOnline();
       }
@@ -764,12 +820,18 @@ export default function App() {
 
     // Subscribe to realtime profile updates
     const handleProfileUpdate = ({ username, displayName, avatarIcon }) => {
+      if (blockedUsersRef.current.includes(username.toLowerCase())) {
+        return;
+      }
       updateContactProfileAndStatus(username, undefined, displayName, avatarIcon);
     };
     subscribeToProfileUpdates(handleProfileUpdate);
 
     // Subscribe to typing indicators
     socket.on('user-typing', ({ username, isTyping }) => {
+      if (blockedUsersRef.current.includes(username.toLowerCase())) {
+        return;
+      }
       setContacts(prev => prev.map(c => 
         c.username.toLowerCase() === username.toLowerCase() ? { ...c, isTyping } : c
       ));
@@ -1029,6 +1091,11 @@ export default function App() {
   const handleSendMessage = async (msgContent) => {
     if (!activeContact || !currentUser) return;
     const recipient = activeContact.username;
+
+    if (blockedUsersRef.current.includes(recipient.toLowerCase())) {
+      alert(`You have blocked @${recipient}. Unblock them to send messages.`);
+      return;
+    }
 
     try {
       // 1. Get E2EE Symmetric shared key
@@ -1476,6 +1543,39 @@ export default function App() {
     }
   };
 
+  const isNavigatingBackRef = useRef(false);
+
+  const handleBackToMenu = (isFromPopState = false) => {
+    if (isNavigatingBackRef.current) return;
+    isNavigatingBackRef.current = true;
+
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+
+    if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings' || window.history.state === 'recents')) {
+      window.history.back();
+    }
+
+    // Context-aware back navigation: Return directly to active chat if Settings/Recents was opened from a chat
+    if (previousActiveContactRef.current && (showSettingsRef.current || showRecentsRef.current)) {
+      const prevContact = previousActiveContactRef.current;
+      previousActiveContactRef.current = null;
+      isNavigatingBackRef.current = false;
+      handleSelectContact(prevContact);
+      return;
+    }
+
+    setIsNavigatingBack(true);
+    setTimeout(() => {
+      setActiveContact(null);
+      setShowSettings(false);
+      setShowRecents(false);
+      setIsNavigatingBack(false);
+      isNavigatingBackRef.current = false;
+    }, 300); // Smooth 300ms slide-back transition
+  };
+
   // Helper: Save contact (removes unsaved warning banner)
   const handleSaveContact = (username) => {
     setContacts(prev => prev.map(c => 
@@ -1486,18 +1586,84 @@ export default function App() {
     }
   };
 
-  // Helper: Block/Delete contact
-  const handleBlockContact = (username) => {
-    if (window.confirm(`Delete conversation and remove @${username}?`)) {
-      if (username) {
-        delete sharedSecrets.current[username.toLowerCase()];
-      }
-      setContacts(prev => prev.filter(c => c.username.toLowerCase() !== username.toLowerCase()));
-      if (activeContactRef.current?.username.toLowerCase() === username.toLowerCase()) {
-        setActiveContact(null);
-      }
+  // Helper: Delete entire conversation / chat
+  const handleDeleteChat = useCallback(async (username) => {
+    if (!username) return;
+    const lower = username.toLowerCase();
+    delete sharedSecrets.current[lower];
+    setContacts(prev => prev.filter(c => c.username.toLowerCase() !== lower));
+    if (activeContactRef.current?.username.toLowerCase() === lower) {
+      handleBackToMenu();
     }
-  };
+    try {
+      await emitDeleteChat(username);
+    } catch (err) {
+      console.warn('Failed to delete chat remotely:', err);
+    }
+  }, []);
+
+  // Helper: Block contact and delete chat
+  const handleBlockContact = useCallback(async (username) => {
+    if (!username) return;
+    const lower = username.toLowerCase();
+    delete sharedSecrets.current[lower];
+    setBlockedUsers(prev => prev.includes(lower) ? prev : [...prev, lower]);
+    setContacts(prev => {
+      const filtered = prev.filter(c => c.username.toLowerCase() !== lower);
+      const curUser = localStorage.getItem('chatra_username');
+      if (curUser) {
+        localStorage.setItem(`contacts_${curUser}`, JSON.stringify(filtered));
+      }
+      return filtered;
+    });
+    if (activeContactRef.current?.username.toLowerCase() === lower) {
+      handleBackToMenu();
+    }
+    try {
+      await emitBlockUser(username);
+      await emitDeleteChat(username);
+    } catch (err) {
+      console.warn('Failed to block contact remotely:', err);
+    }
+  }, []);
+
+  // Helper: Unblock contact
+  const handleUnblockContact = useCallback(async (username) => {
+    if (!username) return;
+    const lower = username.toLowerCase();
+    setBlockedUsers(prev => prev.filter(u => u !== lower));
+    try {
+      await emitUnblockUser(username);
+    } catch (err) {
+      console.warn('Failed to unblock contact remotely:', err);
+      alert(`Failed to unblock @${username}: ${err.message || 'Error'}`);
+    }
+  }, []);
+
+  // Helper: Rename contact locally (custom nickname)
+  const handleRenameContact = useCallback((username, newCustomName) => {
+    if (!username) return;
+    const lower = username.toLowerCase();
+    const cleanName = newCustomName && newCustomName.trim() ? newCustomName.trim() : null;
+
+    setContacts(prev => {
+      const updated = prev.map(c => {
+        if (c.username.toLowerCase() === lower) {
+          return { ...c, customName: cleanName };
+        }
+        return c;
+      });
+      const curUser = localStorage.getItem('chatra_username');
+      if (curUser) {
+        localStorage.setItem(`contacts_${curUser}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    if (activeContactRef.current?.username.toLowerCase() === lower) {
+      setActiveContact(prev => prev ? { ...prev, customName: cleanName } : null);
+    }
+  }, []);
 
   // ==========================================
   // WebRTC P2P Voice & Video Call Logic
@@ -2434,39 +2600,6 @@ export default function App() {
     }
   };
 
-  const isNavigatingBackRef = useRef(false);
-
-  const handleBackToMenu = (isFromPopState = false) => {
-    if (isNavigatingBackRef.current) return;
-    isNavigatingBackRef.current = true;
-
-    if (document.activeElement && typeof document.activeElement.blur === 'function') {
-      document.activeElement.blur();
-    }
-
-    if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings' || window.history.state === 'recents')) {
-      window.history.back();
-    }
-
-    // Context-aware back navigation: Return directly to active chat if Settings/Recents was opened from a chat
-    if (previousActiveContactRef.current && (showSettingsRef.current || showRecentsRef.current)) {
-      const prevContact = previousActiveContactRef.current;
-      previousActiveContactRef.current = null;
-      isNavigatingBackRef.current = false;
-      handleSelectContact(prevContact);
-      return;
-    }
-
-    setIsNavigatingBack(true);
-    setTimeout(() => {
-      setActiveContact(null);
-      setShowSettings(false);
-      setShowRecents(false);
-      setIsNavigatingBack(false);
-      isNavigatingBackRef.current = false;
-    }, 300); // Smooth 300ms slide-back transition
-  };
-
   return (
     <>
       {restoringSession ? (
@@ -2515,142 +2648,149 @@ export default function App() {
                 activeContact={activeContact}
                 setActiveContact={handleSelectContact}
                 addContact={handleAddContact}
+                onRenameContact={handleRenameContact}
+                onDeleteChat={handleDeleteChat}
+                onBlockChat={handleBlockContact}
+                onUnblockContact={handleUnblockContact}
+                blockedUsers={blockedUsers}
                 onLogout={handleLogout}
                 isMinimized={isAppMinimized}
                 onToggleMinimize={handleToggleSidebar}
                 showSettings={showSettings}
                 showRecents={showRecents}
                 isNavigatingBack={isNavigatingBack}
-            onShowSettings={() => {
-              if (window.history.state !== 'settings') {
-                window.history.pushState('settings', '');
-              }
-              if (activeContactRef.current) {
-                previousActiveContactRef.current = activeContactRef.current;
-              }
-              setShowRecents(false);
-              setShowSettings(true);
-              // Unmount ChatArea quietly underneath after SettingsView has faded in on top
-              if (activeContactRef.current) {
-                setTimeout(() => setActiveContact(null), 300);
-              }
-            }}
-            onShowRecents={() => {
-              if (window.history.state !== 'recents') {
-                window.history.pushState('recents', '');
-              }
-              if (activeContactRef.current) {
-                previousActiveContactRef.current = activeContactRef.current;
-              }
-              setShowSettings(false);
-              setShowRecents(true);
-              if (activeContactRef.current) {
-                setTimeout(() => setActiveContact(null), 300);
-              }
-            }}
-          />
-          <div className="main-content-pane">
-            <Dashboard
-              currentUser={currentUser}
-              contacts={contacts}
-              onInitiateCall={handleInitiateCall}
-              onSelectContact={handleSelectContact}
-              onShowSettings={() => {
-                if (window.history.state !== 'settings') {
-                  window.history.pushState('settings', '');
-                }
-                if (activeContactRef.current) {
-                  previousActiveContactRef.current = activeContactRef.current;
-                }
-                setShowRecents(false);
-                setShowSettings(true);
-                if (activeContactRef.current) {
-                  setTimeout(() => setActiveContact(null), 300);
-                }
-              }}
-              onBack={handleBackToMenu}
-              showBackButton={showRecents}
-            />
-
-            {(showSettings || (isNavigatingBack && !activeContact && !showRecents)) && (
-              <SettingsView
-                currentUser={currentUser}
-                onBack={handleBackToMenu}
-                onLogout={handleLogout}
-                isNavigatingBack={isNavigatingBack}
-                onProfileUpdate={(newProfile) => {
-                  setCurrentUser(prev => prev ? { ...prev, ...newProfile } : null);
-                  // Apply updated call quality parameters dynamically if in an active call
-                  if (peerConnectionRef.current && callState === 'connected') {
-                    try {
-                      const senders = peerConnectionRef.current.getSenders();
-                      senders.forEach(sender => {
-                        if (sender && sender.track && sender.track.kind === 'video') {
-                          optimizeSenderParameters(sender, isScreenSharingRef.current);
-                        }
-                      });
-                    } catch (e) {
-                      console.warn("Failed to apply updated quality parameters live:", e);
-                    }
+                onShowSettings={() => {
+                  if (window.history.state !== 'settings') {
+                    window.history.pushState('settings', '');
+                  }
+                  if (activeContactRef.current) {
+                    previousActiveContactRef.current = activeContactRef.current;
+                  }
+                  setShowRecents(false);
+                  setShowSettings(true);
+                  if (activeContactRef.current) {
+                    setTimeout(() => setActiveContact(null), 300);
+                  }
+                }}
+                onShowRecents={() => {
+                  if (window.history.state !== 'recents') {
+                    window.history.pushState('recents', '');
+                  }
+                  if (activeContactRef.current) {
+                    previousActiveContactRef.current = activeContactRef.current;
+                  }
+                  setShowSettings(false);
+                  setShowRecents(true);
+                  if (activeContactRef.current) {
+                    setTimeout(() => setActiveContact(null), 300);
                   }
                 }}
               />
-            )}
+              <div className="main-content-pane">
+                <Dashboard
+                  currentUser={currentUser}
+                  contacts={contacts}
+                  onInitiateCall={handleInitiateCall}
+                  onSelectContact={handleSelectContact}
+                  onShowSettings={() => {
+                    if (window.history.state !== 'settings') {
+                      window.history.pushState('settings', '');
+                    }
+                    if (activeContactRef.current) {
+                      previousActiveContactRef.current = activeContactRef.current;
+                    }
+                    setShowRecents(false);
+                    setShowSettings(true);
+                    if (activeContactRef.current) {
+                      setTimeout(() => setActiveContact(null), 300);
+                    }
+                  }}
+                  onBack={handleBackToMenu}
+                  showBackButton={showRecents}
+                />
 
-            {(activeContact || (isNavigatingBack && activeContact)) && (
-              <ChatArea
-                currentUser={currentUser}
-                activeContact={activeContact}
-                onSendMessage={handleSendMessage}
-                onInitiateCall={handleInitiateCall}
-                currentUserToken={currentUser.token}
-                sharedSecret={sharedSecrets.current[activeContact?.username.toLowerCase()]}
-                onBack={handleBackToMenu}
-                isNavigatingBack={isNavigatingBack}
-                markMessageAsReadLocal={markMessageAsReadLocal}
-                markAllMessagesAsReadLocal={markAllMessagesAsReadLocal}
-                onImageClick={handleOpenLightbox}
-                onVerifyContact={handleVerifyContact}
-                onSaveContact={handleSaveContact}
-                onBlockContact={handleBlockContact}
-                onDeleteMessages={deleteMessagesLocal}
-                selectionCancelCallbackRef={selectionBackRef}
-                onOpenSafetyModal={handleOpenSafetyModal}
-                replyingTo={replyingTo}
-                setReplyingTo={setReplyingTo}
+                {(showSettings || (isNavigatingBack && !activeContact && !showRecents)) && (
+                  <SettingsView
+                    currentUser={currentUser}
+                    onBack={handleBackToMenu}
+                    onLogout={handleLogout}
+                    blockedUsers={blockedUsers}
+                    onUnblockUser={handleUnblockContact}
+                    isNavigatingBack={isNavigatingBack}
+                    onProfileUpdate={(newProfile) => {
+                      setCurrentUser(prev => prev ? { ...prev, ...newProfile } : null);
+                      if (peerConnectionRef.current && callState === 'connected') {
+                        try {
+                          const senders = peerConnectionRef.current.getSenders();
+                          senders.forEach(sender => {
+                            if (sender && sender.track && sender.track.kind === 'video') {
+                              optimizeSenderParameters(sender, isScreenSharingRef.current);
+                            }
+                          });
+                        } catch (e) {
+                          console.warn("Failed to apply updated quality parameters live:", e);
+                        }
+                      }
+                    }}
+                  />
+                )}
+
+                {(activeContact || (isNavigatingBack && activeContact)) && (
+                  <ChatArea
+                    currentUser={currentUser}
+                    activeContact={activeContact}
+                    isBlocked={activeContact && blockedUsers.includes(activeContact.username.toLowerCase())}
+                    onUnblockContact={handleUnblockContact}
+                    onSendMessage={handleSendMessage}
+                    onInitiateCall={handleInitiateCall}
+                    currentUserToken={currentUser.token}
+                    sharedSecret={sharedSecrets.current[activeContact?.username.toLowerCase()]}
+                    onBack={handleBackToMenu}
+                    isNavigatingBack={isNavigatingBack}
+                    markMessageAsReadLocal={markMessageAsReadLocal}
+                    markAllMessagesAsReadLocal={markAllMessagesAsReadLocal}
+                    onImageClick={handleOpenLightbox}
+                    onVerifyContact={handleVerifyContact}
+                    onSaveContact={handleSaveContact}
+                    onBlockContact={handleBlockContact}
+                    onDeleteMessages={deleteMessagesLocal}
+                    selectionCancelCallbackRef={selectionBackRef}
+                    onOpenSafetyModal={handleOpenSafetyModal}
+                    replyingTo={replyingTo}
+                    setReplyingTo={setReplyingTo}
+                  />
+                )}
+              </div>
+
+              {/* WebRTC P2P calling panel overlays */}
+              <CallWindow
+                callState={callState}
+                mediaType={
+                  callState === 'connected'
+                    ? ((!isCameraOff || isScreenSharing || !remoteCameraOff || remoteScreenSharing) ? 'video' : 'voice')
+                    : callMediaType
+                }
+                callerName={callParty}
+                callContact={contacts.find(c => c.username.toLowerCase() === callParty?.toLowerCase()) || { username: callParty }}
+                localStream={localStream}
+                remoteStream={remoteStream}
+                onAccept={handleAcceptCall}
+                onDecline={handleDeclineCall}
+                onHangUp={handleHangUp}
+                isMuted={isMuted}
+                isCameraOff={isCameraOff}
+                isScreenSharing={isScreenSharing}
+                remoteScreenSharing={remoteScreenSharing}
+                remoteCameraOff={remoteCameraOff}
+                remoteMuted={remoteMuted}
+                onToggleMute={handleToggleMute}
+                onToggleCamera={handleToggleCamera}
+                onToggleScreenShare={handleToggleScreenShare}
+                onSwitchCamera={handleSwitchCamera}
+                cameraFacingMode={cameraFacingMode}
+                isCallMinimized={isCallMinimized}
+                setIsCallMinimized={setIsCallMinimized}
               />
-            )}
-          </div>
-
-          {/* WebRTC P2P calling panel overlays */}
-          <CallWindow
-            callState={callState}
-            mediaType={
-              callState === 'connected'
-                ? ((!isCameraOff || isScreenSharing || !remoteCameraOff || remoteScreenSharing) ? 'video' : 'voice')
-                : callMediaType
-            }
-            callerName={callParty}
-            callContact={contacts.find(c => c.username.toLowerCase() === callParty?.toLowerCase()) || { username: callParty }}
-            localStream={localStream}
-            remoteStream={remoteStream}
-            onAccept={handleAcceptCall}
-            onDecline={handleDeclineCall}
-            onHangUp={handleHangUp}
-            isMuted={isMuted}
-            isCameraOff={isCameraOff}
-            isScreenSharing={isScreenSharing}
-            remoteScreenSharing={remoteScreenSharing}
-            remoteCameraOff={remoteCameraOff}
-            remoteMuted={remoteMuted}
-            onToggleMute={handleToggleMute}
-            onToggleCamera={handleToggleCamera}
-            onToggleScreenShare={handleToggleScreenShare}
-            onSwitchCamera={handleSwitchCamera}
-            cameraFacingMode={cameraFacingMode}
-            isCallMinimized={isCallMinimized}
-            setIsCallMinimized={setIsCallMinimized}
-          />
 
           {/* Fullscreen Image Lightbox Modal */}
           <div 

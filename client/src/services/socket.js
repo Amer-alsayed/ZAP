@@ -118,6 +118,18 @@ export const emitSendMessage = (recipient, ciphertext, iv, signature) => {
 export const emitDeleteMessages = (messageIds) =>
   emitWithTimeout('delete-messages', { messageIds });
 
+export const emitDeleteChat = (withUser) =>
+  emitWithTimeout('delete-chat', { withUser });
+
+export const emitBlockUser = (targetUsername) =>
+  emitWithTimeout('block-user', { targetUsername });
+
+export const emitUnblockUser = (targetUsername) =>
+  emitWithTimeout('unblock-user', { targetUsername });
+
+export const emitGetBlockedUsers = () =>
+  emitWithTimeout('get-blocked-users', {}).then(res => res.blockedUsers || []);
+
 /**
  * Fetch chat history with a specific user.
  */

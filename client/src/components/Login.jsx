@@ -177,14 +177,14 @@ export default function Login({ onAuthSuccess }) {
     <div className="auth-wrapper">
       <div className={`auth-card glass ${isFocused ? 'inputs-focused' : ''}`}>
         <div className="auth-logo">
-          <Shield size={44} strokeWidth={1.5} />
+          <Shield size={50} strokeWidth={1.5} />
           <h1>Chatra</h1>
           <p>Anonymous End-to-End Encrypted Chat</p>
         </div>
 
         <div className={`auth-error-container ${error ? 'visible' : ''}`}>
           <div className="auth-error">
-            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <AlertTriangle size={18} style={{ flexShrink: 0 }} />
             <span>{error}</span>
           </div>
         </div>
@@ -193,7 +193,7 @@ export default function Login({ onAuthSuccess }) {
           <div className="form-group">
             <label htmlFor="username">Username</label>
             <div className="input-container">
-              <User size={18} />
+              <User size={20} />
               <input
                 id="username"
                 type="text"
@@ -212,7 +212,7 @@ export default function Login({ onAuthSuccess }) {
           <div className="form-group">
             <label htmlFor="password">Password</label>
             <div className="input-container">
-              <Lock size={18} />
+              <Lock size={20} />
               <input
                 id="password"
                 type="password"

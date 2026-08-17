@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, User, Check, ShieldAlert, CheckCircle, LogOut, Camera, ChevronDown, ChevronUp, Play, Volume2 } from 'lucide-react';
+import { ArrowLeft, User, Check, ShieldAlert, CheckCircle, LogOut, Camera, ChevronDown, ChevronUp, Play, Volume2, Ban, Unlock } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 import { emitUpdateProfile } from '../services/socket';
 import { soundEngine } from '../services/soundEffects';
 
-export default function SettingsView({ currentUser, onBack, onLogout, isNavigatingBack, onProfileUpdate }) {
+export default function SettingsView({ currentUser, onBack, onLogout, isNavigatingBack, onProfileUpdate, blockedUsers = [], onUnblockUser }) {
   const settingsContainerRef = useRef(null);
   const settingsBounceWrapperRef = useRef(null);
   const getInitialAvatar = () => {
@@ -354,7 +354,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
       <div className="settings-header">
         <div className="chat-header-info">
           <button className="back-btn" onClick={onBack} title="Back">
-            <ArrowLeft size={18} />
+            <ArrowLeft size={20} />
           </button>
           <div className="chat-header-name">
             <h2>Settings</h2>
@@ -376,7 +376,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                 currentUser.username,
                 displayName.trim() || currentUser.username,
                 previewAvatarIcon,
-                { width: '72px', height: '72px', borderRadius: '50%', fontSize: '32px' }
+                { width: '80px', height: '80px', borderRadius: '50%', fontSize: '34px' }
               )}
             </div>
             <div className="preview-info">
@@ -389,7 +389,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                   className="settings-action-link" 
                   onClick={() => fileInputRef.current.click()}
                 >
-                  <Camera size={13} style={{ marginRight: '4px' }} />
+                  <Camera size={15} style={{ marginRight: '6px' }} />
                   Upload Photo
                 </button>
                 {selectedImage && (
@@ -420,7 +420,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
             <div className="form-group">
               <label>Display Name</label>
               <div className="input-with-icon">
-                <User size={16} className="input-icon" />
+                <User size={18} className="input-icon" />
                 <input
                   type="text"
                   placeholder="Set display name..."
@@ -761,6 +761,43 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
               </div>
             </div>
 
+            {/* Blocked Contacts Management */}
+            <div className="settings-section">
+              <h4>Blocked Contacts</h4>
+              <p className="section-description">
+                Manage accounts you have blocked. Blocked users cannot send messages or place calls to you.
+              </p>
+              
+              <div className="blocked-contacts-list">
+                {(!blockedUsers || blockedUsers.length === 0) ? (
+                  <div className="empty-blocked-state">
+                    <Ban size={16} style={{ color: 'var(--text-muted)' }} />
+                    <span>No blocked contacts</span>
+                  </div>
+                ) : (
+                  blockedUsers.map(username => (
+                    <div key={username} className="blocked-contact-item">
+                      <div className="blocked-contact-info">
+                        {renderAvatar(username, null, null, { width: '34px', height: '34px', fontSize: '13px' })}
+                        <div className="blocked-contact-text">
+                          <span className="blocked-contact-name">@{username}</span>
+                          <span className="blocked-contact-status">Blocked</span>
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        className="unblock-action-btn"
+                        onClick={() => onUnblockUser?.(username)}
+                        title={`Unblock @${username}`}
+                      >
+                        <Unlock size={14} /> Unblock
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
             {/* Form feedback indicators */}
             {error && (
               <div className="settings-feedback error-feedback">
@@ -790,7 +827,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
           {/* Secure Logout Section */}
           <div className="settings-danger-zone">
             <button className="settings-logout-btn" onClick={onLogout}>
-              <LogOut size={16} />
+              <LogOut size={18} />
               Sign Out Securely
             </button>
           </div>

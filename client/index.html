@@ -9,6 +9,9 @@
   <meta name="description"
     content="Chatra is a completely anonymous, secure, and end-to-end encrypted real-time chat application supporting text, calling, and file sharing." />
   <title>Chatra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --accent-rgb: 0, 122, 204;
@@ -37,6 +40,8 @@
       position: fixed;
       left: 0;
       top: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     .app-preloader {
@@ -48,7 +53,9 @@
       height: 100vh;
       background: radial-gradient(circle at 70% 30%, #0e0e0e 0%, #000000 100%);
       color: #cccccc;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       position: fixed;
       top: 0;
       left: 0;

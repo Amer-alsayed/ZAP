@@ -57,6 +57,33 @@ const removeUserSocket = (username, socketId) => {
   return false;
 };
 
+// Helper: Broadcast user status to others, strictly excluding any blocked relations
+const broadcastUserStatus = async (io, username, status) => {
+  try {
+    const blockedRows = await dbAll(
+      'SELECT username, blocked_username FROM blocked_users WHERE LOWER(username) = LOWER(?) OR LOWER(blocked_username) = LOWER(?)',
+      [username, username]
+    );
+    const blockedSet = new Set();
+    for (const row of blockedRows) {
+      if (row.username.toLowerCase() === username.toLowerCase()) {
+        blockedSet.add(row.blocked_username.toLowerCase());
+      } else {
+        blockedSet.add(row.username.toLowerCase());
+      }
+    }
+
+    for (const [onlineUser] of onlineUsers.entries()) {
+      const lower = onlineUser.toLowerCase();
+      if (lower !== username.toLowerCase() && !blockedSet.has(lower)) {
+        io.to(lower).emit('user-status', { username, status });
+      }
+    }
+  } catch (err) {
+    logger.error('Error in broadcastUserStatus:', err);
+  }
+};
+
 export const socketHandler = (io) => {
   // Socket.io JWT Authentication Middleware
   io.use(async (socket, next) => {
@@ -105,9 +132,9 @@ export const socketHandler = (io) => {
       next();
     });
 
-    // Broadcast online status to others only if they just connected their first tab
+    // Broadcast online status to others only if they just connected their first tab (excluding blocked relations)
     if (wentOnline) {
-      socket.broadcast.emit('user-status', { username, status: 'online' });
+      broadcastUserStatus(io, username, 'online');
     }
 
     // Check if there is a pending call session for this newly connected user
@@ -178,6 +205,27 @@ export const socketHandler = (io) => {
           if (typeof callback === 'function') callback({ error: 'Invalid username' });
           return;
         }
+        const requester = socket.user.username;
+
+        // If target has blocked requester, hide online status and profile
+        const isBlockedByTarget = await dbGet(
+          'SELECT 1 FROM blocked_users WHERE LOWER(username) = LOWER(?) AND LOWER(blocked_username) = LOWER(?)',
+          [targetUsername, requester]
+        );
+
+        if (isBlockedByTarget) {
+          if (typeof callback === 'function') {
+            callback({
+              username: targetUsername,
+              status: 'offline',
+              displayName: null,
+              avatarIcon: null,
+              themeColor: null
+            });
+          }
+          return;
+        }
+
         const isOnline = isUserOnline(targetUsername);
         const user = await dbGet('SELECT display_name, avatar_icon, theme_color FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
         if (typeof callback === 'function') {
@@ -272,6 +320,37 @@ export const socketHandler = (io) => {
 
         msgTimestamps.push(now);
 
+        // Check if sender has blocked recipient
+        const senderBlocked = await dbGet(
+          'SELECT 1 FROM blocked_users WHERE LOWER(username) = LOWER(?) AND LOWER(blocked_username) = LOWER(?)',
+          [sender, recipient]
+        );
+        if (senderBlocked) {
+          if (typeof callback === 'function') {
+            callback({ error: 'You have blocked this user. Unblock to send messages.' });
+          }
+          return;
+        }
+
+        // Check if recipient has blocked sender
+        const isBlocked = await dbGet(
+          'SELECT 1 FROM blocked_users WHERE LOWER(username) = LOWER(?) AND LOWER(blocked_username) = LOWER(?)',
+          [recipient, sender]
+        );
+        if (isBlocked) {
+          // Store the message with delivered = -1 so it stays permanently in sender's history on refresh,
+          // but is NEVER delivered or visible to recipient!
+          const result = await dbRun(
+            `INSERT INTO messages (sender, recipient, ciphertext, iv, signature, delivered)
+             VALUES (?, ?, ?, ?, ?, -1)`,
+            [sender, recipient, ciphertext, iv, signature]
+          );
+          if (typeof callback === 'function') {
+            callback({ success: true, messageId: result.id, status: 0, timestamp: new Date().toISOString() });
+          }
+          return;
+        }
+
         const isOnline = isUserOnline(recipient);
         const status = isOnline ? 1 : 0; // 0 = sent, 1 = delivered
 
@@ -347,23 +426,145 @@ export const socketHandler = (io) => {
         callback?.({ error: 'Failed to delete messages' });
       }
     });
+
+    // Delete entire conversation between current user and partner
+    socket.on('delete-chat', async (data, callback) => {
+      try {
+        const { withUser } = data || {};
+        if (!withUser || typeof withUser !== 'string') return callback?.({ error: 'withUser is required' });
+        const username = socket.user.username;
+
+        // 1. Hide all messages received from withUser
+        const received = await dbAll(
+          'SELECT id FROM messages WHERE LOWER(sender) = LOWER(?) AND LOWER(recipient) = LOWER(?)',
+          [withUser, username]
+        );
+        for (const row of received) {
+          await dbRun(
+            'INSERT OR IGNORE INTO deleted_messages_user (message_id, username) VALUES (?, ?)',
+            [row.id, username.toLowerCase()]
+          );
+        }
+
+        // 2. Delete all messages sent by current user to withUser
+        const sent = await dbAll(
+          'SELECT id FROM messages WHERE LOWER(sender) = LOWER(?) AND LOWER(recipient) = LOWER(?)',
+          [username, withUser]
+        );
+        if (sent.length) {
+          const sentIds = sent.map(r => r.id);
+          const placeholders = sentIds.map(() => '?').join(',');
+          await dbRun(`DELETE FROM messages WHERE id IN (${placeholders})`, sentIds);
+          await dbRun(`DELETE FROM deleted_messages_user WHERE message_id IN (${placeholders})`, sentIds);
+          io.to(withUser.toLowerCase()).emit('messages-deleted', { messageIds: sentIds });
+        }
+
+        callback?.({ success: true });
+      } catch (error) {
+        logger.error('Error deleting chat:', error);
+        callback?.({ error: 'Failed to delete chat' });
+      }
+    });
+
+    // Block user
+    socket.on('block-user', async (data, callback) => {
+      try {
+        const { targetUsername } = data || {};
+        if (!targetUsername || typeof targetUsername !== 'string') return callback?.({ error: 'targetUsername is required' });
+        const username = socket.user.username;
+
+        await dbRun(
+          'INSERT OR IGNORE INTO blocked_users (username, blocked_username) VALUES (?, ?)',
+          [username.toLowerCase(), targetUsername.toLowerCase()]
+        );
+
+        // Tell target user immediately that this user is offline
+        if (isUserOnline(targetUsername)) {
+          io.to(targetUsername.toLowerCase()).emit('user-status', { username, status: 'offline' });
+        }
+
+        callback?.({ success: true });
+      } catch (error) {
+        logger.error('Error blocking user:', error);
+        callback?.({ error: 'Failed to block user' });
+      }
+    });
+
+    // Unblock user
+    socket.on('unblock-user', async (data, callback) => {
+      try {
+        const { targetUsername } = data || {};
+        if (!targetUsername || typeof targetUsername !== 'string') return callback?.({ error: 'targetUsername is required' });
+        const username = socket.user.username;
+
+        await dbRun(
+          'DELETE FROM blocked_users WHERE LOWER(username) = LOWER(?) AND LOWER(blocked_username) = LOWER(?)',
+          [username.toLowerCase(), targetUsername.toLowerCase()]
+        );
+
+        // If both users are online, notify each other of online status
+        if (isUserOnline(targetUsername) && isUserOnline(username)) {
+          io.to(targetUsername.toLowerCase()).emit('user-status', { username, status: 'online' });
+          io.to(username.toLowerCase()).emit('user-status', { username: targetUsername, status: 'online' });
+        }
+
+        callback?.({ success: true });
+      } catch (error) {
+        logger.error('Error unblocking user:', error);
+        callback?.({ error: 'Failed to unblock user' });
+      }
+    });
+
+    // Get blocked users list
+    socket.on('get-blocked-users', async (_, callback) => {
+      try {
+        const username = socket.user.username;
+        const rows = await dbAll(
+          'SELECT blocked_username FROM blocked_users WHERE LOWER(username) = LOWER(?)',
+          [username]
+        );
+        callback?.({ success: true, blockedUsers: rows.map(r => r.blocked_username) });
+      } catch (error) {
+        logger.error('Error fetching blocked users:', error);
+        callback?.({ error: 'Failed to fetch blocked users' });
+      }
+    });
+
     // Fetch all conversation partners (contacts) for the authenticated user
     socket.on('get-contacts', async (_, callback) => {
       try {
         const username = socket.user.username;
 
-        // Get all unique usernames who have exchanged messages with this user
+        // Find all blocked relationships for this user
+        const blockedRows = await dbAll(
+          'SELECT username, blocked_username FROM blocked_users WHERE LOWER(username) = LOWER(?) OR LOWER(blocked_username) = LOWER(?)',
+          [username, username]
+        );
+        const blockedSet = new Set();
+        for (const row of blockedRows) {
+          if (row.username.toLowerCase() === username.toLowerCase()) {
+            blockedSet.add(row.blocked_username.toLowerCase());
+          } else {
+            blockedSet.add(row.username.toLowerCase());
+          }
+        }
+
+        // Get all unique usernames who have exchanged messages with this user and are not hidden/deleted
         const rows = await dbAll(`
           SELECT DISTINCT
             CASE
-              WHEN LOWER(sender) = LOWER(?) THEN recipient
-              ELSE sender
+              WHEN LOWER(m.sender) = LOWER(?) THEN m.recipient
+              ELSE m.sender
             END AS contact_username
-          FROM messages
-          WHERE LOWER(sender) = LOWER(?) OR LOWER(recipient) = LOWER(?)
-        `, [username, username, username]);
+          FROM messages m
+          LEFT JOIN deleted_messages_user d ON m.id = d.message_id AND LOWER(d.username) = LOWER(?)
+          WHERE d.message_id IS NULL
+            AND (LOWER(m.sender) = LOWER(?) OR LOWER(m.recipient) = LOWER(?))
+        `, [username, username, username, username]);
 
-        const contactUsernames = rows.map(r => r.contact_username);
+        const contactUsernames = rows
+          .map(r => r.contact_username)
+          .filter(u => u && !blockedSet.has(u.toLowerCase()));
 
         // Fetch full profile for each contact
         const contactDetails = [];
@@ -374,6 +575,7 @@ export const socketHandler = (io) => {
               [contactUsername]
             );
             if (user) {
+              const isOnline = isUserOnline(user.username) && !blockedSet.has(user.username.toLowerCase());
               contactDetails.push({
                 username: user.username,
                 displayName: user.display_name || null,
@@ -381,7 +583,7 @@ export const socketHandler = (io) => {
                 themeColor: user.theme_color || null,
                 publicIdentityKey: user.public_identity_key ? JSON.parse(user.public_identity_key) : null,
                 publicSigningKey: user.public_signing_key ? JSON.parse(user.public_signing_key) : null,
-                status: isUserOnline(user.username) ? 'online' : 'offline'
+                status: isOnline ? 'online' : 'offline'
               });
             }
           } catch (e) {
@@ -417,8 +619,9 @@ export const socketHandler = (io) => {
           WHERE d.message_id IS NULL
             AND ((LOWER(m.sender) = LOWER(?) AND LOWER(m.recipient) = LOWER(?))
               OR (LOWER(m.sender) = LOWER(?) AND LOWER(m.recipient) = LOWER(?)))
+            AND NOT (LOWER(m.recipient) = LOWER(?) AND m.delivered = -1)
         `;
-        const params = [currentUser, currentUser, withUser, withUser, currentUser];
+        const params = [currentUser, currentUser, withUser, withUser, currentUser, currentUser];
 
         if (beforeId) {
           query += ` AND id < ?`;
@@ -464,12 +667,22 @@ export const socketHandler = (io) => {
     });
 
     // WebRTC Signaling Handlers (Voice/Video)
-    socket.on('call-user', (data) => {
+    socket.on('call-user', async (data) => {
       try {
         const { to, offer, mediaType } = data || {};
         const from = socket.user.username;
 
         if (!to || typeof to !== 'string' || !offer) return;
+
+        // Check if either user has blocked the other
+        const isBlocked = await dbGet(
+          'SELECT 1 FROM blocked_users WHERE (LOWER(username) = LOWER(?) AND LOWER(blocked_username) = LOWER(?)) OR (LOWER(username) = LOWER(?) AND LOWER(blocked_username) = LOWER(?))',
+          [to, from, from, to]
+        );
+        if (isBlocked) {
+          socket.emit('call-ended', { from: to, reason: 'user_unavailable' });
+          return;
+        }
 
         activeCalls.set(from.toLowerCase(), {
           caller: from,
@@ -577,13 +790,20 @@ export const socketHandler = (io) => {
       }
     });
 
-    socket.on('typing', (data) => {
+    socket.on('typing', async (data) => {
       try {
         const { recipient, isTyping } = data || {};
         const sender = socket.user.username;
 
         if (recipient && typeof recipient === 'string' && recipient.length <= 50 && isUserOnline(recipient)) {
-          io.to(recipient.toLowerCase()).emit('user-typing', { username: sender, isTyping: Boolean(isTyping) });
+          // Check if either user has blocked the other
+          const isBlocked = await dbGet(
+            'SELECT 1 FROM blocked_users WHERE (LOWER(username) = LOWER(?) AND LOWER(blocked_username) = LOWER(?)) OR (LOWER(username) = LOWER(?) AND LOWER(blocked_username) = LOWER(?))',
+            [recipient, sender, sender, recipient]
+          );
+          if (!isBlocked) {
+            io.to(recipient.toLowerCase()).emit('user-typing', { username: sender, isTyping: Boolean(isTyping) });
+          }
         }
       } catch (err) {
         logger.error('Error in typing event:', err);
@@ -606,7 +826,7 @@ export const socketHandler = (io) => {
 
       const wentOffline = removeUserSocket(username, socket.id);
       if (wentOffline) {
-        socket.broadcast.emit('user-status', { username, status: 'offline' });
+        broadcastUserStatus(io, username, 'offline');
       }
     });
   });
