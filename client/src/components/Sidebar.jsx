@@ -534,7 +534,9 @@ const Sidebar = React.memo(function Sidebar({
           {renderAvatar(currentUser.username, currentUser.displayName, currentUser.avatarIcon)}
           <div className="username-display">
             <h3>{currentUser.displayName || currentUser.username}</h3>
-            <span><ShieldCheck size={14} /> Encrypted Session</span>
+            {currentUser.displayName && (
+              <span className="user-handle">@{currentUser.username}</span>
+            )}
           </div>
         </div>
       </div>

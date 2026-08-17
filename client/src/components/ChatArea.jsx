@@ -2715,7 +2715,7 @@ const ChatArea = React.memo(function ChatArea({
               <textarea
                 ref={textareaRef}
                 className="message-textarea"
-                placeholder="Write a secure message..."
+                placeholder="Message"
                 value={inputText}
                 onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
