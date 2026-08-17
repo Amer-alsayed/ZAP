@@ -244,6 +244,7 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
           {isImage ? (
             <ImagePreviewLoader 
               fileMetadata={file} 
+              isFullRes={true}
             />
           ) : isVideo ? (
             <VideoPreviewLoader fileMetadata={file} />
@@ -2730,12 +2731,13 @@ const createThumbnailBlob = (blob, maxDimension = 480) => {
 // In-memory instant media URL cache (URL -> { fullUrl, thumbUrl })
 const globalMediaSessionCache = new Map();
 
-function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
+function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes = false }) {
   const fileUrl = fileMetadata?.url;
   
   const [imgSrc, setImgSrc] = useState(() => {
     if (fileUrl && globalMediaSessionCache.has(fileUrl)) {
-      return globalMediaSessionCache.get(fileUrl).thumbUrl;
+      const cached = globalMediaSessionCache.get(fileUrl);
+      return isFullRes ? cached.fullUrl : cached.thumbUrl;
     }
     return null;
   });
@@ -2755,7 +2757,7 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
     // Instant hit from global session cache (0ms)
     if (globalMediaSessionCache.has(fileUrl)) {
       const cached = globalMediaSessionCache.get(fileUrl);
-      setImgSrc(cached.thumbUrl);
+      setImgSrc(isFullRes ? cached.fullUrl : cached.thumbUrl);
       fullResUrlRef.current = cached.fullUrl;
       setIsLoaded(true);
       if (onImageLoad) onImageLoad();
@@ -2781,7 +2783,7 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
         globalMediaSessionCache.set(fileUrl, cacheEntry);
 
         fullResUrlRef.current = fullUrl;
-        setImgSrc(thumbUrl);
+        setImgSrc(isFullRes ? fullUrl : thumbUrl);
       } catch (err) {
         if (active) setError(err.message || 'Media loading failed');
       }
@@ -2792,7 +2794,7 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad }) {
     return () => {
       active = false;
     };
-  }, [fileUrl]);
+  }, [fileUrl, isFullRes]);
 
   if (error) return <span style={{ color: 'var(--text-muted, #a0aec0)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}><AlertTriangle size={14} style={{ color: '#e53e3e' }} /> {error}</span>;
 
