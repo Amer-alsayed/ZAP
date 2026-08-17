@@ -65,54 +65,6 @@ const formatSeparatorDate = (timestamp) => {
   }
 };
 
-// Format text with clickable links
-const renderFormattedText = (text) => {
-  if (!text || typeof text !== 'string') return text;
-  
-  const URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|www\.[^\s<]+[^<.,:;"')\]\s])/gi;
-  const parts = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = URL_REGEX.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(text.substring(lastIndex, match.index));
-    }
-
-    const rawUrl = match[0];
-    const href = rawUrl.startsWith('http://') || rawUrl.startsWith('https://') 
-      ? rawUrl 
-      : `https://${rawUrl}`;
-
-    parts.push(
-      <a
-        key={`link-${match.index}`}
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="chat-text-link"
-        onClick={(e) => {
-          if (window.__isChatraSelectionMode) {
-            e.preventDefault();
-          } else {
-            e.stopPropagation();
-          }
-        }}
-      >
-        {rawUrl}
-      </a>
-    );
-
-    lastIndex = URL_REGEX.lastIndex;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(text.substring(lastIndex));
-  }
-
-  return parts.length > 0 ? parts : text;
-};
-
 // Group consecutive image/video media messages from the same sender into visual albums
 const groupMessagesWithAlbums = (rawMessages) => {
   if (!rawMessages || !rawMessages.length) return [];
@@ -888,9 +840,6 @@ const ChatArea = React.memo(function ChatArea({
   const [isSendingVoice, setIsSendingVoice] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [selectedFiles, setSelectedFiles] = useState([]);
-  const [isClearingFiles, setIsClearingFiles] = useState(false);
-  const [removingFileIndex, setRemovingFileIndex] = useState(null);
-  const [isClosingReply, setIsClosingReply] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // { filename, current, total, status, percent }
 
@@ -918,36 +867,6 @@ const ChatArea = React.memo(function ChatArea({
       setIsBannerDismissing(false);
     }, 280);
   };
-
-  const handleCancelReplyWithAnimation = useCallback(() => {
-    if (isClosingReply || !replyingTo) return;
-    setIsClosingReply(true);
-    setTimeout(() => {
-      setReplyingTo(null);
-      setIsClosingReply(false);
-    }, 220);
-  }, [isClosingReply, replyingTo, setReplyingTo]);
-
-  const handleClearAllFilesWithAnimation = useCallback(() => {
-    if (isClearingFiles || selectedFiles.length === 0) return;
-    setIsClearingFiles(true);
-    setTimeout(() => {
-      setSelectedFiles([]);
-      setIsClearingFiles(false);
-    }, 220);
-  }, [isClearingFiles, selectedFiles.length]);
-
-  const handleRemoveSingleFileWithAnimation = useCallback((idx) => {
-    if (selectedFiles.length <= 1) {
-      handleClearAllFilesWithAnimation();
-      return;
-    }
-    setRemovingFileIndex(idx);
-    setTimeout(() => {
-      setSelectedFiles(prev => prev.filter((_, i) => i !== idx));
-      setRemovingFileIndex(null);
-    }, 180);
-  }, [selectedFiles.length, handleClearAllFilesWithAnimation]);
 
   const handleBlockContactWithAnimation = (username) => {
     if (isBannerDismissing) return;
@@ -1427,13 +1346,31 @@ const ChatArea = React.memo(function ChatArea({
           }
         }
       }
+    } else if (activeContact?.isTyping) {
+      // Pin scroll to bottom dynamically at 60/120fps during the 300ms transition
+      if (isLastMessageVisible) {
+        const startTime = performance.now();
+        let frameId;
+        
+        const keepScrollAtBottom = (now) => {
+          if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+          }
+          if (now - startTime < 350) {
+            frameId = requestAnimationFrame(keepScrollAtBottom);
+          }
+        };
+        
+        frameId = requestAnimationFrame(keepScrollAtBottom);
+        return () => cancelAnimationFrame(frameId);
+      }
     } else if (currentCount > prevMessageCountRef.current) {
-      if (messagesContainerRef.current && isLastMessageVisible) {
+      if (messagesContainerRef.current) {
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
       }
     }
     prevMessageCountRef.current = currentCount;
-  }, [activeContact?.messages?.length]);
+  }, [activeContact?.messages?.length, activeContact?.isTyping]);
 
   const handleImageLoad = () => {
     // If the user was already looking at the bottom, pin the scroll position as the decrypted image loads
@@ -2209,7 +2146,7 @@ const ChatArea = React.memo(function ChatArea({
             isLast={isLast}
             handleImageLoad={handleImageLoad}
           />
-          {msg.text && <p className="media-caption">{renderFormattedText(msg.text)}</p>}
+          {msg.text && <p className="media-caption">{msg.text}</p>}
         </div>
       );
     }
@@ -2249,7 +2186,7 @@ const ChatArea = React.memo(function ChatArea({
       return (
         <div className="media-container">
           {element}
-          {msg.text && <p className="media-caption">{renderFormattedText(msg.text)}</p>}
+          {msg.text && <p className="media-caption">{msg.text}</p>}
         </div>
       );
     }
@@ -2374,7 +2311,7 @@ const ChatArea = React.memo(function ChatArea({
       );
     }
     // Default plaintext
-    return renderFormattedText(msg.text);
+    return msg.text;
   }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick]);
 
   return (
@@ -2506,7 +2443,7 @@ const ChatArea = React.memo(function ChatArea({
       <div className="chat-input-wrapper">
         {/* Floating Scroll-to-Bottom Button / Typing Indicator */}
         <button 
-          className={`scroll-to-bottom-btn glass ${((isScrolledUp || !isLastMessageVisible) && !isInlineTypingVisible) ? 'visible' : ''} ${(activeContact.isTyping && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
+          className={`scroll-to-bottom-btn glass ${(!isLastMessageVisible && !isInlineTypingVisible) ? 'visible' : ''} ${(activeContact.isTyping && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
           onClick={scrollToBottom} 
           title="Scroll to bottom"
           aria-label="Scroll to bottom"
@@ -2524,21 +2461,17 @@ const ChatArea = React.memo(function ChatArea({
           )}
         </button>
         
-        {/* Floating Reply Preview Pill */}
-        <div className={`reply-preview-bar ${(replyingTo || isClosingReply) ? 'glass visible' : ''} ${isClosingReply ? 'is-exiting' : ''}`}>
+        <div className={`reply-preview-bar ${replyingTo ? 'glass visible' : ''}`}>
           {activeReplyInfo && (
-            <div className="reply-preview-inner">
-              <div className="reply-preview-left">
+            <div className="reply-preview-info">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {activeReplyInfo.mediaType === 'file' && activeReplyInfo.fileMetadata?.mimeType?.startsWith('image/') && (
                   <div className="reply-image-thumbnail">
                     <ImagePreviewLoader fileMetadata={activeReplyInfo.fileMetadata} />
                   </div>
                 )}
-                <div className="reply-preview-text-block">
-                  <div className="reply-preview-badge-row">
-                    <CornerUpLeft size={13} className="reply-preview-icon" />
-                    <span className="reply-preview-label">Replying to {activeReplyInfo.sender}</span>
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span className="reply-preview-label">Replying to {activeReplyInfo.sender}</span>
                   <span className="reply-preview-text">
                     {activeReplyInfo.mediaType === 'file' && activeReplyInfo.fileMetadata?.mimeType?.startsWith('image/')
                       ? 'Photo'
@@ -2547,21 +2480,22 @@ const ChatArea = React.memo(function ChatArea({
                   </span>
                 </div>
               </div>
-              <button 
-                className="reply-preview-close" 
-                onClick={(e) => {
-                  e.currentTarget.blur();
-                  handleCancelReplyWithAnimation();
-                }} 
-                title="Cancel reply" 
-                aria-label="Cancel reply"
-              >
-                <X size={15} />
-              </button>
             </div>
           )}
+          <button 
+            className="reply-preview-close" 
+            onClick={(e) => {
+              e.currentTarget.blur();
+              setReplyingTo(null);
+            }} 
+            title="Cancel reply" 
+            aria-label="Cancel reply"
+          >
+            <X size={16} />
+          </button>
         </div>
         
+        {/* Attachment preview / uploading progress bar */}
         {/* Upload & Encryption Progress Floating Overlay */}
         {uploadProgress && (
           <div className="upload-progress-banner glass">
@@ -2593,41 +2527,25 @@ const ChatArea = React.memo(function ChatArea({
           </div>
         )}
 
-        {/* Floating Attachment Preview Pill */}
-        <div className={`attachment-preview-bar ${(selectedFiles.length > 0 || isClearingFiles) ? 'glass visible' : ''} ${isClearingFiles ? 'is-exiting' : ''}`}>
-          {(selectedFiles.length > 0 || isClearingFiles) && (
-            <div className="attachment-preview-inner">
-              <div 
-                className="multi-file-preview-container"
-                onWheel={(e) => {
-                  if (e.deltaY !== 0) {
-                    e.currentTarget.scrollLeft += e.deltaY;
-                  }
-                }}
-              >
-                {selectedFiles.map((file, idx) => (
-                  <div key={`${file.name}-${idx}`} className={`file-preview-pill ${removingFileIndex === idx ? 'is-removing' : ''}`}>
-                    {file.type?.startsWith('image/') ? <Image size={13} /> : <FileText size={13} />}
-                    <span className="file-pill-name">{file.name}</span>
-                    <button 
-                      className="remove-pill-btn" 
-                      onClick={() => handleRemoveSingleFileWithAnimation(idx)}
-                      title="Remove file"
-                      aria-label="Remove file"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <button 
-                className="clear-all-files-btn" 
-                onClick={handleClearAllFilesWithAnimation}
-                title="Clear all attachments"
-              >
-                <span>Clear All</span>
-                <Trash2 size={13} />
-              </button>
+        {/* Attachment preview bar */}
+        <div className={`attachment-preview-bar ${selectedFiles.length > 0 ? 'glass visible' : ''}`}>
+          {selectedFiles.length > 0 && (
+            <div className="multi-file-preview-container">
+              {selectedFiles.map((file, idx) => (
+                <div key={`${file.name}-${idx}`} className="file-preview-pill">
+                  {file.type?.startsWith('image/') ? <Image size={14} /> : <FileText size={14} />}
+                  <span className="file-pill-name">{file.name}</span>
+                  <button 
+                    className="remove-pill-btn" 
+                    onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
+                    title="Remove file"
+                    aria-label="Remove file"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <button className="clear-all-files-btn" onClick={() => setSelectedFiles([])}>Clear All</button>
             </div>
           )}
         </div>
@@ -2745,7 +2663,7 @@ const ChatArea = React.memo(function ChatArea({
               <textarea
                 ref={textareaRef}
                 className="message-textarea"
-                placeholder="Message"
+                placeholder="Write a secure message..."
                 value={inputText}
                 onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
