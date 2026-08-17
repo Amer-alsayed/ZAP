@@ -4525,6 +4525,7 @@ textarea {
   .chat-area,
   .settings-view {
     display: flex !important;
+    animation: none !important;
   }
 
   .app-container.chat-active .sidebar {
@@ -5799,40 +5800,12 @@ textarea {
   background: #000000;
   position: relative;
   z-index: 2;
-  animation: pageViewFluidIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  will-change: transform, opacity;
-}
-
-@keyframes pageViewFluidIn {
-  0% {
-    opacity: 0;
-    transform: translateY(12px) scale(0.992);
-    filter: blur(2px);
-  }
-  70% {
-    filter: blur(0px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0px);
-  }
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity;
 }
 
 .settings-view.navigating-back {
-  animation: pageViewFluidOut 0.22s cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
-}
-
-@keyframes pageViewFluidOut {
-  0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(10px) scale(0.99);
-  }
 }
 
 .settings-header {
