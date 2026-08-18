@@ -4,8 +4,9 @@ import {
   Send, Shield, Phone, Video, Paperclip, Mic, X, Play, Pause, 
   FileText, Image, Video as VideoIcon, Download, AlertTriangle,
   ArrowLeft, CornerUpLeft, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck, Trash2, Camera, Music, Check, Copy, Ban, Unlock, Loader2,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Smile
 } from 'lucide-react';
+import AppleEmojiPicker from './AppleEmojiPicker';
 import { uploadEncryptedFile } from '../services/api';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
 import { getSocket } from '../services/socket';
@@ -63,6 +64,33 @@ const formatSeparatorDate = (timestamp) => {
   } else {
     return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   }
+};
+
+// Detect if a message consists exclusively of 1 to 3 emojis
+const isOnlyEmoji = (text) => {
+  if (!text || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  
+  const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+  const segments = segmenter 
+    ? Array.from(segmenter.segment(trimmed)).map(s => s.segment.trim()).filter(Boolean) 
+    : Array.from(trimmed).filter(c => c.trim().length > 0);
+  
+  if (segments.length === 0 || segments.length > 3) return false;
+  
+  const EMOJI_REGEX = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\u200D|\uFE0F|\p{Emoji_Modifier})+$/u;
+  return segments.every(s => EMOJI_REGEX.test(s));
+};
+
+const getEmojiCount = (text) => {
+  if (!text || typeof text !== 'string') return 0;
+  const trimmed = text.trim();
+  const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+  const segments = segmenter 
+    ? Array.from(segmenter.segment(trimmed)).map(s => s.segment.trim()).filter(Boolean) 
+    : Array.from(trimmed).filter(c => c.trim().length > 0);
+  return segments.length;
 };
 
 // Format text with clickable links
@@ -805,60 +833,66 @@ const MessageList = React.memo(({
                     <CornerUpLeft size={16} color="var(--accent-color)" />
                   </div>
                 )}
-                <div className={`message-bubble ${msg.isAlbum ? 'album-bubble' : ''}`}>
-                  {(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) && (
-                    <div className="selection-indicator-badge" aria-hidden="true">
-                      <Check size={12} strokeWidth={2.8} />
-                    </div>
-                  )}
-                  {!selectionMode && (
-                    <div className="message-actions-container">
-                      <button 
-                        className="msg-action-btn" 
-                        title="Reply"
-                        aria-label="Reply to message"
-                        onClick={() => {
-                          const targetMsg = msg.isAlbum ? msg.albumItems[0] : msg;
-                          setReplyingTo({
-                            id: targetMsg.id,
-                            sender: targetMsg.sender,
-                            text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
-                            mediaType: targetMsg.mediaType || null,
-                            fileMetadata: targetMsg.fileMetadata || null
-                          });
-                          setTimeout(() => {
-                            if (textareaRef.current) {
-                              textareaRef.current.blur();
-                              textareaRef.current.focus();
-                              textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                            }
-                          }, 50);
-                        }}
-                      >
-                        <CornerUpLeft size={12} />
-                      </button>
-                    </div>
-                  )}
-                  {msg.replyTo && (
-                    <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
-                      <span className="reply-context-sender">{msg.replyTo.sender}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                        {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') && (
-                          <div className="reply-image-thumbnail">
-                            <ImagePreviewLoader fileMetadata={msg.replyTo.fileMetadata} />
+                {(() => {
+                  const emojiOnly = !msg.isAlbum && !msg.mediaType && isOnlyEmoji(msg.text);
+                  const emojiCount = emojiOnly ? getEmojiCount(msg.text) : 0;
+                  return (
+                    <div className={`message-bubble ${msg.isAlbum ? 'album-bubble' : ''} ${emojiOnly ? `emoji-only-bubble count-${emojiCount}` : ''}`}>
+                      {(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) && (
+                        <div className="selection-indicator-badge" aria-hidden="true">
+                          <Check size={12} strokeWidth={2.8} />
+                        </div>
+                      )}
+                      {!selectionMode && (
+                        <div className="message-actions-container">
+                          <button 
+                            className="msg-action-btn" 
+                            title="Reply"
+                            aria-label="Reply to message"
+                            onClick={() => {
+                              const targetMsg = msg.isAlbum ? msg.albumItems[0] : msg;
+                              setReplyingTo({
+                                id: targetMsg.id,
+                                sender: targetMsg.sender,
+                                text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                                mediaType: targetMsg.mediaType || null,
+                                fileMetadata: targetMsg.fileMetadata || null
+                              });
+                              setTimeout(() => {
+                                if (textareaRef.current) {
+                                  textareaRef.current.blur();
+                                  textareaRef.current.focus();
+                                  textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                }
+                              }, 50);
+                            }}
+                          >
+                            <CornerUpLeft size={12} />
+                          </button>
+                        </div>
+                      )}
+                      {msg.replyTo && (
+                        <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
+                          <span className="reply-context-sender">{msg.replyTo.sender}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                            {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') && (
+                              <div className="reply-image-thumbnail">
+                                <ImagePreviewLoader fileMetadata={msg.replyTo.fileMetadata} />
+                              </div>
+                            )}
+                            <p className="reply-context-text">
+                              {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
+                                ? 'Photo'
+                                : msg.replyTo.text
+                              }
+                            </p>
                           </div>
-                        )}
-                        <p className="reply-context-text">
-                          {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
-                            ? 'Photo'
-                            : msg.replyTo.text
-                          }
-                        </p>
-                      </div>
+                        </div>
+                      )}
+                      {renderMessageContent(msg, index === groupedMessages.length - 1)}
                     </div>
-                  )}
-                  {renderMessageContent(msg, index === groupedMessages.length - 1)}
-                </div>
+                  );
+                })()}
                 <div className="message-meta">
                   <span>
                     {formatMessageTime(msg.timestamp)}
@@ -963,6 +997,124 @@ const ChatArea = React.memo(function ChatArea({
   const [isClosingAttachMenu, setIsClosingAttachMenu] = useState(false);
   const attachMenuRef = useRef(null);
   const attachBtnRef = useRef(null);
+
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isClosingEmojiPicker, setIsClosingEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef(null);
+  const emojiBtnRef = useRef(null);
+
+  const closeEmojiPicker = useCallback(() => {
+    if (!showEmojiPicker || isClosingEmojiPicker) return;
+    setIsClosingEmojiPicker(true);
+    setTimeout(() => {
+      setShowEmojiPicker(false);
+      setIsClosingEmojiPicker(false);
+    }, 180);
+  }, [showEmojiPicker, isClosingEmojiPicker]);
+
+  const toggleEmojiPicker = useCallback(() => {
+    if (showEmojiPicker) {
+      closeEmojiPicker();
+    } else {
+      if (showAttachMenu) closeAttachMenu();
+      setShowEmojiPicker(true);
+    }
+  }, [showEmojiPicker, closeEmojiPicker, showAttachMenu]);
+
+  const handleInsertEmoji = useCallback((emoji) => {
+    if (!textareaRef.current) {
+      setInputText(prev => prev + emoji);
+      return;
+    }
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart ?? inputText.length;
+    const end = textarea.selectionEnd ?? inputText.length;
+    const newText = inputText.substring(0, start) + emoji + inputText.substring(end);
+    setInputText(newText);
+    soundEngine.playKeyboardTick?.();
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const newPos = start + emoji.length;
+      textarea.setSelectionRange(newPos, newPos);
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    });
+  }, [inputText]);
+
+  const handleDeleteChar = useCallback(() => {
+    if (!textareaRef.current || !inputText) {
+      setInputText(prev => prev.slice(0, -1));
+      return;
+    }
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart ?? inputText.length;
+    const end = textarea.selectionEnd ?? inputText.length;
+    if (start !== end) {
+      const newText = inputText.substring(0, start) + inputText.substring(end);
+      setInputText(newText);
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start, start);
+      });
+    } else if (start > 0) {
+      const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+      let newPos = start - 1;
+      if (segmenter) {
+        const segments = Array.from(segmenter.segment(inputText.substring(0, start)));
+        const lastSegment = segments[segments.length - 1];
+        if (lastSegment) {
+          newPos = lastSegment.index;
+        }
+      }
+      const newText = inputText.substring(0, newPos) + inputText.substring(start);
+      setInputText(newText);
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(newPos, newPos);
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+      });
+    }
+  }, [inputText]);
+
+  // Close attach menu and emoji picker on outside click or Escape key
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        attachMenuRef.current && 
+        !attachMenuRef.current.contains(e.target) &&
+        attachBtnRef.current &&
+        !attachBtnRef.current.contains(e.target)
+      ) {
+        closeAttachMenu();
+      }
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(e.target) &&
+        emojiBtnRef.current &&
+        !emojiBtnRef.current.contains(e.target)
+      ) {
+        closeEmojiPicker();
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        closeAttachMenu();
+        closeEmojiPicker();
+      }
+    };
+    if (showAttachMenu || showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showAttachMenu, showEmojiPicker, closeEmojiPicker]);
 
   const [isBannerDismissing, setIsBannerDismissing] = useState(false);
   const [dismissedBannerUser, setDismissedBannerUser] = useState(null);
@@ -2764,43 +2916,69 @@ const ChatArea = React.memo(function ChatArea({
             </button>
           </div>
 
-          {/* 2. Center: Dedicated Pill-Shaped Typing Bar */}
-          <div className={`chat-input-pill ${(selectedFiles.length > 0 || replyingTo) ? 'with-preview' : ''} ${(isRecording && !recordingExitMode) ? 'is-recording-mode' : ''} glass`}>
-            {isRecording ? (
-              <div className={`recording-banner ${recordingExitMode ? `is-exiting-${recordingExitMode}` : ''}`}>
-                <div className="recording-indicator">
-                  <div className="recording-dot" />
-                  <span className="recording-timer">{formatTime(recordingDuration)}</span>
+            {/* 2. Center: Dedicated Pill-Shaped Typing Bar */}
+            <div className={`chat-input-pill ${(selectedFiles.length > 0 || replyingTo) ? 'with-preview' : ''} ${(isRecording && !recordingExitMode) ? 'is-recording-mode' : ''} glass`}>
+              {isRecording ? (
+                <div className={`recording-banner ${recordingExitMode ? `is-exiting-${recordingExitMode}` : ''}`}>
+                  <div className="recording-indicator">
+                    <div className="recording-dot" />
+                    <span className="recording-timer">{formatTime(recordingDuration)}</span>
+                  </div>
+                  <div className="recording-waveform-bars">
+                    <span className="wave-bar bar-1" />
+                    <span className="wave-bar bar-2" />
+                    <span className="wave-bar bar-3" />
+                    <span className="wave-bar bar-4" />
+                    <span className="wave-bar bar-5" />
+                  </div>
+                  <button 
+                    className="recording-cancel-btn" 
+                    onClick={() => stopRecording(false)} 
+                    title="Cancel recording" 
+                    aria-label="Cancel recording"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
-                <div className="recording-waveform-bars">
-                  <span className="wave-bar bar-1" />
-                  <span className="wave-bar bar-2" />
-                  <span className="wave-bar bar-3" />
-                  <span className="wave-bar bar-4" />
-                  <span className="wave-bar bar-5" />
-                </div>
-                <button 
-                  className="recording-cancel-btn" 
-                  onClick={() => stopRecording(false)} 
-                  title="Cancel recording" 
-                  aria-label="Cancel recording"
-                >
-                  <Trash2 size={18} />
-                </button>
+              ) : (
+                <>
+                  <textarea
+                    ref={textareaRef}
+                    className="message-textarea"
+                    placeholder="Message"
+                    value={inputText}
+                    onChange={handleTextareaChange}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    disabled={uploading}
+                  />
+                  <button
+                    ref={emojiBtnRef}
+                    type="button"
+                    className={`input-emoji-btn ${showEmojiPicker ? 'active' : ''}`}
+                    onClick={toggleEmojiPicker}
+                    title={showEmojiPicker ? "Close emoji picker" : "Choose an emoji"}
+                    aria-label="Choose an emoji"
+                  >
+                    <Smile size={20} />
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Apple Emoji Picker Popover */}
+            {(showEmojiPicker || isClosingEmojiPicker) && (
+              <div 
+                ref={emojiPickerRef} 
+                className={`apple-emoji-popover-wrapper ${isClosingEmojiPicker ? 'is-closing' : ''}`}
+              >
+                <AppleEmojiPicker 
+                  onSelectEmoji={handleInsertEmoji} 
+                  onDelete={handleDeleteChar}
+                  onClose={closeEmojiPicker}
+                />
               </div>
-            ) : (
-              <textarea
-                ref={textareaRef}
-                className="message-textarea"
-                placeholder="Message"
-                value={inputText}
-                onChange={handleTextareaChange}
-                onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
-                disabled={uploading}
-              />
             )}
-          </div>
 
           {/* 3. Right: Separated Action Pill Button (Mic / Send / Loading) */}
           <div className="input-action-pill-wrapper">
