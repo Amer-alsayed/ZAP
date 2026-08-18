@@ -6250,9 +6250,11 @@ textarea {
   background: #000000 !important;
   position: relative;
   z-index: 2;
+  animation: none !important;
 }
 
 .settings-view.navigating-back {
+  animation: chatAreaFadeOut 0.18s cubic-bezier(0.4, 0, 1, 1) forwards !important;
   pointer-events: none;
 }
 
