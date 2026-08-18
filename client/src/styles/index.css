@@ -2385,15 +2385,16 @@ button {
   height: 38px;
   padding: 8px 4px;
   font-size: 15.5px;
+  line-height: 20px;
   resize: none;
   overflow-y: auto;
-  line-height: 1.45;
   margin: 0;
   background: transparent;
   border: none;
   outline: none;
   color: var(--text-primary);
   min-width: 0;
+  box-sizing: border-box;
   
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -2435,45 +2436,6 @@ button {
 .input-emoji-btn.active {
   color: var(--accent-color);
   background: rgba(var(--accent-rgb), 0.16);
-}
-
-/* ==========================================
-   APPLE MESSAGES EMOJI PICKER
-   ========================================== */
-.apple-emoji-popover-wrapper {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  right: 68px;
-  z-index: 1050;
-  animation: appleEmojiPopIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  transform-origin: bottom right;
-}
-
-.apple-emoji-popover-wrapper.is-closing {
-  animation: appleEmojiPopOut 0.18s ease-in forwards;
-  pointer-events: none;
-}
-
-@keyframes appleEmojiPopIn {
-  0% {
-    opacity: 0;
-    transform: translateY(12px) scale(0.95);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes appleEmojiPopOut {
-  0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(8px) scale(0.96);
-  }
 }
 
 /* ==========================================
@@ -2625,6 +2587,9 @@ button {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  contain: layout paint;
+  will-change: scroll-position;
 }
 
 .apple-emoji-scroll-body::-webkit-scrollbar {
@@ -2641,6 +2606,8 @@ button {
   background: transparent !important;
   border: none !important;
   padding: 0 !important;
+  content-visibility: auto;
+  contain-intrinsic-size: 180px;
 }
 
 .apple-emoji-section-title {

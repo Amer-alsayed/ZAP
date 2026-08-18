@@ -1021,6 +1021,14 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, [showEmojiPicker, closeEmojiPicker, showAttachMenu]);
 
+  const adjustTextareaHeight = useCallback((el) => {
+    if (!el) return;
+    el.style.height = '38px';
+    if (el.scrollHeight > 48) {
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    }
+  }, []);
+
   const handleInsertEmoji = useCallback((emoji) => {
     if (!textareaRef.current) {
       setInputText(prev => prev + emoji);
@@ -1037,10 +1045,9 @@ const ChatArea = React.memo(function ChatArea({
       textarea.focus();
       const newPos = start + emoji.length;
       textarea.setSelectionRange(newPos, newPos);
-      textarea.style.height = 'auto';
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+      adjustTextareaHeight(textarea);
     });
-  }, [inputText]);
+  }, [inputText, adjustTextareaHeight]);
 
   const handleDeleteChar = useCallback(() => {
     if (!textareaRef.current || !inputText) {
@@ -1056,6 +1063,7 @@ const ChatArea = React.memo(function ChatArea({
       requestAnimationFrame(() => {
         textarea.focus();
         textarea.setSelectionRange(start, start);
+        adjustTextareaHeight(textarea);
       });
     } else if (start > 0) {
       const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
@@ -1072,11 +1080,10 @@ const ChatArea = React.memo(function ChatArea({
       requestAnimationFrame(() => {
         textarea.focus();
         textarea.setSelectionRange(newPos, newPos);
-        textarea.style.height = 'auto';
-        textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+        adjustTextareaHeight(textarea);
       });
     }
-  }, [inputText]);
+  }, [inputText, adjustTextareaHeight]);
 
   // Close attach menu and emoji picker on outside click or Escape key
   useEffect(() => {
@@ -1771,8 +1778,7 @@ const ChatArea = React.memo(function ChatArea({
   const handleTextareaChange = (e) => {
     const text = e.target.value;
     setInputText(text);
-    e.target.style.height = '36px';
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+    adjustTextareaHeight(e.target);
 
     const socket = getSocket();
     if (socket && socket.connected) {
@@ -1824,7 +1830,7 @@ const ChatArea = React.memo(function ChatArea({
     setInputText('');
     setReplyingTo(null);
     if (textareaRef.current) {
-      textareaRef.current.style.height = '36px';
+      textareaRef.current.style.height = '38px';
       textareaRef.current.focus({ preventScroll: true });
     }
 

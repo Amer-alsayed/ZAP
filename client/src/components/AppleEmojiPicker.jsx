@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
 import { Search, X, Delete, Smile } from 'lucide-react';
 
 export const EMOJI_CATEGORIES = [
@@ -148,12 +148,66 @@ export const EMOJI_CATEGORIES = [
   }
 ];
 
+// Memoized Section Component to prevent re-rendering when switching tabs
+const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSelectEmoji }) {
+  return (
+    <div 
+      id={`apple-emoji-cat-${category.id}`} 
+      className="apple-emoji-section"
+    >
+      <div className="apple-emoji-section-title">
+        {category.name}
+      </div>
+      <div className="apple-emoji-grid">
+        {category.emojis.map((emoji, idx) => (
+          <button
+            key={`${category.id}-${idx}-${emoji}`}
+            className="apple-emoji-btn"
+            onPointerDown={(e) => {
+              // Prevent focus steal to keep keyboard ready
+              e.preventDefault();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              onSelectEmoji(emoji);
+            }}
+            title={emoji}
+            aria-label={`Insert ${emoji}`}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+// Memoized Dock Bar for instant 120fps highlight updates
+const AppleEmojiDock = memo(function AppleEmojiDock({ activeCategory, onCategoryClick, isSearching }) {
+  return (
+    <div className="apple-emoji-dock-bar">
+      {EMOJI_CATEGORIES.map((cat) => (
+        <button
+          key={cat.id}
+          className={`apple-dock-tab ${activeCategory === cat.id && !isSearching ? 'is-active' : ''}`}
+          onClick={() => onCategoryClick(cat.id)}
+          title={cat.name}
+          aria-label={cat.name}
+        >
+          <span className="apple-dock-icon">{cat.icon}</span>
+        </button>
+      ))}
+    </div>
+  );
+});
+
 export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
   const [activeCategory, setActiveCategory] = useState('smileys');
   const [searchQuery, setSearchQuery] = useState('');
   const scrollContainerRef = useRef(null);
   const searchInputRef = useRef(null);
   const isScrollingRef = useRef(false);
+  const rafIdRef = useRef(null);
 
   // Search filter across all categories
   const filteredCategories = useMemo(() => {
@@ -172,36 +226,57 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
     }).filter(cat => cat.emojis.length > 0);
   }, [searchQuery]);
 
-  // Jump smoothly to a category section
+  // Smooth, buttery gliding to target category section
   const handleCategoryClick = useCallback((categoryId) => {
     setActiveCategory(categoryId);
-    setSearchQuery('');
+    if (searchQuery) setSearchQuery('');
+    
+    const container = scrollContainerRef.current;
     const targetElement = document.getElementById(`apple-emoji-cat-${categoryId}`);
-    if (targetElement && scrollContainerRef.current) {
+    if (targetElement && container) {
       isScrollingRef.current = true;
-      targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const targetTop = targetElement.offsetTop - container.offsetTop;
+      container.scrollTo({
+        top: Math.max(0, targetTop - 6),
+        behavior: 'smooth'
+      });
       setTimeout(() => {
         isScrollingRef.current = false;
-      }, 400);
-    }
-  }, []);
-
-  // Update active category tab based on scroll position
-  const handleScroll = useCallback(() => {
-    if (isScrollingRef.current || searchQuery) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const scrollTop = container.scrollTop;
-    for (let i = EMOJI_CATEGORIES.length - 1; i >= 0; i--) {
-      const cat = EMOJI_CATEGORIES[i];
-      const el = document.getElementById(`apple-emoji-cat-${cat.id}`);
-      if (el && el.offsetTop - container.offsetTop <= scrollTop + 60) {
-        setActiveCategory(cat.id);
-        break;
-      }
+      }, 350);
     }
   }, [searchQuery]);
+
+  // High-performance RAF scroll watcher (zero layout thrashing)
+  const handleScroll = useCallback(() => {
+    if (isScrollingRef.current || searchQuery) return;
+    if (rafIdRef.current) return;
+
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      const scrollTop = container.scrollTop;
+      const containerTop = container.offsetTop;
+
+      for (let i = EMOJI_CATEGORIES.length - 1; i >= 0; i--) {
+        const cat = EMOJI_CATEGORIES[i];
+        const el = document.getElementById(`apple-emoji-cat-${cat.id}`);
+        if (el && (el.offsetTop - containerTop) <= scrollTop + 60) {
+          setActiveCategory(prev => (prev !== cat.id ? cat.id : prev));
+          break;
+        }
+      }
+    });
+  }, [searchQuery]);
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="apple-emoji-picker-container glass" onClick={(e) => e.stopPropagation()}>
@@ -235,6 +310,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         {onDelete && (
           <button 
             className="apple-backspace-btn" 
+            onPointerDown={(e) => e.preventDefault()}
             onClick={(e) => {
               e.preventDefault();
               onDelete();
@@ -258,7 +334,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         )}
       </div>
 
-      {/* Unified Single Smooth Scrollable List */}
+      {/* Unified Single High-Performance Smooth Scroll View */}
       <div 
         className="apple-emoji-scroll-body" 
         ref={scrollContainerRef}
@@ -271,49 +347,21 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
           </div>
         ) : (
           filteredCategories.map((category) => (
-            <div 
-              key={category.id} 
-              id={`apple-emoji-cat-${category.id}`} 
-              className="apple-emoji-section"
-            >
-              <div className="apple-emoji-section-title">
-                {category.name}
-              </div>
-              <div className="apple-emoji-grid">
-                {category.emojis.map((emoji, idx) => (
-                  <button
-                    key={`${category.id}-${idx}-${emoji}`}
-                    className="apple-emoji-btn"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      onSelectEmoji(emoji);
-                    }}
-                    title={emoji}
-                    aria-label={`Insert ${emoji}`}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <EmojiCategorySection
+              key={category.id}
+              category={category}
+              onSelectEmoji={onSelectEmoji}
+            />
           ))
         )}
       </div>
 
       {/* Bottom Docked Apple Category Navigation Bar */}
-      <div className="apple-emoji-dock-bar">
-        {EMOJI_CATEGORIES.map((cat) => (
-          <button
-            key={cat.id}
-            className={`apple-dock-tab ${activeCategory === cat.id && !searchQuery ? 'is-active' : ''}`}
-            onClick={() => handleCategoryClick(cat.id)}
-            title={cat.name}
-            aria-label={cat.name}
-          >
-            <span className="apple-dock-icon">{cat.icon}</span>
-          </button>
-        ))}
-      </div>
+      <AppleEmojiDock
+        activeCategory={activeCategory}
+        onCategoryClick={handleCategoryClick}
+        isSearching={Boolean(searchQuery)}
+      />
     </div>
   );
 }
