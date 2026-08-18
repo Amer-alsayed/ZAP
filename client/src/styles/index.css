@@ -5165,7 +5165,7 @@ textarea {
 /* Back button style (visible on all screens) */
 .back-btn {
   display: flex;
-  color: var(--text-primary);
+  color: var(--text-muted);
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -6237,8 +6237,8 @@ textarea {
   position: absolute;
   bottom: calc(100% + 12px); /* Sits right above the input container */
   left: 50%;
-  background: rgba(18, 18, 18, 0.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: rgba(18, 18, 18, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   color: var(--text-muted) !important;
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.25) !important;
@@ -6247,8 +6247,8 @@ textarea {
   -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   
   /* Initial hidden state layout */
-  height: 44px !important;
-  width: 44px !important;
+  height: 40px !important;
+  width: 40px !important;
   border-radius: 50% !important;
   overflow: visible;
   display: flex;
@@ -6260,19 +6260,19 @@ textarea {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: translateX(-50%) translateY(12px) scale(0.9);
+  transform: translateX(-50%) translateY(8px) scale(0.9);
   
-  /* Smooth appearing/disappearing and morphing transitions */
+  /* Spring transition matching input buttons */
   transition: 
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), 
+    width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), 
+    border-radius 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
     background-color 0.2s ease, 
     border-color 0.2s ease,
     color 0.2s ease,
-    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), 
-    width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), 
-    border-radius 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
     box-shadow 0.2s ease,
-    opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    visibility 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity 0.2s ease,
+    visibility 0.2s ease;
 }
 
 /* Visible state */
@@ -6287,12 +6287,24 @@ textarea {
   background: rgba(28, 28, 28, 0.95) !important;
   border-color: rgba(255, 255, 255, 0.18) !important;
   color: var(--text-primary) !important;
+  transform: translateX(-50%) translateY(0) scale(1.06);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
-  transform: translateX(-50%) translateY(-2px) scale(1.06);
 }
 
 .scroll-to-bottom-btn.visible:active {
   transform: translateX(-50%) translateY(0) scale(0.94);
+}
+
+.scroll-to-bottom-btn svg {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.scroll-to-bottom-btn.visible:hover svg {
+  transform: translateY(1px);
+}
+
+.scroll-to-bottom-btn.visible:active svg {
+  transform: translateY(2px);
 }
 
 /* Inner content alignment */
@@ -6315,9 +6327,9 @@ textarea {
   font-weight: 500;
   color: #ffffff !important;
   transition: 
-    max-width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), 
-    opacity 0.25s ease,
-    margin-right 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-width 0.25s cubic-bezier(0.16, 1, 0.3, 1), 
+    opacity 0.2s ease,
+    margin-right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   margin-right: 0;
 }
 
@@ -6336,17 +6348,7 @@ textarea {
 }
 
 .typing-arrow-bounce {
-  animation: arrow-down-bounce 0.8s infinite alternate ease-in-out;
-}
-
-@keyframes arrow-down-bounce {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(3px); }
-}
-
-@keyframes bounceIn {
-  0% { opacity: 0; transform: scale(0.3) translateY(20px); }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
+  opacity: 0.9;
 }
 
 /* Floating Unread Count Badge overlay */
@@ -6369,15 +6371,15 @@ textarea {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 0 2px #000000 !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
-  animation: popInBadge 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: popInBadge 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   z-index: 101;
   pointer-events: none;
   box-sizing: border-box !important;
 }
 
 @keyframes popInBadge {
-  0% { transform: scale(0); }
-  100% { transform: scale(1); }
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 /* Fullscreen Image Lightbox Viewer with Entry/Exit Transitions */

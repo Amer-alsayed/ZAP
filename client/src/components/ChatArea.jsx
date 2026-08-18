@@ -1471,16 +1471,19 @@ const ChatArea = React.memo(function ChatArea({
       setIsScrolledUp(nextScrolledUp);
     }
   }, []);
+  const isSmoothScrollingRef = useRef(false);
 
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
+      isSmoothScrollingRef.current = true;
       messagesContainerRef.current.scrollTo({
         top: messagesContainerRef.current.scrollHeight,
         behavior: 'smooth'
       });
+      setTimeout(() => {
+        isSmoothScrollingRef.current = false;
+      }, 400);
     }
-    isScrolledUpRef.current = false;
-    setIsScrolledUp(false);
     setIsLastMessageVisible(true);
     if (markAllMessagesAsReadLocal) {
       markAllMessagesAsReadLocal(activeContact.username);
@@ -1513,7 +1516,7 @@ const ChatArea = React.memo(function ChatArea({
           if (messagesContainerRef.current) {
             messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
           }
-          if (now - startTime < 320) {
+          if (now - startTime < 180) {
             frameId = requestAnimationFrame(keepBottomInView);
           }
         };
@@ -1743,11 +1746,10 @@ const ChatArea = React.memo(function ChatArea({
       prevMessageCountRef.current = activeContact?.messages?.length || 0;
     }
 
-    if (messagesContainerRef.current && (isNewContact || !isScrolledUpRef.current)) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-    }
-    
     if (isNewContact) {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
       if (markAllMessagesAsReadLocal) {
         markAllMessagesAsReadLocal(activeContact.username);
       }
@@ -1756,25 +1758,29 @@ const ChatArea = React.memo(function ChatArea({
       if (textareaRef.current) {
         textareaRef.current.style.height = '36px';
       }
+
+      // Double-frame check to guarantee bottom scroll as DOM elements/bubbles finish layout
+      const frameId = requestAnimationFrame(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      });
+
+      const timerId = setTimeout(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      }, 60);
+
+      return () => {
+        cancelAnimationFrame(frameId);
+        clearTimeout(timerId);
+      };
+    } else if (!isScrolledUpRef.current && !isSmoothScrollingRef.current) {
+      if (messagesContainerRef.current && isLastMessageVisible) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
     }
-
-    // Double-frame check to guarantee bottom scroll as DOM elements/bubbles finish layout
-    const frameId = requestAnimationFrame(() => {
-      if (messagesContainerRef.current && (isNewContact || !isScrolledUpRef.current)) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-      }
-    });
-
-    const timerId = setTimeout(() => {
-      if (messagesContainerRef.current && (isNewContact || !isScrolledUpRef.current)) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-      }
-    }, 60);
-
-    return () => {
-      cancelAnimationFrame(frameId);
-      clearTimeout(timerId);
-    };
   }, [activeContact.username, activeContact?.messages?.length, markAllMessagesAsReadLocal]);
 
   // Immediately mark unread messages as read when looking at bottom view
