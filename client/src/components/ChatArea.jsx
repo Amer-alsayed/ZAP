@@ -1074,8 +1074,10 @@ const ChatArea = React.memo(function ChatArea({
   selectionCancelCallbackRef,
   onOpenSafetyModal,
   replyingTo,
-  setReplyingTo
+  setReplyingTo,
+  showToast
 }) {
+  const notify = showToast || window.showAppToast || ((msg) => window.alert(msg));
   const selectionCancelRef = useRef(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectionCount, setSelectionCount] = useState(0);
@@ -1936,6 +1938,14 @@ const ChatArea = React.memo(function ChatArea({
     // If there's neither text nor attached files, do nothing
     if (!inputText.trim() && selectedFiles.length === 0) return;
 
+    // Automatically close emoji picker and attach menus when sending
+    if (showEmojiPicker) {
+      closeEmojiPicker();
+    }
+    if (showAttachMenu) {
+      setShowAttachMenu(false);
+    }
+
     // Immediately emit stop typing
     const socket = getSocket();
     if (socket && socket.connected && isTypingRef.current) {
@@ -2059,7 +2069,7 @@ const ChatArea = React.memo(function ChatArea({
         soundEngine.playMessageSent();
       } catch (err) {
         console.error("Encryption/Upload failed:", err);
-        alert(`Failed to send encrypted file: ${err.message || 'Unknown upload error'}`);
+        notify(`Failed to send encrypted file: ${err.message || 'Unknown upload error'}`, 'error', 'Upload Error');
       } finally {
         setUploadProgress(null);
         setUploading(false);
@@ -2094,7 +2104,7 @@ const ChatArea = React.memo(function ChatArea({
         const file = items[i].getAsFile();
         if (file) {
           if (file.size > 15 * 1024 * 1024) {
-            alert(`File "${file.name}" exceeds 15MB limit.`);
+            notify(`File "${file.name}" exceeds 15MB limit.`, 'warning', 'File Size Limit');
             continue;
           }
           pastedFiles.push(file);
@@ -2161,7 +2171,7 @@ const ChatArea = React.memo(function ChatArea({
       URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error(err);
-      alert(err.message || 'Failed to decrypt and download file.');
+      notify(err.message || 'Failed to decrypt and download file.', 'error', 'Download Error');
     }
   }, []);
 
@@ -2224,7 +2234,7 @@ const ChatArea = React.memo(function ChatArea({
       }, 1000);
     } catch (err) {
       console.error('Microphone access denied:', err);
-      alert('Microphone access is required to record voice notes.');
+      notify('Microphone access is required to record voice notes.', 'error', 'Permission Required');
     }
   };
 
@@ -2411,7 +2421,7 @@ const ChatArea = React.memo(function ChatArea({
       soundEngine.playMessageSent();
     } catch (err) {
       console.error('Error sending voice note:', err);
-      alert(`Failed to send encrypted voice note: ${err?.message || err}`);
+      notify(`Failed to send encrypted voice note: ${err?.message || err}`, 'error', 'Voice Note Error');
     } finally {
       setIsSendingVoice(false);
     }
@@ -2507,9 +2517,9 @@ const ChatArea = React.memo(function ChatArea({
     } catch (err) {
       console.error('Voice note error:', err);
       if (err.message && (err.message.includes('404') || err.message.includes('expired') || err.message.includes('Failed to fetch'))) {
-        alert('This voice note is no longer available on the server (expired or deleted).');
+        notify('This voice note is no longer available on the server (expired or deleted).', 'warning', 'Voice Note');
       } else {
-        alert('Failed to decrypt and play voice note.');
+        notify('Failed to decrypt and play voice note.', 'error', 'Audio Playback Error');
       }
     }
   }, [playbackRate, audioProgress]);

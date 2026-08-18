@@ -145,7 +145,7 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
           display: 'inline-flex', 
           alignItems: 'center', 
           gap: '5px', 
-          color: isMissed ? '#fb7185' : 'inherit',
+          color: isMissed ? '#ff453a' : 'inherit',
           fontWeight: isMissed ? '500' : 'normal'
         }}>
           {isMissed ? (

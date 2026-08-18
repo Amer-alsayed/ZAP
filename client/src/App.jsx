@@ -31,6 +31,7 @@ import SettingsView from './components/SettingsView';
 import { soundEngine } from './services/soundEffects';
 import Dashboard from './components/Dashboard';
 import { applyThemeTokens } from './utils/themeTokens';
+import { AppToastContainer, AppConfirmModal } from './components/AppNotification';
 
 import { searchUser } from './services/api';
 import { 
@@ -69,6 +70,45 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null); // { username, token, keys }
   const [restoringSession, setRestoringSession] = useState(true);
   const [isPreloaderFading, setIsPreloaderFading] = useState(false);
+
+  // In-App Toast & Confirmation Modal State
+  const [toasts, setToasts] = useState([]);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false });
+
+  const showToast = useCallback((message, type = 'error', title = null, duration = 4000) => {
+    if (!message) return;
+    const id = 'toast_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const newToast = { id, message, type, title };
+    setToasts(prev => [...prev, newToast]);
+
+    if (duration > 0) {
+      setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+      }, duration);
+    }
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const showConfirm = useCallback((options) => {
+    setConfirmModal({
+      isOpen: true,
+      ...options
+    });
+  }, []);
+
+  const closeConfirm = useCallback(() => {
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  }, []);
+
+  // Gracefully intercept window.alert and expose toast helpers
+  useEffect(() => {
+    window.alert = (msg) => showToast(msg, 'error');
+    window.showAppToast = showToast;
+    window.showAppConfirm = showConfirm;
+  }, [showToast, showConfirm]);
 
   // Restore E2EE session on mount
   useEffect(() => {
@@ -653,7 +693,7 @@ export default function App() {
         setActiveContact(null);
         setShowSettings(false);
         sharedSecrets.current = {};
-        alert(reason);
+        showToast(reason, 'error', 'Session Ended');
       }
     });
 
@@ -1010,7 +1050,7 @@ export default function App() {
     });
 
     socket.on('call-error', ({ message }) => {
-      alert(message);
+      showToast(message, 'warning', 'Call Alert');
       cleanupCall(true);
     });
     return () => {
@@ -1104,7 +1144,7 @@ export default function App() {
     const recipient = activeContact.username;
 
     if (blockedUsersRef.current.includes(recipient.toLowerCase())) {
-      alert(`You have blocked @${recipient}. Unblock them to send messages.`);
+      showToast(`You have blocked @${recipient}. Unblock them to send messages.`, 'warning', 'Contact Blocked');
       return;
     }
 
@@ -1139,7 +1179,7 @@ export default function App() {
       appendMessageToContact(recipient, localMsg);
     } catch (err) {
       console.error('E2EE encryption/sending failed:', err);
-      alert(`Failed to send message: ${err.message || 'Unknown error'}`);
+      showToast(`Failed to send message: ${err.message || 'Unknown error'}`, 'error');
     }
   };
 
@@ -1649,7 +1689,7 @@ export default function App() {
       await emitUnblockUser(username);
     } catch (err) {
       console.warn('Failed to unblock contact remotely:', err);
-      alert(`Failed to unblock @${username}: ${err.message || 'Error'}`);
+      showToast(`Failed to unblock @${username}: ${err.message || 'Error'}`, 'error');
     }
   }, []);
 
@@ -1916,12 +1956,12 @@ export default function App() {
     if (!target) return;
 
     if (callStateRef.current !== 'idle') {
-      alert('You are already in a call. Please hang up or decline the active call first.');
+      showToast('You are already in a call. Please hang up or decline the active call first.', 'warning', 'Active Call');
       return;
     }
 
     if (target.toLowerCase() === currentUser.username.toLowerCase()) {
-      alert('You cannot place a call to yourself.');
+      showToast('You cannot place a call to yourself.', 'warning');
       return;
     }
     
@@ -1987,7 +2027,7 @@ export default function App() {
       }
     } catch (err) {
       console.error('Call media setup failed:', err);
-      alert('Could not access media devices (camera/microphone).');
+      showToast('Could not access media devices (camera/microphone).', 'error', 'Permission Required');
       cleanupCall();
     }
   };
@@ -2058,7 +2098,7 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to accept call:', err);
-      alert('Failed to connect call devices.');
+      showToast('Failed to connect call devices.', 'error', 'Call Error');
       handleDeclineCall();
     }
   };
@@ -2208,7 +2248,7 @@ export default function App() {
       setIsCameraOff(false);
     } catch (err) {
       console.error("Failed to enable camera:", err);
-      alert("Could not access camera device.");
+      showToast("Could not access camera device.", "error", "Camera Error");
     }
   };
 
@@ -2355,7 +2395,7 @@ export default function App() {
         }
       } catch (e) {}
 
-      alert('Could not switch camera. Your device may be using a single camera or another application is locking camera access.');
+      showToast('Could not switch camera. Your device may be using a single camera or another application is locking camera access.', 'warning', 'Camera Switch');
     }
   };
 
@@ -2364,7 +2404,7 @@ export default function App() {
     if (!stream || !peerConnectionRef.current) return;
 
     if (!navigator.mediaDevices?.getDisplayMedia) {
-      alert("Screen sharing is not supported by your current browser/device (requires iOS 13+ Safari, Android Chrome 119+, or a desktop browser, served over a secure HTTPS connection).");
+      showToast("Screen sharing is not supported by your current browser/device (requires iOS 13+ Safari, Android Chrome 119+, or a desktop browser over HTTPS).", "warning", "Screen Share");
       return;
     }
 
@@ -2433,7 +2473,7 @@ export default function App() {
       };
     } catch (err) {
       console.error("Screen sharing activation failed:", err);
-      alert("Failed to start screen sharing: " + (err.message || err.toString()));
+      showToast("Failed to start screen sharing: " + (err.message || err.toString()), "error", "Screen Share Error");
       setIsScreenSharing(false);
     }
   };
@@ -2587,30 +2627,36 @@ export default function App() {
     setCameraFacingMode('user');
   };
 
-  // Secure sign out
+  // Secure sign out with in-app confirmation modal
   const handleLogout = () => {
-    if (window.confirm("Sign out? Your keys are stored client-side. Make sure you know your password to log back in!")) {
-      cleanupCall();
-      disconnectSocket();
-      localStorage.removeItem('session_enc_key');
-      localStorage.removeItem('chatra_username');
-      localStorage.removeItem('chatra_token');
-      localStorage.removeItem('chatra_encrypted_private_keys');
-      localStorage.removeItem('chatra_public_identity_key');
-      localStorage.removeItem('chatra_public_signing_key');
-      localStorage.removeItem('chatra_display_name');
-      localStorage.removeItem('chatra_avatar_icon');
-      // Preserve cached media files in IndexedDB so sign in across devices/sessions keeps decrypted attachments intact
-      localStorage.removeItem('chatra_active_view');
-      localStorage.removeItem('chatra_active_contact');
-      previousActiveContactRef.current = null;
-      setCurrentUser(null);
-      setContacts([]);
-      setActiveContact(null);
-      setShowSettings(false);
-      setShowRecents(false);
-      sharedSecrets.current = {};
-    }
+    showConfirm({
+      title: 'Sign out of Chatra?',
+      message: 'Your encryption keys are stored locally on this device. Make sure you know your password to sign back in.',
+      confirmText: 'Sign Out',
+      cancelText: 'Cancel',
+      isDanger: true,
+      onConfirm: () => {
+        cleanupCall();
+        disconnectSocket();
+        localStorage.removeItem('session_enc_key');
+        localStorage.removeItem('chatra_username');
+        localStorage.removeItem('chatra_token');
+        localStorage.removeItem('chatra_encrypted_private_keys');
+        localStorage.removeItem('chatra_public_identity_key');
+        localStorage.removeItem('chatra_public_signing_key');
+        localStorage.removeItem('chatra_display_name');
+        localStorage.removeItem('chatra_avatar_icon');
+        localStorage.removeItem('chatra_active_view');
+        localStorage.removeItem('chatra_active_contact');
+        previousActiveContactRef.current = null;
+        setCurrentUser(null);
+        setContacts([]);
+        setActiveContact(null);
+        setShowSettings(false);
+        setShowRecents(false);
+        sharedSecrets.current = {};
+      }
+    });
   };
 
   return (
@@ -2771,6 +2817,7 @@ export default function App() {
                     onOpenSafetyModal={handleOpenSafetyModal}
                     replyingTo={replyingTo}
                     setReplyingTo={setReplyingTo}
+                    showToast={showToast}
                   />
                 )}
               </div>
@@ -2869,6 +2916,12 @@ export default function App() {
           );
         })()
       )}
+
+      {/* Floating In-App Toast Notification Stack */}
+      <AppToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Custom In-App Action Confirmation Modal */}
+      <AppConfirmModal modalState={confirmModal} onClose={closeConfirm} />
     </>
   );
 }

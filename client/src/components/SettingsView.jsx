@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, User, Check, ShieldAlert, CheckCircle, LogOut, Camera, ChevronDown, ChevronUp, Play, Volume2, Ban, Unlock } from 'lucide-react';
+import { ArrowLeft, User, Check, ShieldAlert, CheckCircle, LogOut, Camera, Trash2, ChevronDown, ChevronUp, Play, Volume2, Ban, Unlock } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 import { emitUpdateProfile } from '../services/socket';
 import { soundEngine } from '../services/soundEffects';
@@ -387,18 +387,21 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
               <div className="avatar-action-buttons">
                 <button 
                   type="button" 
-                  className="settings-action-link" 
+                  className="avatar-action-pill" 
                   onClick={() => fileInputRef.current.click()}
+                  title={selectedImage ? 'Change profile photo' : 'Upload profile photo'}
                 >
-                  <Camera size={15} style={{ marginRight: '6px' }} />
-                  Upload Photo
+                  <Camera size={13} />
+                  {selectedImage ? 'Change Photo' : 'Upload Photo'}
                 </button>
                 {selectedImage && (
                   <button 
                     type="button" 
-                    className="settings-action-link danger-link" 
+                    className="avatar-action-pill danger-pill" 
                     onClick={handleRemoveImage}
+                    title="Remove custom photo"
                   >
+                    <Trash2 size={13} />
                     Remove Photo
                   </button>
                 )}
@@ -494,9 +497,12 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
             </div>
 
             {/* Colors */}
-            <div className="form-group" style={selectedImage ? { opacity: 0.5 } : {}}>
+            <div className={`form-group avatar-options-group ${selectedImage ? 'is-disabled' : ''}`}>
               <label>
-                Avatar Color {selectedImage && <span style={{ fontSize: '10px', textTransform: 'none', color: 'var(--text-muted)' }}>(Disabled: custom photo is active)</span>}
+                Avatar Color
+                {selectedImage && (
+                  <span className="photo-active-chip">Photo Active</span>
+                )}
               </label>
               <div className="color-selector-row">
                 {colors.map((c) => {
@@ -508,7 +514,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                       className={`color-dot ${isColorSelected ? 'active' : ''}`}
                       style={{ backgroundColor: c.value }}
                       onClick={() => selectColorAndClearImage(c.name)}
-                      disabled={saving}
+                      disabled={saving || !!selectedImage}
                       title={`Select ${c.name} background`}
                     >
                       {isColorSelected && <Check size={14} color="#ffffff" />}
@@ -519,9 +525,12 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
             </div>
 
             {/* Emojis */}
-            <div className="form-group" style={selectedImage ? { opacity: 0.5 } : {}}>
+            <div className={`form-group avatar-options-group ${selectedImage ? 'is-disabled' : ''}`}>
               <label>
-                Avatar Symbol (Emoji) {selectedImage && <span style={{ fontSize: '10px', textTransform: 'none', color: 'var(--text-muted)' }}>(Disabled: custom photo is active)</span>}
+                Avatar Symbol (Emoji)
+                {selectedImage && (
+                  <span className="photo-active-chip">Photo Active</span>
+                )}
               </label>
               <div className="avatar-emoji-grid">
                 {uniqueEmojis.map((emoji) => {
@@ -532,7 +541,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                       type="button"
                       className={`avatar-emoji-btn ${isEmojiSelected ? 'active' : ''}`}
                       onClick={() => selectEmojiAndClearImage(emoji === 'None' ? '' : emoji)}
-                      disabled={saving}
+                      disabled={saving || !!selectedImage}
                     >
                       {emoji}
                     </button>
@@ -541,71 +550,46 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
               </div>
             </div>
 
-            {/* Call Quality Profile Settings */}
+            {/* Call Quality Profile Settings (Unified List Group) */}
             <div className="form-group">
-              <label style={{ display: 'block', marginBottom: '8px' }}>Call & Screen Share Quality</label>
-              <div className="quality-selector-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label>Call & Screen Share Quality</label>
+              <div className="quality-selector-group">
                 {[
-                  { id: 'low', name: 'Low Quality', desc: 'Optimized for slow connections. 480p Video, 720p 15fps Screen, 24kbps Mono Audio.' },
-                  { id: 'medium', name: 'Medium (Default)', desc: 'Well-balanced HD video. 720p Video, 1080p 30fps Screen, 64kbps Stereo Audio.' },
-                  { id: 'high', name: 'High Definition', desc: 'Premium quality. 1080p Video, 1080p 60fps Screen, 128kbps High-Fidelity Audio.' }
-                ].map((q) => (
-                  <button
-                    key={q.id}
-                    type="button"
-                    className={`quality-option-card ${callQuality === q.id ? 'active' : ''}`}
-                    onClick={() => {
-                      setCallQuality(q.id);
-                      localStorage.setItem('chatra_call_quality', q.id);
-                    }}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      padding: '12px 16px',
-                      borderRadius: '12px',
-                      background: callQuality === q.id ? 'rgba(0, 122, 204, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                      border: callQuality === q.id ? '1px solid var(--accent-color)' : '1px solid rgba(255, 255, 255, 0.08)',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      width: '100%',
-                      gap: '4px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                      <span style={{ fontWeight: '600', fontSize: '13px', color: callQuality === q.id ? 'var(--accent-color)' : 'var(--text-color)' }}>
-                        {q.name}
-                      </span>
-                      {callQuality === q.id && (
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: '700',
-                          backgroundColor: 'var(--accent-color)',
-                          color: '#ffffff',
-                          padding: '2px 6px',
-                          borderRadius: '8px',
-                          textTransform: 'uppercase'
-                        }}>
-                          Active
-                        </span>
-                      )}
-                    </div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                      {q.desc}
-                    </span>
-                  </button>
-                ))}
+                  { id: 'low', name: 'Low Quality', desc: '480p Video • 720p 15fps Screen • 24kbps Audio (Slow connections)' },
+                  { id: 'medium', name: 'Medium (Default)', desc: '720p Video • 1080p 30fps Screen • 64kbps Audio (Balanced HD)' },
+                  { id: 'high', name: 'High Definition', desc: '1080p Video • 1080p 60fps Screen • 128kbps Hi-Fi Audio (Studio)' }
+                ].map((q) => {
+                  const isSelected = callQuality === q.id;
+                  return (
+                    <button
+                      key={q.id}
+                      type="button"
+                      className={`quality-option-row ${isSelected ? 'active' : ''}`}
+                      onClick={() => {
+                        setCallQuality(q.id);
+                        localStorage.setItem('chatra_call_quality', q.id);
+                      }}
+                    >
+                      <div className="quality-option-info">
+                        <span className="quality-option-name">{q.name}</span>
+                        <span className="quality-option-desc">{q.desc}</span>
+                      </div>
+                      <div className={`quality-option-radio ${isSelected ? 'active' : ''}`}>
+                        {isSelected && <div className="quality-radio-dot" />}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             {/* Sound Effects & Acoustics Settings */}
-            <div className="form-group" style={{ marginTop: '24px' }}>
-              <label style={{ display: 'block', marginBottom: '8px' }}>Sound Effects & Acoustics</label>
+            <div className="form-group" style={{ marginTop: '20px' }}>
+              <label>Sound Effects & Acoustics</label>
               <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '12px',
+                background: '#121517',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: '16px',
                 padding: '16px',
                 display: 'flex',
                 flexDirection: 'column',
@@ -613,10 +597,10 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-color)' }}>
+                    <div style={{ fontWeight: '600', fontSize: '13.5px', color: '#ffffff' }}>
                       Audio Feedback & Ringtones
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    <div style={{ fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
                       Play subtle acoustic feedback for sent messages, calls, and incoming alerts.
                     </div>
                   </div>
@@ -635,7 +619,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                       position: 'absolute',
                       cursor: 'pointer',
                       top: 0, left: 0, right: 0, bottom: 0,
-                      backgroundColor: soundEffectsEnabled ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.15)',
+                      backgroundColor: soundEffectsEnabled ? 'var(--accent-main)' : 'rgba(255, 255, 255, 0.15)',
                       transition: '.2s',
                       borderRadius: '24px'
                     }}>
@@ -657,12 +641,13 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                 {soundEffectsEnabled && (
                   <>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
                         <span>Effects Volume</span>
                         <span>{Math.round(soundVolume * 100)}%</span>
                       </div>
                       <input 
                         type="range"
+                        className="settings-volume-slider"
                         min="0"
                         max="1"
                         step="0.05"
@@ -672,7 +657,9 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                           setSoundVolume(v);
                           localStorage.setItem('chatra_sound_volume', v.toString());
                         }}
-                        style={{ width: '100%', accentColor: 'var(--accent-color)', cursor: 'pointer' }}
+                        style={{
+                          background: `linear-gradient(to right, var(--accent-main) 0%, var(--accent-main) ${Math.round(soundVolume * 100)}%, rgba(255, 255, 255, 0.1) ${Math.round(soundVolume * 100)}%, rgba(255, 255, 255, 0.1) 100%)`
+                        }}
                       />
                     </div>
 
@@ -734,7 +721,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                                     position: 'absolute',
                                     cursor: 'pointer',
                                     top: 0, left: 0, right: 0, bottom: 0,
-                                    backgroundColor: (individualSounds && individualSounds[item.key]) ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.15)',
+                                    backgroundColor: (individualSounds && individualSounds[item.key]) ? 'var(--accent-main)' : 'rgba(255, 255, 255, 0.15)',
                                     transition: '.2s',
                                     borderRadius: '20px'
                                   }}>
@@ -764,7 +751,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
 
             {/* Blocked Contacts Management */}
             <div className="settings-section">
-              <h4>Blocked Contacts</h4>
+              <label style={{ display: 'block', marginBottom: '8px' }}>Blocked Contacts</label>
               <p className="section-description">
                 Manage accounts you have blocked. Blocked users cannot send messages or place calls to you.
               </p>
@@ -807,21 +794,26 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
               </div>
             )}
 
-            {success && (
-              <div className="settings-feedback success-feedback">
-                <CheckCircle size={16} />
-                <span>Profile updated successfully!</span>
-              </div>
-            )}
-
-            {/* Submit Control */}
+            {/* Submit Control with In-Button State Feedback */}
             <button
               type="button"
-              className="save-profile-btn"
+              className={`save-profile-btn ${success ? 'is-success' : ''}`}
               disabled={saving}
               onClick={handleSave}
             >
-              {saving ? 'Saving changes...' : 'Save Profile'}
+              {saving ? (
+                <span className="btn-state-content">
+                  <div className="btn-spinner" />
+                  Saving changes...
+                </span>
+              ) : success ? (
+                <span className="btn-state-content">
+                  <Check size={16} strokeWidth={2.6} />
+                  Saved Successfully
+                </span>
+              ) : (
+                'Save Profile'
+              )}
             </button>
           </div>
 
@@ -835,6 +827,14 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
         </div>
         </div>
       </div>
+
+      {/* Non-Shifting Floating Bottom Toast */}
+      {success && (
+        <div className="settings-floating-toast" role="status" aria-live="polite">
+          <CheckCircle size={16} className="toast-icon" />
+          <span>Profile updated successfully</span>
+        </div>
+      )}
     </div>
   );
 }

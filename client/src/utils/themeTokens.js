@@ -17,6 +17,10 @@ export const applyThemeTokens = (rgbValue = '0, 122, 204') => {
     root.style.setProperty('--accent-card-active', `rgb(${Math.round(13 + (r - 13) * 0.16)}, ${Math.round(16 + (g - 16) * 0.16)}, ${Math.round(18 + (b - 18) * 0.16)})`);
     // Elevated high-contrast text variant
     root.style.setProperty('--accent-text', `rgb(${Math.min(255, r + 45)}, ${Math.min(255, g + 45)}, ${Math.min(255, b + 45)})`);
+    // Dynamic text contrast for primary CTA buttons (dark on light/high-luminance accents, white on deep accents)
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    const btnText = luminance > 0.55 ? '#09090b' : '#ffffff';
+    root.style.setProperty('--accent-btn-text', btnText);
     root.style.setProperty('--accent-color', `rgb(${r}, ${g}, ${b})`);
     root.style.setProperty('--accent-hover', `rgba(${r}, ${g}, ${b}, 0.85)`);
     root.style.setProperty('--accent-glow', `rgba(${r}, ${g}, ${b}, 0.3)`);
