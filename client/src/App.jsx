@@ -1964,24 +1964,38 @@ export default function App() {
       showToast('You cannot place a call to yourself.', 'warning');
       return;
     }
-    
-    if (targetUser) {
-      const contactObj = contacts.find(c => c.username === target);
-      if (contactObj) handleSelectContact(contactObj);
-    }
-    
-    isCallInitiator.current = true;
-    setCallMediaType(media);
-    setCallParty(target);
-    setCallState('calling');
-    setIsMuted(false);
-    setIsCameraOff(media === 'voice');
-    setIsScreenSharing(false);
-    setRemoteScreenSharing(false);
-    setRemoteCameraOff(media === 'voice');
 
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast('Calling is not supported by your current browser.', 'error', 'Unsupported Browser');
+      return;
+    }
+
+    // 1. Pre-flight Hardware Verification: Check device availability before initiating call state or ringing
     try {
-      let stream;
+      if (navigator.mediaDevices.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const hasAudio = devices.some(d => d.kind === 'audioinput');
+        const hasVideo = devices.some(d => d.kind === 'videoinput');
+
+        // Check audio input device (required for any call)
+        if (devices.length > 0 && !hasAudio) {
+          showToast('No microphone found on this device. Please connect a microphone to place calls.', 'warning', 'Microphone Missing');
+          return;
+        }
+
+        // Check video input device when initiating a video call
+        if (media === 'video' && devices.length > 0 && !hasVideo) {
+          showToast('No camera found on this device. You can make a voice call instead.', 'warning', 'No Camera Found');
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Pre-flight enumerateDevices check skipped:', e);
+    }
+
+    // 2. Pre-acquire media stream FIRST before mutating call state or sending network offers
+    let stream;
+    try {
       if (media === 'video') {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: getAudioConstraints(),
@@ -2000,14 +2014,51 @@ export default function App() {
           dummyTrackRef.current = dummyTrack;
         }
       }
-      setLocalStream(stream);
+    } catch (err) {
+      console.error('Call media pre-flight capture failed:', err);
+      if (stream) {
+        try { stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+      }
 
+      if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        if (media === 'video') {
+          showToast('No camera found on this device. You can make a voice call instead.', 'warning', 'No Camera Found');
+        } else {
+          showToast('No microphone found on this device. Please connect a microphone to place calls.', 'warning', 'No Microphone Found');
+        }
+      } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        showToast('Camera/Microphone permission was denied. Please allow access in your browser settings.', 'error', 'Permission Denied');
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        showToast('Your camera or microphone is currently in use by another application.', 'error', 'Hardware In Use');
+      } else {
+        showToast(`Could not access media devices: ${err.message || 'Unknown device error'}`, 'error', 'Device Error');
+      }
+      return; // Return cleanly without creating a ghost call or cancelled call log!
+    }
+
+    // 3. Hardware is verified and media stream is ready -> Activate call state and transmit offer
+    if (targetUser) {
+      const contactObj = contacts.find(c => c.username === target);
+      if (contactObj) handleSelectContact(contactObj);
+    }
+    
+    isCallInitiator.current = true;
+    setCallMediaType(media);
+    setCallParty(target);
+    setCallState('calling');
+    setIsMuted(false);
+    setIsCameraOff(media === 'voice');
+    setIsScreenSharing(false);
+    setRemoteScreenSharing(false);
+    setRemoteCameraOff(media === 'voice');
+    setLocalStream(stream);
+
+    try {
       const pc = setupPeerConnection(target, stream);
       const offer = await pc.createOffer();
       offer.sdp = optimizeSDP(offer.sdp);
       await pc.setLocalDescription(offer);
 
-      // Configure high quality video encoding parameters if initiated as video
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack && media === 'video') {
         if ('contentHint' in videoTrack) videoTrack.contentHint = 'motion';
@@ -2026,30 +2077,40 @@ export default function App() {
         });
       }
     } catch (err) {
-      console.error('Call media setup failed:', err);
-      showToast('Could not access media devices (camera/microphone).', 'error', 'Permission Required');
+      console.error('Call offer setup failed:', err);
+      showToast('Could not establish call connection.', 'error', 'Connection Error');
       cleanupCall();
     }
   };
 
   const handleAcceptCall = async () => {
     if (!callParty || !pendingOfferRef.current) return;
-    setCallState('connected');
-    callStartTime.current = Date.now();
-    setIsMuted(false);
-    setIsCameraOff(callMediaType === 'voice');
-    setIsScreenSharing(false);
-    setRemoteScreenSharing(false);
-    setRemoteCameraOff(callMediaType === 'voice');
 
+    let stream;
+    let effectiveMediaType = callMediaType;
     try {
-      let stream;
       if (callMediaType === 'video') {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: getAudioConstraints(),
-          video: getVideoConstraints()
-        });
-        dummyTrackRef.current = null;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: getAudioConstraints(),
+            video: getVideoConstraints()
+          });
+          dummyTrackRef.current = null;
+        } catch (videoErr) {
+          console.warn('Could not acquire camera on video call accept, gracefully falling back to voice-only:', videoErr);
+          // Gracefully fallback to voice call if receiving device has no camera
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: getAudioConstraints(),
+            video: false
+          });
+          const dummyTrack = createDummyVideoTrack();
+          if (dummyTrack) {
+            stream.addTrack(dummyTrack);
+            dummyTrackRef.current = dummyTrack;
+          }
+          effectiveMediaType = 'voice';
+          showToast('No camera found on this device. Joined call as voice-only.', 'info', 'Voice Fallback');
+        }
       } else {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: getAudioConstraints(),
@@ -2061,8 +2122,23 @@ export default function App() {
           dummyTrackRef.current = dummyTrack;
         }
       }
-      setLocalStream(stream);
+    } catch (err) {
+      console.error('Failed to acquire audio/video on accept:', err);
+      showToast('Could not access microphone to accept call.', 'error', 'Permission Required');
+      handleDeclineCall();
+      return;
+    }
 
+    setCallState('connected');
+    callStartTime.current = Date.now();
+    setIsMuted(false);
+    setIsCameraOff(effectiveMediaType === 'voice');
+    setIsScreenSharing(false);
+    setRemoteScreenSharing(false);
+    setRemoteCameraOff(effectiveMediaType === 'voice');
+    setLocalStream(stream);
+
+    try {
       const pc = setupPeerConnection(callParty, stream);
       await pc.setRemoteDescription({
         type: 'offer',
@@ -2073,9 +2149,8 @@ export default function App() {
       answer.sdp = optimizeSDP(answer.sdp);
       await pc.setLocalDescription(answer);
 
-      // Configure high quality video encoding parameters if accepted as video
       const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack && callMediaType === 'video') {
+      if (videoTrack && effectiveMediaType === 'video') {
         if ('contentHint' in videoTrack) videoTrack.contentHint = 'motion';
         const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
         if (videoSender) {
@@ -2149,11 +2224,29 @@ export default function App() {
     if (!stream) return;
 
     if (!isCameraOff) {
-      // Camera is ON -> turn it OFF
-      stream.getVideoTracks().forEach(track => {
-        track.enabled = false;
+      // 1. Camera is ON -> Turn it completely OFF and physically release the hardware sensor
+      const oldVideoTracks = stream.getVideoTracks();
+      oldVideoTracks.forEach(track => {
+        try { track.stop(); } catch (e) {}
+        try { stream.removeTrack(track); } catch (e) {}
       });
+
+      // 2. Insert a lightweight dummy black video track so WebRTC sender remains alive
+      const dummyTrack = createDummyVideoTrack();
+      if (dummyTrack) {
+        dummyTrackRef.current = dummyTrack;
+        stream.addTrack(dummyTrack);
+        if (peerConnectionRef.current) {
+          const senders = peerConnectionRef.current.getSenders();
+          const videoSender = senders.find(s => s && s.track && s.track.kind === 'video');
+          if (videoSender) {
+            try { await videoSender.replaceTrack(dummyTrack); } catch (e) {}
+          }
+        }
+      }
+
       setIsCameraOff(true);
+      setLocalStream(new MediaStream(stream.getTracks()));
       
       if (isScreenSharing) {
         await handleStopScreenShare();
@@ -2172,80 +2265,61 @@ export default function App() {
       return;
     }
 
-    // Camera is OFF -> turn it ON
+    // 2. Camera is OFF -> Turn it ON by acquiring a fresh hardware camera track
     try {
-      let cameraTrack;
+      const camStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: getVideoConstraints()
+      });
+      const cameraTrack = camStream.getVideoTracks()[0];
+      if (!cameraTrack) throw new Error('No camera track available.');
+
+      if ('contentHint' in cameraTrack) {
+        cameraTrack.contentHint = 'motion';
+      }
+
+      // Stop and remove dummy canvas track
       if (dummyTrackRef.current) {
-        // Upgrade from voice call: fetch real camera track
-        const camStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: getVideoConstraints()
-        });
-        cameraTrack = camStream.getVideoTracks()[0];
-        if (cameraTrack && 'contentHint' in cameraTrack) {
-          cameraTrack.contentHint = 'motion';
-        }
-        
-        // Stop and remove dummy canvas track
-        dummyTrackRef.current.stop();
-        stream.removeTrack(dummyTrackRef.current);
+        try { dummyTrackRef.current.stop(); } catch (e) {}
+        try { stream.removeTrack(dummyTrackRef.current); } catch (e) {}
         dummyTrackRef.current = null;
-        
-        // Add real camera track
-        stream.addTrack(cameraTrack);
-        
-        // Find video sender and replace track
-        if (peerConnectionRef.current) {
-          const senders = peerConnectionRef.current.getSenders();
-          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender) {
-            await videoSender.replaceTrack(cameraTrack);
-            await optimizeSenderParameters(videoSender, false);
-          }
+      }
+
+      // Clean up any extra video tracks in stream
+      stream.getVideoTracks().forEach(track => {
+        if (track !== cameraTrack) {
+          try { track.stop(); } catch (e) {}
+          try { stream.removeTrack(track); } catch (e) {}
         }
-        
-        setCallMediaType('video');
-        
-        // Notify partner
-        const socket = getSocket();
-        if (socket && callPartyRef.current) {
-          socket.emit('call-media-update', { 
-            to: callPartyRef.current, 
-            mediaType: 'video', 
-            screenSharing: isScreenSharing,
-            cameraOff: false
-          });
-        }
-      } else {
-        // Just enable the existing camera track
-        stream.getVideoTracks().forEach(track => {
-          track.enabled = true;
-          if ('contentHint' in track) {
-            track.contentHint = 'motion';
-          }
-        });
-        
-        if (peerConnectionRef.current) {
-          const senders = peerConnectionRef.current.getSenders();
-          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender) {
-            await optimizeSenderParameters(videoSender, false);
-          }
-        }
-        
-        setCallMediaType('video');
-        const socket = getSocket();
-        if (socket && callPartyRef.current) {
-          socket.emit('call-media-update', { 
-            to: callPartyRef.current, 
-            mediaType: 'video', 
-            screenSharing: isScreenSharing,
-            cameraOff: false
-          });
+      });
+
+      // Add real camera track to stream
+      stream.addTrack(cameraTrack);
+
+      // Find video sender and replace track
+      if (peerConnectionRef.current) {
+        const senders = peerConnectionRef.current.getSenders();
+        const videoSender = senders.find(s => s && s.track && s.track.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(cameraTrack);
+          await optimizeSenderParameters(videoSender, false);
         }
       }
-      
+
+      setCallMediaType('video');
       setIsCameraOff(false);
+      setLocalStream(new MediaStream(stream.getTracks()));
+
+      // Notify partner
+      const socket = getSocket();
+      if (socket && callPartyRef.current) {
+        socket.emit('call-media-update', { 
+          to: callPartyRef.current, 
+          mediaType: 'video', 
+          screenSharing: isScreenSharing,
+          cameraOff: false
+        });
+      }
     } catch (err) {
       console.error("Failed to enable camera:", err);
       showToast("Could not access camera device.", "error", "Camera Error");
@@ -2481,11 +2555,11 @@ export default function App() {
   const handleStopScreenShare = async () => {
     const stream = localStreamRef.current;
     if (stream) {
-      const screenTrack = stream.getVideoTracks()[0];
-      if (screenTrack) {
-        screenTrack.stop();
-        stream.removeTrack(screenTrack);
-      }
+      const screenTracks = stream.getVideoTracks();
+      screenTracks.forEach(t => {
+        try { t.stop(); } catch (e) {}
+        try { stream.removeTrack(t); } catch (e) {}
+      });
     }
 
     if (!peerConnectionRef.current) {
@@ -2494,25 +2568,36 @@ export default function App() {
     }
 
     let restoredTrack = originalVideoTrackRef.current;
-    if (!restoredTrack) {
+    if (!restoredTrack || restoredTrack.readyState === 'ended' || isCameraOff) {
+      if (restoredTrack) {
+        try { restoredTrack.stop(); } catch (e) {}
+      }
+      originalVideoTrackRef.current = null;
       restoredTrack = createDummyVideoTrack();
       dummyTrackRef.current = restoredTrack;
     } else {
       originalVideoTrackRef.current = null;
     }
 
-    stream.addTrack(restoredTrack);
+    if (stream && restoredTrack) {
+      stream.addTrack(restoredTrack);
+    }
 
     const senders = peerConnectionRef.current.getSenders();
     const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-    if (videoSender) {
-      await videoSender.replaceTrack(restoredTrack);
-      await optimizeSenderParameters(videoSender, false);
+    if (videoSender && restoredTrack) {
+      try {
+        await videoSender.replaceTrack(restoredTrack);
+        await optimizeSenderParameters(videoSender, false);
+      } catch (e) {}
     }
 
     setIsScreenSharing(false);
+    if (stream) {
+      setLocalStream(new MediaStream(stream.getTracks()));
+    }
 
-    const isVoice = !!dummyTrackRef.current;
+    const isVoice = !!dummyTrackRef.current || isCameraOff;
     const newMediaType = isVoice ? 'voice' : 'video';
     setCallMediaType(newMediaType);
     setIsCameraOff(isVoice);
@@ -2589,21 +2674,30 @@ export default function App() {
       sendCallLogMessage(callPartyRef.current, callMediaTypeRef.current, status, duration);
     }
 
-    // 2. Reset WebRTC connections and stream state
+    // 2. Reset WebRTC connections and stop ALL hardware media tracks (Microphone, Camera, Screen)
     if (peerConnectionRef.current) {
+      try {
+        peerConnectionRef.current.getSenders().forEach(s => {
+          if (s.track) {
+            try { s.track.stop(); } catch (e) {}
+          }
+        });
+      } catch (e) {}
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current.getTracks().forEach(track => {
+        try { track.stop(); } catch (e) {}
+      });
       setLocalStream(null);
     }
     if (dummyTrackRef.current) {
-      dummyTrackRef.current.stop();
+      try { dummyTrackRef.current.stop(); } catch (e) {}
       dummyTrackRef.current = null;
     }
     if (originalVideoTrackRef.current) {
-      originalVideoTrackRef.current.stop();
+      try { originalVideoTrackRef.current.stop(); } catch (e) {}
       originalVideoTrackRef.current = null;
     }
     setRemoteStream(null);

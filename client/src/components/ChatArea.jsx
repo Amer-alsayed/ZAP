@@ -2208,7 +2208,21 @@ const ChatArea = React.memo(function ChatArea({
   // ==========================================
   // Voice Notes Recorder
   // ==========================================
+  const activeVoiceStreamRef = useRef(null);
+
+  const releaseVoiceStreamTracks = useCallback(() => {
+    if (activeVoiceStreamRef.current) {
+      try {
+        activeVoiceStreamRef.current.getTracks().forEach(track => {
+          try { track.stop(); } catch (e) {}
+        });
+      } catch (e) {}
+      activeVoiceStreamRef.current = null;
+    }
+  }, []);
+
   const startRecording = async () => {
+    releaseVoiceStreamTracks();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -2219,6 +2233,7 @@ const ChatArea = React.memo(function ChatArea({
           channelCount: 1
         }
       });
+      activeVoiceStreamRef.current = stream;
 
       // Select the best supported mimeType for high quality audio recording
       let options = { audioBitsPerSecond: 128000 };
@@ -2240,10 +2255,10 @@ const ChatArea = React.memo(function ChatArea({
       };
 
       mediaRecorderRef.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current.mimeType || 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
         
-        // Stop all track streams
-        stream.getTracks().forEach(track => track.stop());
+        // Stop all track streams immediately to release microphone hardware sensor
+        releaseVoiceStreamTracks();
 
         // Process audio encryption and upload
         await processAndSendVoiceNote(audioBlob);
@@ -2264,6 +2279,7 @@ const ChatArea = React.memo(function ChatArea({
       }, 1000);
     } catch (err) {
       console.error('Microphone access denied:', err);
+      releaseVoiceStreamTracks();
       notify('Microphone access is required to record voice notes.', 'error', 'Permission Required');
     }
   };
@@ -2314,10 +2330,8 @@ const ChatArea = React.memo(function ChatArea({
             mediaRecorderRef.current.stop();
           } catch (e) {}
         }
-        if (mediaRecorderRef.current.stream) {
-          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-        }
       }
+      releaseVoiceStreamTracks();
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
       }
@@ -2329,7 +2343,7 @@ const ChatArea = React.memo(function ChatArea({
       window.removeEventListener('beforeunload', cleanupRecording);
       cleanupRecording();
     };
-  }, [activeContact?.username]);
+  }, [activeContact?.username, releaseVoiceStreamTracks]);
 
   const stopRecording = (shouldSend = true) => {
     if (!mediaRecorderRef.current && !isRecording) return;
@@ -2347,10 +2361,8 @@ const ChatArea = React.memo(function ChatArea({
             mediaRecorderRef.current.stop();
           } catch (e) {}
         }
-        if (mediaRecorderRef.current.stream) {
-          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-        }
       }
+      releaseVoiceStreamTracks();
       setRecordingExitMode('cancel');
       setTimeout(() => {
         setIsRecording(false);
@@ -2365,7 +2377,10 @@ const ChatArea = React.memo(function ChatArea({
           mediaRecorderRef.current.stop();
         } catch (e) {
           console.error('Error stopping recorder:', e);
+          releaseVoiceStreamTracks();
         }
+      } else {
+        releaseVoiceStreamTracks();
       }
       setRecordingExitMode('send');
       setTimeout(() => {
