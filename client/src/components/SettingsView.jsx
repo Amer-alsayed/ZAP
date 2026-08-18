@@ -522,14 +522,14 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
               <label>
                 Avatar Symbol (Emoji) {selectedImage && <span style={{ fontSize: '10px', textTransform: 'none', color: 'var(--text-muted)' }}>(Disabled: custom photo is active)</span>}
               </label>
-              <div className="emoji-grid">
+              <div className="avatar-emoji-grid">
                 {uniqueEmojis.map((emoji) => {
                   const isEmojiSelected = !selectedImage && ((emoji === 'None' && !selectedEmoji) || selectedEmoji === emoji);
                   return (
                     <button
                       key={emoji}
                       type="button"
-                      className={`emoji-btn ${isEmojiSelected ? 'active' : ''}`}
+                      className={`avatar-emoji-btn ${isEmojiSelected ? 'active' : ''}`}
                       onClick={() => selectEmojiAndClearImage(emoji === 'None' ? '' : emoji)}
                       disabled={saving}
                     >

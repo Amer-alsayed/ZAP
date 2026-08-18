@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Search, X, Delete, Smile } from 'lucide-react';
 
 export const EMOJI_CATEGORIES = [
   {
     id: 'smileys',
-    name: 'Smileys & Emotion',
+    name: 'Smileys & People',
     icon: '😀',
     emojis: [
       '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', 
@@ -16,14 +16,7 @@ export const EMOJI_CATEGORIES = [
       '🧐', '😕', '😟', '🙁', '😮', '😯', '😲', '😳', '🥺', '😦', 
       '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', 
       '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', 
-      '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '🤖', '👾'
-    ]
-  },
-  {
-    id: 'people',
-    name: 'People & Body',
-    icon: '👋',
-    emojis: [
+      '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '🤖', '👾',
       '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', 
       '🫰', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', 
       '🫵', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '🫶', 
@@ -31,10 +24,7 @@ export const EMOJI_CATEGORIES = [
       '🦵', '🦶', '👂', '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', 
       '👀', '👁️', '👅', '👄', '🫦', '👶', '👧', '🧒', '👦', '👩', 
       '🧑', '👨', '👱‍♀️', '👱‍♂️', '👵', '🧓', '👴', '👲', '👳‍♀️', '👳‍♂️', 
-      '🧕', '👮‍♀️', '👮‍♂️', '👷‍♀️', '👷‍♂️', '💂‍♀️', '💂‍♂️', '🕵️‍♀️', '🕵️‍♂️', '👩‍⚕️',
-      '👨‍⚕️', '👩‍🎓', '👨‍🎓', '👩‍🏫', '👨‍🏫', '👩‍💻', '👨‍💻', '👩‍💼', '👨‍💼', '👩‍🔧',
-      '👨‍🔧', '👩‍🔬', '👨‍🔬', '👩‍🚀', '👨‍🚀', '👩‍🚒', '👨‍🚒', '👸', '🤴', '🦸‍♀️',
-      '🦸‍♂️', '🦹‍♀️', '🦹‍♂️', '🧙‍♀️', '🧙‍♂️', '🧚‍♀️', '🧚‍♂️', '🧛‍♀️', '🧛‍♂️', '🧜‍♀️'
+      '🧕', '👮‍♀️', '👮‍♂️', '👷‍♀️', '👷‍♂️', '💂‍♀️', '💂‍♂️', '🕵️‍♀️', '🕵️‍♂️', '👩‍⚕️'
     ]
   },
   {
@@ -79,7 +69,7 @@ export const EMOJI_CATEGORIES = [
   },
   {
     id: 'activities',
-    name: 'Activities & Sports',
+    name: 'Activity',
     icon: '⚽️',
     emojis: [
       '⚽️', '🏀', '🏈', '⚾️', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', 
@@ -113,7 +103,7 @@ export const EMOJI_CATEGORIES = [
   },
   {
     id: 'objects',
-    name: 'Objects & Tech',
+    name: 'Objects',
     icon: '💡',
     emojis: [
       '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🕹️', '💽', '💾', 
@@ -129,15 +119,12 @@ export const EMOJI_CATEGORIES = [
       '🗝️', '🚪', '🪑', '🛋️', '🛏️', '🖼️', '🪞', '🪟', '🛍️', '🛒', 
       '🎁', '🎈', '🎉', '🎊', '✉️', '📩', '📨', '📧', '💌', '📦', 
       '🏷️', '📜', '📃', '📄', '📑', '🧾', '📊', '📈', '📉', '🗒️', 
-      '🗓️', '📅', '📆', '📇', '🗃️', '🗳️', '🗄️', '📋', '📁', '📂', 
-      '📰', '📓', '📕', '📗', '📘', '📙', '📚', '📖', '🔖', '🧷', 
-      '🔗', '📎', '🖇️', '📌', '📍', '✂️', '🖊️', '🖋️', '✒️', '📝', 
-      '✏️', '🔍', '🔎', '🔏', '🔐', '🔒', '🔓'
+      '🗓️', '📅', '📆', '📇', '🗃️', '🗳️', '🗄️', '📋', '📁', '📂'
     ]
   },
   {
     id: 'symbols',
-    name: 'Symbols & Hearts',
+    name: 'Symbols',
     icon: '❤️',
     emojis: [
       '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', 
@@ -152,21 +139,11 @@ export const EMOJI_CATEGORIES = [
       '❕', '❓', '❔', '‼️', '⁉️', '🔅', '🔆', '〽️', '⚠️', '🚸', 
       '🔱', '⚜️', '🔰', '♻️', '✅', '🈯️', '💹', '❇️', '✳️', '❎', 
       '🌐', '💠', 'Ⓜ️', '🌀', '💤', '🏧', '🚾', '♿️', '🅿️', '🈳', 
-      '🈂️', '🛂', '🛃', '🛄', '🛅', '🚹', '🚺', '🚼', '🚻', '🚮', 
-      '📶', '🈁', '🔣', 'ℹ️', '🔤', '🔡', '🔠', '🆖', '🆗', '🆙', 
-      '🆒', '🆕', '🆓', '0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', 
-      '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '🔢', '#️⃣', '*️⃣', '⏏️', 
-      '▶️', '⏸️', '⏯️', '⏹️', '⏺️', '⏭️', '⏮️', '⏩', '⏪', '⏫', 
-      '⏬', '◀️', '🔼', '🔽', '➡️', '⬅️', '⬆️', '⬇️', '↗️', '↘️', 
-      '↙️', '↖️', '↕️', '↔️', '↪️', '↩️', '⤴️', '⤵️', '🔀', '🔁', 
-      '🔂', '🔄', '🔃', '🎵', '🎶', '➕', '➖', '➗', '✖️', '🟰', 
-      '♾️', '💲', '💱', '™️', '©️', '®️', '👁️‍🗨️', '🔚', '🔙', '🔛', 
-      '🔝', '🔜', '〰️', '➰', '➿', '✔️', '🔘', '🔴', '🟠', '🟡', 
-      '🟢', '🔵', '🟣', '⚫️', '⚪️', '🟤', '🔺', '🔻', '🔸', '🔹', 
-      '🔶', '🔷', '🔳', '🲲', '▪️', '▫️', '◾️', '◽️', '◼️', '◻️', 
-      '🟥', '🟧', '🟨', '🟩', '🟦', '🟪', '⬛️', '⬜️', '🟫', '🔈', 
-      '🔉', '🔊', '🔇', '📣', '📢', '🔔', '🔕', '🃏', '🀄️', '♠️', 
-      '♣️', '♥️', '♦️', '💭', '🗯️', '💬', '🗨️'
+      '0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', 
+      '🔟', '🔢', '#️⃣', '*️⃣', '⏏️', '▶️', '⏸️', '⏯️', '⏹️', '⏺️', 
+      '⏭️', '⏮️', '⏩', '⏪', '⏫', '⏬', '◀️', '🔼', '🔽', '➡️', 
+      '⬅️', '⬆️', '⬇️', '↗️', '↘️', '↙️', '↖️', '↕️', '↔️', '↪️', 
+      '↩️', '⤴️', '⤵️', '🔀', '🔁', '🔂', '🔄', '🔃', '🎵', '🎶'
     ]
   }
 ];
@@ -176,6 +153,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
   const [searchQuery, setSearchQuery] = useState('');
   const scrollContainerRef = useRef(null);
   const searchInputRef = useRef(null);
+  const isScrollingRef = useRef(false);
 
   // Search filter across all categories
   const filteredCategories = useMemo(() => {
@@ -194,32 +172,54 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
     }).filter(cat => cat.emojis.length > 0);
   }, [searchQuery]);
 
-  const handleCategoryClick = (categoryId) => {
+  // Jump smoothly to a category section
+  const handleCategoryClick = useCallback((categoryId) => {
     setActiveCategory(categoryId);
     setSearchQuery('');
-    const element = document.getElementById(`emoji-cat-${categoryId}`);
-    if (element && scrollContainerRef.current) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const targetElement = document.getElementById(`apple-emoji-cat-${categoryId}`);
+    if (targetElement && scrollContainerRef.current) {
+      isScrollingRef.current = true;
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => {
+        isScrollingRef.current = false;
+      }, 400);
     }
-  };
+  }, []);
+
+  // Update active category tab based on scroll position
+  const handleScroll = useCallback(() => {
+    if (isScrollingRef.current || searchQuery) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const scrollTop = container.scrollTop;
+    for (let i = EMOJI_CATEGORIES.length - 1; i >= 0; i--) {
+      const cat = EMOJI_CATEGORIES[i];
+      const el = document.getElementById(`apple-emoji-cat-${cat.id}`);
+      if (el && el.offsetTop - container.offsetTop <= scrollTop + 60) {
+        setActiveCategory(cat.id);
+        break;
+      }
+    }
+  }, [searchQuery]);
 
   return (
     <div className="apple-emoji-picker-container glass" onClick={(e) => e.stopPropagation()}>
-      {/* Top Header: Search & Quick Delete Action */}
-      <div className="emoji-picker-header">
-        <div className="emoji-search-wrapper">
-          <Search size={15} className="emoji-search-icon" />
+      {/* Top Header: iOS Search Bar & Actions */}
+      <div className="apple-emoji-header">
+        <div className="apple-emoji-search-bar">
+          <Search size={15} className="apple-search-icon" />
           <input
             ref={searchInputRef}
             type="text"
-            className="emoji-search-input"
+            className="apple-search-input"
             placeholder="Search Emoji"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {searchQuery && (
             <button 
-              className="emoji-clear-search-btn" 
+              className="apple-search-clear-btn" 
               onClick={() => {
                 setSearchQuery('');
                 searchInputRef.current?.focus();
@@ -234,7 +234,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
 
         {onDelete && (
           <button 
-            className="emoji-backspace-btn" 
+            className="apple-backspace-btn" 
             onClick={(e) => {
               e.preventDefault();
               onDelete();
@@ -248,9 +248,9 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
 
         {onClose && (
           <button 
-            className="emoji-close-btn" 
+            className="apple-close-btn" 
             onClick={onClose}
-            title="Close emoji picker"
+            title="Close"
             aria-label="Close emoji picker"
           >
             <X size={16} />
@@ -258,24 +258,32 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         )}
       </div>
 
-      {/* Main Scrollable Emoji Grid Area */}
-      <div className="emoji-grid-scroll-area" ref={scrollContainerRef}>
+      {/* Unified Single Smooth Scrollable List */}
+      <div 
+        className="apple-emoji-scroll-body" 
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+      >
         {filteredCategories.length === 0 ? (
-          <div className="emoji-no-results">
+          <div className="apple-emoji-empty-state">
             <Smile size={32} style={{ opacity: 0.25, marginBottom: '8px' }} />
-            <p>No matching emoji</p>
+            <p>No Results Found</p>
           </div>
         ) : (
           filteredCategories.map((category) => (
-            <div key={category.id} id={`emoji-cat-${category.id}`} className="emoji-category-section">
-              <div className="emoji-category-header">
-                <span>{category.name}</span>
+            <div 
+              key={category.id} 
+              id={`apple-emoji-cat-${category.id}`} 
+              className="apple-emoji-section"
+            >
+              <div className="apple-emoji-section-title">
+                {category.name}
               </div>
-              <div className="emoji-grid">
+              <div className="apple-emoji-grid">
                 {category.emojis.map((emoji, idx) => (
                   <button
                     key={`${category.id}-${idx}-${emoji}`}
-                    className="emoji-item-btn"
+                    className="apple-emoji-btn"
                     onClick={(e) => {
                       e.preventDefault();
                       onSelectEmoji(emoji);
@@ -292,17 +300,17 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         )}
       </div>
 
-      {/* Bottom Apple Category Switcher Bar */}
-      <div className="emoji-category-bar">
+      {/* Bottom Docked Apple Category Navigation Bar */}
+      <div className="apple-emoji-dock-bar">
         {EMOJI_CATEGORIES.map((cat) => (
           <button
             key={cat.id}
-            className={`emoji-category-tab ${activeCategory === cat.id && !searchQuery ? 'active' : ''}`}
+            className={`apple-dock-tab ${activeCategory === cat.id && !searchQuery ? 'is-active' : ''}`}
             onClick={() => handleCategoryClick(cat.id)}
             title={cat.name}
             aria-label={cat.name}
           >
-            <span className="emoji-category-icon">{cat.icon}</span>
+            <span className="apple-dock-icon">{cat.icon}</span>
           </button>
         ))}
       </div>
