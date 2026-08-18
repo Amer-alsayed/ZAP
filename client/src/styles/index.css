@@ -4919,6 +4919,33 @@ textarea {
   color: #ff453a !important;
 }
 
+.call-btn.screen-share {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: var(--text-muted) !important;
+}
+
+.call-btn.screen-share:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: var(--text-primary) !important;
+  transform: translateY(-2px);
+}
+
+.call-btn.screen-share.sharing-active {
+  background: rgba(0, 122, 204, 0.16) !important;
+  border-color: rgba(0, 122, 204, 0.38) !important;
+  color: var(--accent-color) !important;
+  box-shadow: none !important;
+}
+
+.call-btn.screen-share.sharing-active:hover {
+  background: rgba(0, 122, 204, 0.28) !important;
+  border-color: rgba(0, 122, 204, 0.6) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+}
+
 .call-btn:active {
   transform: scale(0.94) !important;
 }

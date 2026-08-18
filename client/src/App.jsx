@@ -326,6 +326,11 @@ export default function App() {
     }
   }, [callState]);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const isFullscreenRef = useRef(false);
+
+  useEffect(() => {
+    isFullscreenRef.current = isFullscreen;
+  }, [isFullscreen]);
 
   const isCallMinimizedRef = useRef(false);
   const replyingToRef = useRef(null);
@@ -555,9 +560,10 @@ export default function App() {
   // Handle native back gestures (Android back button & mobile browser back)
   useEffect(() => {
     const handlePopState = (e) => {
-      // 0. Ignore popstate if it's from voice recording or call termination cleanup
-      if (window.__isChatraRecording || window.__isPoppingRecording || window.__isPoppingCall) {
+      // 0. Ignore popstate if it's from voice recording, call termination, or fullscreen exit
+      if (window.__isChatraRecording || window.__isPoppingRecording || window.__isPoppingCall || window.__isPoppingFullscreen) {
         window.__isPoppingCall = false;
+        window.__isPoppingFullscreen = false;
         return;
       }
 
@@ -574,8 +580,11 @@ export default function App() {
       }
       
       // 3. Exit fullscreen mode if active
-      if (document.fullscreenElement) {
-        document.exitFullscreen?.().catch(() => {});
+      if (document.fullscreenElement || isFullscreenRef.current) {
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.().catch(() => {});
+        }
+        setIsFullscreen(false);
         return;
       }
       
@@ -628,7 +637,7 @@ export default function App() {
   useEffect(() => {
     const isMaximizedCallActive = callState === 'connected' && !isCallMinimized;
     if (isMaximizedCallActive) {
-      if (window.history.state !== 'call-maximized' && window.history.state !== 'fullscreen') {
+      if (window.history.state !== 'call-maximized') {
         window.history.pushState('call-maximized', '');
       }
     } else {
@@ -641,19 +650,6 @@ export default function App() {
       }
     }
   }, [callState, isCallMinimized]);
-
-  // Push history state 'fullscreen' when fullscreen mode is active
-  useEffect(() => {
-    if (isFullscreen) {
-      if (window.history.state !== 'fullscreen') {
-        window.history.pushState('fullscreen', '');
-      }
-    } else {
-      if (window.history.state === 'fullscreen') {
-        window.history.back();
-      }
-    }
-  }, [isFullscreen]);
 
 
   // ==========================================
@@ -1856,24 +1852,24 @@ export default function App() {
 
       if (isScreenShare) {
         if (quality === 'high') {
-          maxBitrate = 6000000; // 6 Mbps for crisp 1080p60 screen share
+          maxBitrate = 3000000; // 3 Mbps for crisp 1080p30 screen share
           priority = 'high';
         } else if (quality === 'low') {
-          maxBitrate = 1000000; // 1 Mbps for low bandwidth screen share
+          maxBitrate = 800000; // 800 Kbps for low bandwidth screen share
           priority = 'low';
         } else {
-          maxBitrate = 4000000; // 4 Mbps for medium 30fps screen share
+          maxBitrate = 2000000; // 2 Mbps for balanced 30fps screen share
           priority = 'high';
         }
       } else {
         if (quality === 'high') {
-          maxBitrate = 3500000; // 3.5 Mbps for HD 1080p camera
+          maxBitrate = 3000000; // 3 Mbps for HD 1080p camera
           priority = 'high';
         } else if (quality === 'low') {
           maxBitrate = 500000; // 500 Kbps for low bandwidth camera
           priority = 'low';
         } else {
-          maxBitrate = 1800000; // 1.8 Mbps for standard HD camera
+          maxBitrate = 1500000; // 1.5 Mbps for standard HD camera
           priority = 'medium';
         }
       }
@@ -1929,25 +1925,28 @@ export default function App() {
     const quality = localStorage.getItem('chatra_call_quality') || 'medium';
     if (quality === 'high') {
       return {
-        frameRate: { ideal: 60, max: 60 },
-        width: { ideal: 1920, max: 2560 },
-        height: { ideal: 1080, max: 1440 },
-        displaySurface: 'monitor'
+        frameRate: { ideal: 30, max: 30 },
+        width: { ideal: 1920, max: 1920 },
+        height: { ideal: 1080, max: 1080 },
+        displaySurface: 'monitor',
+        selfBrowserSurface: 'exclude'
       };
     } else if (quality === 'low') {
       return {
         frameRate: { ideal: 15, max: 15 },
         width: { ideal: 1280, max: 1280 },
         height: { ideal: 720, max: 720 },
-        displaySurface: 'monitor'
+        displaySurface: 'monitor',
+        selfBrowserSurface: 'exclude'
       };
     } else {
       // Medium
       return {
         frameRate: { ideal: 30, max: 30 },
-        width: { ideal: 1920, max: 1920 },
-        height: { ideal: 1080, max: 1080 },
-        displaySurface: 'monitor'
+        width: { ideal: 1280, max: 1920 },
+        height: { ideal: 720, max: 1080 },
+        displaySurface: 'monitor',
+        selfBrowserSurface: 'exclude'
       };
     }
   };
@@ -2503,11 +2502,6 @@ export default function App() {
         });
       }
       const screenTrack = screenStream.getVideoTracks()[0];
-      
-      // 2. Set content hint to 'detail' for maximum text sharpness
-      if (screenTrack && 'contentHint' in screenTrack) {
-        screenTrack.contentHint = 'detail';
-      }
 
       // Store current video track (camera or dummy)
       const currentVideoTrack = stream.getVideoTracks()[0];
@@ -2529,7 +2523,7 @@ export default function App() {
 
       setIsScreenSharing(true);
       setCallMediaType('video');
-      setIsCameraOff(false);
+      setLocalStream(new MediaStream(stream.getTracks()));
 
       // Notify partner
       const socket = getSocket();
@@ -2538,7 +2532,7 @@ export default function App() {
           to: callPartyRef.current, 
           mediaType: 'video', 
           screenSharing: true,
-          cameraOff: false
+          cameraOff: isCameraOff
         });
       }
 

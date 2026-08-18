@@ -913,7 +913,7 @@ export default function CallWindow({
                       {isCameraOff ? <VideoOff size={18} /> : <Video size={18} />}
                     </button>
 
-                    {!isCameraOff && onSwitchCamera && (
+                    {!isCameraOff && !isScreenSharing && onSwitchCamera && (
                       <button 
                         className="call-btn switch-camera" 
                         onClick={() => {
@@ -929,15 +929,15 @@ export default function CallWindow({
 
                     {!!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && (
                       <button 
-                        className={`call-btn mute ${isScreenSharing ? 'active' : ''}`} 
+                        className={`call-btn screen-share ${isScreenSharing ? 'sharing-active' : ''}`} 
                         onClick={() => {
                           soundEngine.playToggleMute(!isScreenSharing);
                           onToggleScreenShare();
                         }}
-                        title={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
-                        aria-label={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
+                        title={isScreenSharing ? "Stop Sharing Screen (Sharing Active)" : "Share Screen"}
+                        aria-label={isScreenSharing ? "Stop Sharing Screen (Sharing Active)" : "Share Screen"}
                       >
-                        {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
+                        <Monitor size={18} />
                       </button>
                     )}
                     
@@ -1033,12 +1033,12 @@ export default function CallWindow({
 
                     {!!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && (
                       <button 
-                        className={`call-btn mute ${isScreenSharing ? 'active' : ''}`} 
+                        className={`call-btn screen-share ${isScreenSharing ? 'sharing-active' : ''}`} 
                         onClick={onToggleScreenShare}
-                        title={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
-                        aria-label={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
+                        title={isScreenSharing ? "Stop Sharing Screen (Sharing Active)" : "Share Screen"}
+                        aria-label={isScreenSharing ? "Stop Sharing Screen (Sharing Active)" : "Share Screen"}
                       >
-                        {isScreenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
+                        <Monitor size={20} />
                       </button>
                     )}
 
