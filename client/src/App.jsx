@@ -30,6 +30,7 @@ import CallWindow from './components/CallWindow';
 import SettingsView from './components/SettingsView';
 import { soundEngine } from './services/soundEffects';
 import Dashboard from './components/Dashboard';
+import { applyThemeTokens } from './utils/themeTokens';
 
 import { searchUser } from './services/api';
 import { 
@@ -74,7 +75,7 @@ export default function App() {
     const restoreSession = async () => {
       const savedRgb = localStorage.getItem('chatra_theme_rgb');
       if (savedRgb) {
-        document.documentElement.style.setProperty('--accent-rgb', savedRgb);
+        applyThemeTokens(savedRgb);
       }
 
       const token = localStorage.getItem('chatra_token');
@@ -137,7 +138,7 @@ export default function App() {
   useEffect(() => {
     const savedRgb = localStorage.getItem('chatra_theme_rgb');
     if (savedRgb) {
-      document.documentElement.style.setProperty('--accent-rgb', savedRgb);
+      applyThemeTokens(savedRgb);
     }
 
     const glass = localStorage.getItem('chatra_glass') !== 'false';
@@ -171,7 +172,7 @@ export default function App() {
       // Apply and persist theme color from server (cross-device sync)
       if (currentUser.themeColor) {
         localStorage.setItem('chatra_theme_rgb', currentUser.themeColor);
-        document.documentElement.style.setProperty('--accent-rgb', currentUser.themeColor);
+        applyThemeTokens(currentUser.themeColor);
       }
       
       if (currentUser.encryptedPrivateKeys) {

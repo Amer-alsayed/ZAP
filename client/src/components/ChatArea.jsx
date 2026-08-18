@@ -150,12 +150,15 @@ const renderFormattedText = (text) => {
   return parts.length > 0 ? parts : text;
 };
 
-// Group consecutive image/video media messages from the same sender into visual albums
+// Group consecutive image/video media into visual albums, consecutive file attachments into multi-file cards,
+// and deduplicate consecutive identical system call logs.
 const groupMessagesWithAlbums = (rawMessages) => {
   if (!rawMessages || !rawMessages.length) return [];
   
   const result = [];
   let currentAlbum = [];
+  let currentFileGroup = [];
+  let currentCallGroup = [];
 
   const flushAlbum = () => {
     if (!currentAlbum.length) return;
@@ -183,14 +186,61 @@ const groupMessagesWithAlbums = (rawMessages) => {
     currentAlbum = [];
   };
 
+  const flushFileGroup = () => {
+    if (!currentFileGroup.length) return;
+    if (currentFileGroup.length === 1) {
+      result.push(currentFileGroup[0]);
+    } else {
+      const first = currentFileGroup[0];
+      const last = currentFileGroup[currentFileGroup.length - 1];
+      const allIds = currentFileGroup.map(m => m.id);
+      const captionMsg = currentFileGroup.find(m => m.text && m.text.trim());
+
+      result.push({
+        ...first,
+        id: `files-${allIds.join('-')}`,
+        isMultiFile: true,
+        fileItems: [...currentFileGroup],
+        allIds,
+        timestamp: last.timestamp,
+        status: Math.min(...currentFileGroup.map(m => m.status ?? 0)),
+        text: captionMsg ? captionMsg.text : null,
+        isNew: currentFileGroup.some(m => m.isNew),
+        isDeleting: currentFileGroup.some(m => m.isDeleting)
+      });
+    }
+    currentFileGroup = [];
+  };
+
+  const flushCallGroup = () => {
+    if (!currentCallGroup.length) return;
+    if (currentCallGroup.length === 1) {
+      result.push(currentCallGroup[0]);
+    } else {
+      const last = currentCallGroup[currentCallGroup.length - 1];
+      const allIds = currentCallGroup.map(m => m.id);
+      result.push({
+        ...last,
+        id: `call-group-${allIds.join('-')}`,
+        callCount: currentCallGroup.length,
+        allIds
+      });
+    }
+    currentCallGroup = [];
+  };
+
   for (let i = 0; i < rawMessages.length; i++) {
     const msg = rawMessages[i];
-    const isMedia = msg.mediaType === 'file' && msg.fileMetadata && (
+    const isImageOrVideo = msg.mediaType === 'file' && msg.fileMetadata && (
       msg.fileMetadata.mimeType?.startsWith('image/') ||
       msg.fileMetadata.mimeType?.startsWith('video/')
     );
+    const isDocFile = msg.mediaType === 'file' && msg.fileMetadata && !isImageOrVideo;
+    const isCall = msg.mediaType === 'call';
 
-    if (isMedia) {
+    if (isImageOrVideo) {
+      flushFileGroup();
+      flushCallGroup();
       if (currentAlbum.length === 0) {
         currentAlbum.push(msg);
       } else {
@@ -207,13 +257,64 @@ const groupMessagesWithAlbums = (rawMessages) => {
           currentAlbum.push(msg);
         }
       }
+    } else if (isDocFile) {
+      flushAlbum();
+      flushCallGroup();
+      if (currentFileGroup.length === 0) {
+        currentFileGroup.push(msg);
+      } else {
+        const prev = currentFileGroup[currentFileGroup.length - 1];
+        const sameSender = prev.sender === msg.sender;
+        const timeDiff = Math.abs(new Date(msg.timestamp) - new Date(prev.timestamp));
+        const withinTime = isNaN(timeDiff) || timeDiff < 120000;
+        const noSeparateReply = !msg.replyTo || (prev.replyTo && msg.replyTo.id === prev.replyTo.id);
+
+        if (sameSender && withinTime && noSeparateReply) {
+          currentFileGroup.push(msg);
+        } else {
+          flushFileGroup();
+          currentFileGroup.push(msg);
+        }
+      }
+    } else if (isCall) {
+      flushAlbum();
+      flushFileGroup();
+      if (currentCallGroup.length === 0) {
+        currentCallGroup.push(msg);
+      } else {
+        const prev = currentCallGroup[currentCallGroup.length - 1];
+        const sameSender = prev.sender?.toLowerCase() === msg.sender?.toLowerCase();
+        
+        let sameStatus = false;
+        try {
+          const p = typeof prev.text === 'string' ? JSON.parse(prev.text) : prev.text;
+          const c = typeof msg.text === 'string' ? JSON.parse(msg.text) : msg.text;
+          sameStatus = (p.status === c.status) || (['cancelled', 'declined', 'missed'].includes(p.status) && ['cancelled', 'declined', 'missed'].includes(c.status));
+        } catch (e) {
+          sameStatus = prev.text === msg.text;
+        }
+
+        const timeDiff = Math.abs(new Date(msg.timestamp) - new Date(prev.timestamp));
+        const withinTime = isNaN(timeDiff) || timeDiff < 180000;
+
+        if (sameSender && sameStatus && withinTime) {
+          currentCallGroup.push(msg);
+        } else {
+          flushCallGroup();
+          currentCallGroup.push(msg);
+        }
+      }
     } else {
       flushAlbum();
+      flushFileGroup();
+      flushCallGroup();
       result.push(msg);
     }
   }
 
   flushAlbum();
+  flushFileGroup();
+  flushCallGroup();
   return result;
 };
 
@@ -698,10 +799,13 @@ const MessageList = React.memo(({
                     )}
                   </div>
                   <div className="system-call-log-details">
-                    <span className="system-call-log-text">{statusText}</span>
+                    <span className="system-call-log-text">
+                      {statusText}{msg.callCount > 1 ? ` (${msg.callCount})` : ''}
+                    </span>
                     {status === 'completed' && (
                       <span className="system-call-duration">({formatCallDuration(callData.duration)})</span>
                     )}
+                    <span className="system-call-bullet">•</span>
                     <span className="system-call-time">
                       {formatMessageTime(msg.timestamp)}
                     </span>
@@ -717,6 +821,9 @@ const MessageList = React.memo(({
         const isOnlyEmojiMsg = !msg.isAlbum && !msg.mediaType && !msg.replyTo && isOnlyEmoji(msg.text);
         const emojiCount = isOnlyEmojiMsg ? getEmojiCount(msg.text) : 0;
 
+        const prevMsg = groupedMessages[index - 1];
+        const isFirstOfGroup = !prevMsg || (prevMsg.mediaType === 'call') || (prevMsg.sender?.toLowerCase() !== msg.sender?.toLowerCase());
+
         return (
           <React.Fragment key={msg.id}>
             {showDateSeparator && (
@@ -725,7 +832,7 @@ const MessageList = React.memo(({
               </div>
             )}
             <div 
-              className={`message-row ${isSent ? 'sent' : 'received'} ${(msg.isAlbum ? msg.allIds.some(id => deletingIds.includes(id)) : deletingIds.includes(msg.id)) || msg.isDeleting ? 'is-deleting' : ''} ${msg.isCollapsing ? 'is-collapsing' : ''}`}
+              className={`message-row ${isSent ? 'sent' : 'received'} ${isFirstOfGroup ? 'is-first-of-group' : 'is-subsequent'} {((msg.isAlbum || msg.isMultiFile) ? msg.allIds.some(id => deletingIds.includes(id)) : deletingIds.includes(msg.id)) || msg.isDeleting ? 'is-deleting' : ''} ${msg.isCollapsing ? 'is-collapsing' : ''}`}
               style={{ '--msg-delay': staggerIndex }}
               onContextMenu={(e) => e.preventDefault()}
               onClickCapture={(e) => {
@@ -793,11 +900,11 @@ const MessageList = React.memo(({
                 cancelLongPress();
                 if (swipeStartRef.current?.msgId === msg.id) {
                   if (swipeState.offset >= 30) {
-                    const targetMsg = msg.isAlbum ? msg.albumItems[0] : msg;
+                    const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
                     setReplyingTo({
                       id: targetMsg.id,
                       sender: targetMsg.sender,
-                      text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                      text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
                       mediaType: targetMsg.mediaType || null,
                       fileMetadata: targetMsg.fileMetadata || null
                     });
@@ -823,95 +930,109 @@ const MessageList = React.memo(({
                 setSwipeState({ msgId: null, offset: 0, isSwiping: false });
               }}
             >
-              <div 
-                id={`msg-${msg.id}`} 
-                ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
-                data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
-                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${isOnlyEmojiMsg ? 'emoji-only-wrapper' : ''} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
-                style={{
-                  transform: swipeState.msgId === msg.id && swipeState.offset > 0 ? `translateX(${swipeState.offset}px)` : 'translateX(0px)',
-                  transition: swipeState.msgId === msg.id && swipeState.isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
-                }}
-              >
-                {/* Swipe-to-reply spring indicator icon */}
-                {swipeState.msgId === msg.id && swipeState.offset > 5 && (
+              {(() => {
+                const isSelectedMsg = (msg.isAlbum || msg.isMultiFile) 
+                  ? msg.allIds.some(id => selectedIds.includes(id)) 
+                  : selectedIds.includes(msg.id);
+
+                return (
                   <div 
-                    className="swipe-reply-indicator"
+                    id={`msg-${msg.id}`} 
+                    ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
+                    data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
+                    className={`message-wrapper ${isSent ? 'sent' : 'received'} ${isOnlyEmojiMsg ? 'emoji-only-wrapper' : ''} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${isSelectedMsg ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
                     style={{
-                      opacity: Math.min(swipeState.offset / 30, 1),
-                      transform: `translateY(-50%) scale(${Math.min(swipeState.offset / 30, 1)})`
+                      transform: swipeState.msgId === msg.id && swipeState.offset > 0 ? `translateX(${swipeState.offset}px)` : 'translateX(0px)',
+                      transition: swipeState.msgId === msg.id && swipeState.isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
                     }}
                   >
-                    <CornerUpLeft size={16} color="var(--accent-color)" />
-                  </div>
-                )}
-                <div className={`message-bubble ${msg.isAlbum ? 'album-bubble' : ''} ${isOnlyEmojiMsg ? `emoji-only-bubble count-${emojiCount}` : ''}`}>
-                  {(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) && (
-                    <div className="selection-indicator-badge" aria-hidden="true">
-                      <Check size={12} strokeWidth={2.8} />
-                    </div>
-                  )}
-                  {!selectionMode && (
-                    <div className="message-actions-container">
-                      <button 
-                        className="msg-action-btn" 
-                        title="Reply"
-                        aria-label="Reply to message"
-                        onClick={() => {
-                          const targetMsg = msg.isAlbum ? msg.albumItems[0] : msg;
-                          setReplyingTo({
-                            id: targetMsg.id,
-                            sender: targetMsg.sender,
-                            text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
-                            mediaType: targetMsg.mediaType || null,
-                            fileMetadata: targetMsg.fileMetadata || null
-                          });
-                          setTimeout(() => {
-                            if (textareaRef.current) {
-                              textareaRef.current.blur();
-                              textareaRef.current.focus();
-                              textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                            }
-                          }, 50);
+                    {/* Swipe-to-reply spring indicator icon */}
+                    {swipeState.msgId === msg.id && swipeState.offset > 5 && (
+                      <div 
+                        className="swipe-reply-indicator"
+                        style={{
+                          opacity: Math.min(swipeState.offset / 30, 1),
+                          transform: `translateY(-50%) scale(${Math.min(swipeState.offset / 30, 1)})`
                         }}
                       >
-                        <CornerUpLeft size={12} />
-                      </button>
-                    </div>
-                  )}
-                  {msg.replyTo && (
-                    <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
-                      <span className="reply-context-sender">{msg.replyTo.sender}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                        {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') && (
-                          <div className="reply-image-thumbnail">
-                            <ImagePreviewLoader fileMetadata={msg.replyTo.fileMetadata} />
+                        <CornerUpLeft size={16} color="var(--accent-color)" />
+                      </div>
+                    )}
+                    <div className={`message-bubble ${isSelectedMsg ? 'is-selected' : ''} ${msg.isAlbum ? 'album-bubble' : ''} ${msg.isMultiFile ? 'multifile-bubble' : ''} ${isOnlyEmojiMsg ? `emoji-only-bubble count-${emojiCount}` : ''} ${msg.mediaType === 'file' && msg.fileMetadata?.mimeType?.startsWith('image/') ? 'single-image-bubble' : ''}`}>
+                      {isSelectedMsg && (
+                        <div className="selection-indicator-badge" aria-hidden="true">
+                          <Check size={12} strokeWidth={2.8} />
+                        </div>
+                      )}
+                      {!selectionMode && (
+                        <div className="message-actions-container">
+                          <button 
+                            className="msg-action-btn" 
+                            title="Reply"
+                            aria-label="Reply to message"
+                            onClick={() => {
+                              const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
+                              setReplyingTo({
+                                id: targetMsg.id,
+                                sender: targetMsg.sender,
+                                text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                                mediaType: targetMsg.mediaType || null,
+                                fileMetadata: targetMsg.fileMetadata || null
+                              });
+                              setTimeout(() => {
+                                if (textareaRef.current) {
+                                  textareaRef.current.blur();
+                                  textareaRef.current.focus();
+                                  textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                }
+                              }, 50);
+                            }}
+                          >
+                            <CornerUpLeft size={12} />
+                          </button>
+                        </div>
+                      )}
+                      {msg.replyTo && (
+                        <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
+                          <span className="reply-context-sender">{msg.replyTo.sender}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                            {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') && (
+                              <div className="reply-image-thumbnail">
+                                <ImagePreviewLoader fileMetadata={msg.replyTo.fileMetadata} />
+                              </div>
+                            )}
+                            <p className="reply-context-text">
+                              {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
+                                ? 'Photo'
+                                : msg.replyTo.text
+                              }
+                            </p>
                           </div>
+                        </div>
+                      )}
+                      <div className="message-bubble-body">
+                        <div className="message-text-content">
+                          {renderMessageContent(msg, index === groupedMessages.length - 1)}
+                        </div>
+                        {msg.mediaType !== 'voice' && (
+                          <span className="inline-message-meta">
+                            <span className="inline-meta-time">
+                              {formatMessageTime(msg.timestamp)}
+                            </span>
+                            {isSent && (
+                              <span className="inline-meta-ticks" title={msg.status === 2 ? "Read" : msg.status === 1 ? "Delivered" : "Sent"}>
+                                {msg.status === 0 && <span className="tick-single">✓</span>}
+                                {msg.status === 1 && <span className="tick-delivered">✓✓</span>}
+                                {msg.status === 2 && <span className="tick-read">✓✓</span>}
+                              </span>
+                            )}
+                          </span>
                         )}
-                        <p className="reply-context-text">
-                          {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
-                            ? 'Photo'
-                            : msg.replyTo.text
-                          }
-                        </p>
                       </div>
                     </div>
-                  )}
-                  {renderMessageContent(msg, index === groupedMessages.length - 1)}
-                </div>
-                <div className="message-meta">
-                  <span>
-                    {formatMessageTime(msg.timestamp)}
-                  </span>
-                  {isSent && (
-                    <span className="message-status-ticks" title={msg.status === 2 ? "Read" : msg.status === 1 ? "Delivered" : "Sent"}>
-                      {msg.status === 0 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓</span>}
-                      {msg.status === 1 && <span style={{ color: 'var(--text-subtle)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
-                      {msg.status === 2 && <span style={{ color: 'var(--accent-color)', marginLeft: '4px', fontSize: '11px', fontWeight: 'bold' }}>✓✓</span>}
-                    </span>
-                  )}
-                </div>
-              </div>
+                  </div>
+                );
+              })()}
             </div>
           </React.Fragment>
         );
@@ -2410,6 +2531,8 @@ const ChatArea = React.memo(function ChatArea({
 
   // Render message bubble content based on message type
   const renderMessageContent = useCallback((msg, isLast) => {
+    const isSent = msg.sender?.toLowerCase() !== activeContact?.username?.toLowerCase();
+
     if (msg.isAlbum) {
       return (
         <div className="media-container media-album-container">
@@ -2425,25 +2548,61 @@ const ChatArea = React.memo(function ChatArea({
       );
     }
 
+    if (msg.isMultiFile) {
+      return (
+        <div className="multi-file-card">
+          {msg.fileItems.map((item, idx) => {
+            const file = item.fileMetadata || {};
+            const fileName = file.name || file.fileName || file.filename || 'Document';
+            const fileSizeStr = file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'File';
+            return (
+              <div key={item.id || idx} className="file-attachment-row">
+                <FileText size={22} className="file-icon" />
+                <div className="file-info">
+                  <span className="file-name" title={fileName}>{fileName}</span>
+                  <span className="file-size">{fileSizeStr}</span>
+                </div>
+                <button 
+                  className="file-download-btn" 
+                  onClick={() => downloadAndDecryptFile(file)}
+                  title="Download & Decrypt File"
+                  aria-label="Download & Decrypt File"
+                >
+                  <Download size={14} />
+                </button>
+              </div>
+            );
+          })}
+          {msg.text && <p className="media-caption">{renderFormattedText(msg.text)}</p>}
+        </div>
+      );
+    }
+
     if (msg.mediaType === 'file') {
-      const file = msg.fileMetadata;
-      const isImage = file.mimeType.startsWith('image/');
-      const isVideo = file.mimeType.startsWith('video/');
+      const file = msg.fileMetadata || {};
+      const isImage = file.mimeType?.startsWith('image/');
+      const isVideo = file.mimeType?.startsWith('video/');
 
       let element;
       if (isImage) {
-        element = <ImagePreviewLoader fileMetadata={file} onImageClick={onImageClick ? (src) => {
-          if (!selectionModeRef.current) onImageClick(src);
-        } : undefined} onImageLoad={isLast ? handleImageLoad : undefined} />;
+        element = (
+          <div className="image-message-wrapper">
+            <ImagePreviewLoader fileMetadata={file} onImageClick={onImageClick ? (src) => {
+              if (!selectionModeRef.current) onImageClick(src);
+            } : undefined} onImageLoad={isLast ? handleImageLoad : undefined} />
+          </div>
+        );
       } else if (isVideo) {
         element = <VideoPreviewLoader fileMetadata={file} />;
       } else {
+        const fileName = file.name || file.fileName || file.filename || 'Document';
+        const fileSizeStr = file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'File';
         element = (
           <div className="file-attachment-card">
-            <FileText size={28} className="file-icon" />
+            <FileText size={22} className="file-icon" />
             <div className="file-info">
-              <div className="file-name" title={file.name}>{file.name}</div>
-              <div className="file-size">{(file.size / 1024).toFixed(1)} KB</div>
+              <span className="file-name" title={fileName}>{fileName}</span>
+              <span className="file-size">{fileSizeStr}</span>
             </div>
             <button 
               className="file-download-btn" 
@@ -2451,7 +2610,7 @@ const ChatArea = React.memo(function ChatArea({
               title="Download & Decrypt File"
               aria-label="Download & Decrypt File"
             >
-              <Download size={16} />
+              <Download size={14} />
             </button>
           </div>
         );
@@ -2477,50 +2636,66 @@ const ChatArea = React.memo(function ChatArea({
         : (progress / 100) * totalDuration;
 
       return (
-        <div className="voice-note-player">
+        <div className="voice-note-player-compact">
           <VoiceNotePreloader fileMetadata={file} />
-          <button 
-            className="play-pause-btn" 
-            onClick={() => { if (!selectionModeRef.current) togglePlayAudio(msg.id, file); }}
-          >
-            {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" style={{ marginLeft: '2px' }} />}
-          </button>
+          {/* Row 1 (Top): Circular Play Button + Progress Scrubber Track */}
+          <div className="voice-row-top">
+            <button 
+              className="play-pause-btn-compact" 
+              onClick={() => { if (!selectionModeRef.current) togglePlayAudio(msg.id, file); }}
+              aria-label={isPlaying ? "Pause" : "Play"}
+            >
+              {isPlaying ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" style={{ marginLeft: '1.5px' }} />}
+            </button>
 
-          <div className="voice-slider-container">
-            <input 
-              type="range"
-              className="voice-slider"
-              min="0"
-              max="100"
-              step="0.1"
-              value={progress}
-              onChange={(e) => {
-                const seekPct = parseFloat(e.target.value) / 100;
-                // Navigate/seek audio without auto-playing if currently paused
-                if (!selectionModeRef.current) togglePlayAudio(msg.id, file, seekPct, false);
-              }}
-              style={{
-                background: `linear-gradient(to right, var(--accent-color) ${progress}%, rgba(255, 255, 255, 0.15) ${progress}%)`
-              }}
-            />
+            <div className="voice-slider-container">
+              <input 
+                type="range"
+                className="voice-slider"
+                min="0"
+                max="100"
+                step="0.1"
+                value={progress}
+                onChange={(e) => {
+                  const seekPct = parseFloat(e.target.value) / 100;
+                  if (!selectionModeRef.current) togglePlayAudio(msg.id, file, seekPct, false);
+                }}
+                style={{
+                  background: `linear-gradient(to right, var(--accent-color) ${progress}%, rgba(255, 255, 255, 0.15) ${progress}%)`
+                }}
+              />
+            </div>
           </div>
 
-          <div className="voice-meta-info">
+          {/* Row 2 (Bottom): Duration (Left) + Speed & Timestamp (Right) */}
+          <div className="voice-row-bottom">
             <span className="voice-duration">
               {formatTime(currentTimeSec)} / {formatTime(totalDuration)}
             </span>
-            <button 
-              className="voice-speed-btn" 
-              title={`Playback speed ${playbackRate}x`}
-              aria-label={`Playback speed ${playbackRate}x`}
-              onClick={(e) => {
-                e.stopPropagation();
-                const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
-                handlePlaybackRateChange(nextRate);
-              }}
-            >
-              {playbackRate}x
-            </button>
+            <div className="voice-bottom-right">
+              <button 
+                className="voice-speed-btn" 
+                title={`Playback speed ${playbackRate}x`}
+                aria-label={`Playback speed ${playbackRate}x`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
+                  handlePlaybackRateChange(nextRate);
+                }}
+              >
+                {playbackRate}x
+              </button>
+              <span className="voice-inline-meta">
+                <span className="inline-meta-time">{formatMessageTime(msg.timestamp)}</span>
+                {isSent && (
+                  <span className="inline-meta-ticks">
+                    {msg.status === 0 && <span className="tick-single">✓</span>}
+                    {msg.status === 1 && <span className="tick-delivered">✓✓</span>}
+                    {msg.status === 2 && <span className="tick-read">✓✓</span>}
+                  </span>
+                )}
+              </span>
+            </div>
           </div>
         </div>
       );
@@ -2590,7 +2765,7 @@ const ChatArea = React.memo(function ChatArea({
     }
     // Default plaintext
     return renderFormattedText(msg.text);
-  }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick]);
+  }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick, activeContact?.username]);
 
   return (
     <div className={`chat-area ${isNavigatingBack ? 'navigating-back' : ''}`}>

@@ -94,24 +94,26 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
 
   const renderTicks = () => {
     if (!isSentByMe) return null;
-    let ticksColor = 'var(--text-subtle)';
+    let ticksColor = 'rgba(255, 255, 255, 0.4)';
     let ticksText = '✓';
 
     if (lastMsg.status === 1) {
       ticksText = '✓✓';
     } else if (lastMsg.status === 2) {
       ticksText = '✓✓';
-      ticksColor = 'var(--accent-color)'; // active theme accent
+      ticksColor = 'var(--accent-text)';
     }
 
     return (
       <span style={{ 
         color: ticksColor, 
-        marginRight: '5px', 
+        marginRight: '4px', 
         fontSize: '11px', 
         fontWeight: 'bold', 
-        display: 'inline-block',
-        flexShrink: 0
+        display: 'inline-flex',
+        alignItems: 'center',
+        flexShrink: 0,
+        lineHeight: 1
       }}>
         {ticksText}
       </span>
@@ -133,7 +135,7 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
     if (isSentByMe) {
       content = (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-          {isVoice ? <Phone size={14} style={{ opacity: 0.7 }} /> : <Video size={14} style={{ opacity: 0.7 }} />}
+          {isVoice ? <Phone size={13} style={{ opacity: 0.7 }} /> : <Video size={13} style={{ opacity: 0.7 }} />}
           Outgoing Call
         </span>
       );
@@ -143,13 +145,13 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
           display: 'inline-flex', 
           alignItems: 'center', 
           gap: '5px', 
-          color: isMissed ? '#ff453a' : 'inherit',
+          color: isMissed ? '#fb7185' : 'inherit',
           fontWeight: isMissed ? '500' : 'normal'
         }}>
           {isMissed ? (
-            isVoice ? <PhoneOff size={14} /> : <VideoOff size={14} />
+            isVoice ? <PhoneOff size={13} /> : <VideoOff size={13} />
           ) : (
-            isVoice ? <Phone size={14} /> : <Video size={14} />
+            isVoice ? <Phone size={13} /> : <Video size={13} />
           )}
           {isMissed ? 'Missed Call' : 'Incoming Call'}
         </span>
@@ -158,14 +160,14 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
   } else if (lastMsg.mediaType === 'voice' || lastMsg.mediaType === 'audio') {
     content = (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-        <Mic size={14} style={{ opacity: 0.7 }} />
+        <Mic size={13} style={{ opacity: 0.7 }} />
         Voice Message
       </span>
     );
   } else if (lastMsg.mediaType === 'image') {
     content = (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-        <Image size={14} style={{ opacity: 0.7 }} />
+        <Image size={13} style={{ opacity: 0.7 }} />
         Photo
       </span>
     );
@@ -174,7 +176,7 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
     const isVid = lastMsg.fileMetadata?.mimeType?.startsWith('video/');
     content = (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-        {isImg ? <Image size={14} style={{ opacity: 0.7 }} /> : isVid ? <Video size={14} style={{ opacity: 0.7 }} /> : <FileText size={14} style={{ opacity: 0.7 }} />}
+        {isImg ? <Image size={13} style={{ opacity: 0.7 }} /> : isVid ? <Video size={13} style={{ opacity: 0.7 }} /> : <FileText size={13} style={{ opacity: 0.7 }} />}
         {isImg ? 'Photo' : isVid ? 'Video' : 'Document'}
       </span>
     );
@@ -183,9 +185,9 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
   }
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', gap: '1.5px' }}>
       {renderTicks()}
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
         {content}
       </span>
     </span>
@@ -660,11 +662,11 @@ const Sidebar = React.memo(function Sidebar({
                   </div>
                   <div className="contact-info">
                     <div className="contact-name-row">
-                      <span className="contact-name" style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span className="contact-name">
+                        <span className="contact-display-name">
                           {contact.customName || contact.displayName || contact.username}
                         </span>
-                        {contact.isVerified && <ShieldCheck size={16} style={{ color: 'var(--accent-color)', flexShrink: 0 }} title="E2EE Verified Identity" />}
+                        {contact.isVerified && <ShieldCheck size={14} className="contact-verified-badge" title="E2EE Verified Identity" />}
                       </span>
                       {lastMsg && (
                         <span className="last-msg-time">
@@ -672,22 +674,8 @@ const Sidebar = React.memo(function Sidebar({
                         </span>
                       )}
                     </div>
-                    {(contact.customName || contact.displayName) && (
-                      <div className="contact-handle">
-                        @{contact.username}
-                      </div>
-                    )}
                     <div className="contact-preview-row">
-                      <div style={{
-                        flex: 1,
-                        minWidth: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        color: contact.isTyping ? 'var(--text-link)' : 'var(--text-muted)',
-                        fontWeight: contact.isTyping ? '500' : 'normal',
-                        fontSize: '13.5px'
-                      }}>
+                      <div className={`contact-preview-text ${contact.isTyping ? 'typing-text' : ''}`}>
                         {contact.isTyping 
                           ? 'typing...'
                           : renderLastMessagePreview(lastMsg, currentUser)

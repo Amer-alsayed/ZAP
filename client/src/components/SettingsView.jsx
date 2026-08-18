@@ -3,6 +3,7 @@ import { ArrowLeft, User, Check, ShieldAlert, CheckCircle, LogOut, Camera, Chevr
 import { renderAvatar } from './Sidebar';
 import { emitUpdateProfile } from '../services/socket';
 import { soundEngine } from '../services/soundEffects';
+import { applyThemeTokens } from '../utils/themeTokens';
 
 export default function SettingsView({ currentUser, onBack, onLogout, isNavigatingBack, onProfileUpdate, blockedUsers = [], onUnblockUser }) {
   const settingsContainerRef = useRef(null);
@@ -56,7 +57,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
   const handleThemeChange = (rgbValue) => {
     setAppThemeRgb(rgbValue);
     localStorage.setItem('chatra_theme_rgb', rgbValue);
-    document.documentElement.style.setProperty('--accent-rgb', rgbValue);
+    applyThemeTokens(rgbValue);
   };
 
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(() => {
@@ -353,8 +354,8 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
       {/* Settings Header */}
       <div className="settings-header">
         <div className="chat-header-info">
-          <button className="back-btn" onClick={onBack} title="Back">
-            <ArrowLeft size={20} />
+          <button className="back-btn" onClick={onBack} title="Back" aria-label="Back">
+            <ArrowLeft size={18} />
           </button>
           <div className="chat-header-name">
             <h2>Settings</h2>
