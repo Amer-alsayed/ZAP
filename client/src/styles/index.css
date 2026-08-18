@@ -6250,7 +6250,6 @@ textarea {
   background: #000000 !important;
   position: relative;
   z-index: 2;
-  animation: none !important;
 }
 
 .settings-view.navigating-back {
@@ -6279,6 +6278,8 @@ textarea {
   overscroll-behavior-y: contain;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 16px, black 100%);
   mask-image: linear-gradient(to bottom, transparent 0, black 16px, black 100%);
+  animation: chatThreadFluidIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
 }
 
 .settings-content {
@@ -7541,6 +7542,8 @@ textarea {
   overscroll-behavior-y: contain;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 16px, black 100%);
   mask-image: linear-gradient(to bottom, transparent 0, black 16px, black 100%);
+  animation: chatThreadFluidIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
 }
 
 .recents-bounce-wrapper {
