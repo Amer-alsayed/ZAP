@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from '
 import { Search, X, Delete, Smile } from 'lucide-react';
 
 const RECENT_EMOJIS_KEY = 'chatra_frequent_emojis';
+const MAX_RECENT_EMOJIS = 14; // Exactly 2 clean rows of 7 emojis (Apple iOS standard)
 const DEFAULT_RECENT_EMOJIS = ['😂', '❤️', '🔥', '👍', '🙏', '😊', '😍', '✨', '🥺', '🎉', '👏', '🤣', '🥰', '💯'];
 
 export const EMOJI_CATEGORIES = [
@@ -209,10 +210,12 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
       const saved = localStorage.getItem(RECENT_EMOJIS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.slice(0, MAX_RECENT_EMOJIS);
+        }
       }
     } catch (e) {}
-    return DEFAULT_RECENT_EMOJIS;
+    return DEFAULT_RECENT_EMOJIS.slice(0, MAX_RECENT_EMOJIS);
   });
 
   const [activeCategory, setActiveCategory] = useState('recents');
@@ -230,7 +233,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         id: 'recents',
         name: 'Frequently Used',
         icon: '🕒',
-        emojis: recentEmojis
+        emojis: recentEmojis.slice(0, MAX_RECENT_EMOJIS)
       });
     }
     return [...list, ...EMOJI_CATEGORIES];
@@ -262,11 +265,11 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
     }).filter(cat => cat.emojis.length > 0);
   }, [searchQuery, allCategoriesWithRecents]);
 
-  // Record emoji selection into history / frequently used
+  // Record emoji selection into history / frequently used (capped at MAX_RECENT_EMOJIS)
   const handleSelectEmojiWithTracking = useCallback((emoji) => {
     setRecentEmojis(prev => {
       const filtered = prev.filter(e => e !== emoji);
-      const updated = [emoji, ...filtered].slice(0, 28); // Keep top 28
+      const updated = [emoji, ...filtered].slice(0, MAX_RECENT_EMOJIS);
       try {
         localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(updated));
       } catch (e) {}
