@@ -2673,7 +2673,7 @@ export default function App() {
           <div className="preloader-bar-bg">
             <div className="preloader-bar"></div>
           </div>
-          <div className="preloader-text">Restoring E2EE session...</div>
+          <div className="preloader-text">Restoring secure session...</div>
         </div>
       ) : !currentUser ? (
         <Login onAuthSuccess={setCurrentUser} />

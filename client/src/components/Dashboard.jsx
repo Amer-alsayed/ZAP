@@ -395,23 +395,27 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
                           </div>
                         </div>
 
-                        {/* Expandable attempt details drawer */}
-                        {log.count > 1 && isExpanded && (
-                          <div className="recents-expanded-drawer">
-                            {log.attempts.map((att, attIdx) => (
-                              <div className="recents-attempt-item" key={att.id || attIdx}>
-                                <div className="attempt-left">
-                                  <span className="attempt-bullet">•</span>
-                                  <span className="attempt-status">
-                                    {att.isSentByMe ? 'Outgoing' : (att.status === 'missed' || att.status === 'cancelled') ? 'Missed' : 'Incoming'}
-                                  </span>
-                                  {att.duration > 0 && (
-                                    <span className="attempt-duration">({formatDuration(att.duration)})</span>
-                                  )}
-                                </div>
-                                <span className="attempt-time">{formatCallTimeOnly(att.timestamp)}</span>
+                        {/* Expandable attempt details drawer with smooth animated grid transition */}
+                        {log.count > 1 && (
+                          <div className="recents-drawer-collapse">
+                            <div className="recents-drawer-inner">
+                              <div className="recents-expanded-drawer">
+                                {log.attempts.map((att, attIdx) => (
+                                  <div className="recents-attempt-item" key={att.id || attIdx}>
+                                    <div className="attempt-left">
+                                      <span className="attempt-bullet">•</span>
+                                      <span className="attempt-status">
+                                        {att.isSentByMe ? 'Outgoing' : (att.status === 'missed' || att.status === 'cancelled') ? 'Missed' : 'Incoming'}
+                                      </span>
+                                      {att.duration > 0 && (
+                                        <span className="attempt-duration">({formatDuration(att.duration)})</span>
+                                      )}
+                                    </div>
+                                    <span className="attempt-time">{formatCallTimeOnly(att.timestamp)}</span>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            </div>
                           </div>
                         )}
                       </div>

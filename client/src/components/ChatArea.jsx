@@ -1129,17 +1129,9 @@ const ChatArea = React.memo(function ChatArea({
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isClosingEmojiPicker, setIsClosingEmojiPicker] = useState(false);
-  const [hasMountedEmojiPicker, setHasMountedEmojiPicker] = useState(false);
+  const [hasMountedEmojiPicker, setHasMountedEmojiPicker] = useState(true);
   const emojiPickerRef = useRef(null);
   const emojiBtnRef = useRef(null);
-
-  // Pre-warm emoji picker in background during idle time for 0ms instant first open
-  useEffect(() => {
-    const idleTimer = setTimeout(() => {
-      setHasMountedEmojiPicker(true);
-    }, 800);
-    return () => clearTimeout(idleTimer);
-  }, []);
 
   const closeEmojiPicker = useCallback(() => {
     if (!showEmojiPicker || isClosingEmojiPicker) return;

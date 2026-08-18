@@ -152,8 +152,17 @@ export const EMOJI_CATEGORIES = [
   }
 ];
 
-// Memoized Category Section Component
+// Memoized Category Section Component with delegated event handling
 const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSelectEmoji }) {
+  const handleGridClick = useCallback((e) => {
+    const btn = e.target.closest('button[data-emoji]');
+    if (btn) {
+      e.preventDefault();
+      const emoji = btn.getAttribute('data-emoji');
+      if (emoji) onSelectEmoji(emoji);
+    }
+  }, [onSelectEmoji]);
+
   return (
     <div 
       id={`apple-emoji-cat-${category.id}`} 
@@ -162,18 +171,13 @@ const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSe
       <div className="apple-emoji-section-title">
         {category.name}
       </div>
-      <div className="apple-emoji-grid">
+      <div className="apple-emoji-grid" onClick={handleGridClick}>
         {category.emojis.map((emoji, idx) => (
           <button
             key={`${category.id}-${idx}-${emoji}`}
+            type="button"
             className="apple-emoji-btn"
-            onPointerDown={(e) => {
-              e.preventDefault();
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              onSelectEmoji(emoji);
-            }}
+            data-emoji={emoji}
             title={emoji}
             aria-label={`Insert ${emoji}`}
           >
