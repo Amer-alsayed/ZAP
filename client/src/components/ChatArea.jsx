@@ -714,7 +714,7 @@ const MessageList = React.memo(({
 
         const staggerIndex = Math.max(0, index - (groupedMessages.length - 12));
 
-        const isOnlyEmojiMsg = !msg.isAlbum && !msg.mediaType && isOnlyEmoji(msg.text);
+        const isOnlyEmojiMsg = !msg.isAlbum && !msg.mediaType && !msg.replyTo && isOnlyEmoji(msg.text);
         const emojiCount = isOnlyEmojiMsg ? getEmojiCount(msg.text) : 0;
 
         return (
@@ -2583,6 +2583,10 @@ const ChatArea = React.memo(function ChatArea({
           </div>
         </div>
       );
+    }
+    // Render emoji-only response inside quoted reply bubble
+    if (msg.replyTo && isOnlyEmoji(msg.text)) {
+      return <div className="reply-emoji-body">{msg.text}</div>;
     }
     // Default plaintext
     return renderFormattedText(msg.text);
