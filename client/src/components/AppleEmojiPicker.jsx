@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
 import { Search, X, Delete, Smile } from 'lucide-react';
 
+const RECENT_EMOJIS_KEY = 'chatra_frequent_emojis';
+const DEFAULT_RECENT_EMOJIS = ['😂', '❤️', '🔥', '👍', '🙏', '😊', '😍', '✨', '🥺', '🎉', '👏', '🤣', '🥰', '💯'];
+
 export const EMOJI_CATEGORIES = [
   {
     id: 'smileys',
@@ -148,7 +151,7 @@ export const EMOJI_CATEGORIES = [
   }
 ];
 
-// Memoized Section Component to prevent re-rendering when switching tabs
+// Memoized Category Section Component
 const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSelectEmoji }) {
   return (
     <div 
@@ -164,7 +167,6 @@ const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSe
             key={`${category.id}-${idx}-${emoji}`}
             className="apple-emoji-btn"
             onPointerDown={(e) => {
-              // Prevent focus steal to keep keyboard ready
               e.preventDefault();
             }}
             onClick={(e) => {
@@ -182,11 +184,11 @@ const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSe
   );
 });
 
-// Memoized Dock Bar for instant 120fps highlight updates
-const AppleEmojiDock = memo(function AppleEmojiDock({ activeCategory, onCategoryClick, isSearching }) {
+// Memoized Apple Dock Bar
+const AppleEmojiDock = memo(function AppleEmojiDock({ categories, activeCategory, onCategoryClick, isSearching }) {
   return (
     <div className="apple-emoji-dock-bar">
-      {EMOJI_CATEGORIES.map((cat) => (
+      {categories.map((cat) => (
         <button
           key={cat.id}
           className={`apple-dock-tab ${activeCategory === cat.id && !isSearching ? 'is-active' : ''}`}
@@ -202,17 +204,51 @@ const AppleEmojiDock = memo(function AppleEmojiDock({ activeCategory, onCategory
 });
 
 export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
-  const [activeCategory, setActiveCategory] = useState('smileys');
+  const [recentEmojis, setRecentEmojis] = useState(() => {
+    try {
+      const saved = localStorage.getItem(RECENT_EMOJIS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_RECENT_EMOJIS;
+  });
+
+  const [activeCategory, setActiveCategory] = useState('recents');
   const [searchQuery, setSearchQuery] = useState('');
   const scrollContainerRef = useRef(null);
   const searchInputRef = useRef(null);
   const isScrollingRef = useRef(false);
   const rafIdRef = useRef(null);
 
-  // Search filter across all categories
+  // Full list of categories including Frequently Used at top
+  const allCategoriesWithRecents = useMemo(() => {
+    const list = [];
+    if (recentEmojis.length > 0) {
+      list.push({
+        id: 'recents',
+        name: 'Frequently Used',
+        icon: '🕒',
+        emojis: recentEmojis
+      });
+    }
+    return [...list, ...EMOJI_CATEGORIES];
+  }, [recentEmojis]);
+
+  // Dock items
+  const dockCategories = useMemo(() => {
+    return allCategoriesWithRecents.map(c => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon
+    }));
+  }, [allCategoriesWithRecents]);
+
+  // Search filter across categories
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) {
-      return EMOJI_CATEGORIES;
+      return allCategoriesWithRecents;
     }
     const query = searchQuery.trim().toLowerCase();
     return EMOJI_CATEGORIES.map(cat => {
@@ -224,9 +260,22 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         emojis: cat.emojis.filter(e => e.includes(query))
       };
     }).filter(cat => cat.emojis.length > 0);
-  }, [searchQuery]);
+  }, [searchQuery, allCategoriesWithRecents]);
 
-  // Smooth, buttery gliding to target category section
+  // Record emoji selection into history / frequently used
+  const handleSelectEmojiWithTracking = useCallback((emoji) => {
+    setRecentEmojis(prev => {
+      const filtered = prev.filter(e => e !== emoji);
+      const updated = [emoji, ...filtered].slice(0, 28); // Keep top 28
+      try {
+        localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+    onSelectEmoji(emoji);
+  }, [onSelectEmoji]);
+
+  // Smooth gliding to target category section
   const handleCategoryClick = useCallback((categoryId) => {
     setActiveCategory(categoryId);
     if (searchQuery) setSearchQuery('');
@@ -246,7 +295,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
     }
   }, [searchQuery]);
 
-  // High-performance RAF scroll watcher (zero layout thrashing)
+  // High-performance RAF scroll watcher
   const handleScroll = useCallback(() => {
     if (isScrollingRef.current || searchQuery) return;
     if (rafIdRef.current) return;
@@ -259,8 +308,8 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
       const scrollTop = container.scrollTop;
       const containerTop = container.offsetTop;
 
-      for (let i = EMOJI_CATEGORIES.length - 1; i >= 0; i--) {
-        const cat = EMOJI_CATEGORIES[i];
+      for (let i = allCategoriesWithRecents.length - 1; i >= 0; i--) {
+        const cat = allCategoriesWithRecents[i];
         const el = document.getElementById(`apple-emoji-cat-${cat.id}`);
         if (el && (el.offsetTop - containerTop) <= scrollTop + 60) {
           setActiveCategory(prev => (prev !== cat.id ? cat.id : prev));
@@ -268,7 +317,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         }
       }
     });
-  }, [searchQuery]);
+  }, [searchQuery, allCategoriesWithRecents]);
 
   useEffect(() => {
     return () => {
@@ -334,7 +383,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         )}
       </div>
 
-      {/* Unified Single High-Performance Smooth Scroll View */}
+      {/* Unified Single Smooth Scrollable List */}
       <div 
         className="apple-emoji-scroll-body" 
         ref={scrollContainerRef}
@@ -350,14 +399,15 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
             <EmojiCategorySection
               key={category.id}
               category={category}
-              onSelectEmoji={onSelectEmoji}
+              onSelectEmoji={handleSelectEmojiWithTracking}
             />
           ))
         )}
       </div>
 
-      {/* Bottom Docked Apple Category Navigation Bar */}
+      {/* Bottom Docked Apple Category Navigation Bar with Recents */}
       <AppleEmojiDock
+        categories={dockCategories}
         activeCategory={activeCategory}
         onCategoryClick={handleCategoryClick}
         isSearching={Boolean(searchQuery)}

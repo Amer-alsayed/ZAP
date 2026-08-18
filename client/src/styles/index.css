@@ -2673,43 +2673,47 @@ button {
 .apple-emoji-dock-bar {
   display: flex;
   align-items: center;
-  justify-content: space-around;
-  padding: 6px 8px 8px 8px;
-  background: rgba(14, 14, 18, 0.94);
+  justify-content: space-between;
+  padding: 5px 6px 7px 6px;
+  background: rgba(14, 14, 18, 0.95);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
+  gap: 1px;
 }
 
 .apple-dock-tab {
   background: transparent;
   border: none;
-  padding: 5px 8px;
-  border-radius: 10px;
+  padding: 4px 3px;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease;
-  opacity: 0.55;
-  filter: grayscale(0.6);
+  opacity: 0.5;
+  filter: grayscale(0.7);
+  flex: 1;
+  min-width: 0;
 }
 
 .apple-dock-tab:hover {
   opacity: 0.85;
   filter: grayscale(0);
   background: rgba(255, 255, 255, 0.06);
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
 .apple-dock-tab.is-active {
   opacity: 1;
   filter: grayscale(0);
-  background: rgba(255, 255, 255, 0.14);
-  transform: scale(1.08);
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
 }
 
 .apple-dock-icon {
-  font-size: 19px;
+  font-size: 17px;
+  line-height: 1;
 }
 
 /* ==========================================
