@@ -67,11 +67,20 @@ const formatSeparatorDate = (timestamp) => {
 };
 
 // Detect if a message consists exclusively of 1 to 3 emojis
+// Detect if a message consists exclusively of 1 to 3 emojis
 const isOnlyEmoji = (text) => {
   if (!text || typeof text !== 'string') return false;
   const trimmed = text.trim();
   if (!trimmed) return false;
-  
+
+  // Reject if it contains standard ASCII alphanumeric words (unless keycap emoji)
+  if (/[a-zA-Z]/.test(trimmed)) {
+    return false;
+  }
+  if (/[0-9]/.test(trimmed) && !/^[0-9]\uFE0F?\u20E3$/.test(trimmed)) {
+    return false;
+  }
+
   const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
   const segments = segmenter 
     ? Array.from(segmenter.segment(trimmed)).map(s => s.segment.trim()).filter(Boolean) 
@@ -79,7 +88,7 @@ const isOnlyEmoji = (text) => {
   
   if (segments.length === 0 || segments.length > 3) return false;
   
-  const EMOJI_REGEX = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\u200D|\uFE0F|\p{Emoji_Modifier})+$/u;
+  const EMOJI_REGEX = /^(\p{Extended_Pictographic}|\p{Emoji}|\u200D|\uFE0E|\uFE0F|\p{Emoji_Component}|\p{Emoji_Modifier}|\p{Emoji_Modifier_Base}|\p{Emoji_Presentation})+$/u;
   return segments.every(s => EMOJI_REGEX.test(s));
 };
 
@@ -705,6 +714,9 @@ const MessageList = React.memo(({
 
         const staggerIndex = Math.max(0, index - (groupedMessages.length - 12));
 
+        const isOnlyEmojiMsg = !msg.isAlbum && !msg.mediaType && isOnlyEmoji(msg.text);
+        const emojiCount = isOnlyEmojiMsg ? getEmojiCount(msg.text) : 0;
+
         return (
           <React.Fragment key={msg.id}>
             {showDateSeparator && (
@@ -815,7 +827,7 @@ const MessageList = React.memo(({
                 id={`msg-${msg.id}`} 
                 ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
                 data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
-                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
+                className={`message-wrapper ${isSent ? 'sent' : 'received'} ${isOnlyEmojiMsg ? 'emoji-only-wrapper' : ''} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
                 style={{
                   transform: swipeState.msgId === msg.id && swipeState.offset > 0 ? `translateX(${swipeState.offset}px)` : 'translateX(0px)',
                   transition: swipeState.msgId === msg.id && swipeState.isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
@@ -833,66 +845,60 @@ const MessageList = React.memo(({
                     <CornerUpLeft size={16} color="var(--accent-color)" />
                   </div>
                 )}
-                {(() => {
-                  const emojiOnly = !msg.isAlbum && !msg.mediaType && isOnlyEmoji(msg.text);
-                  const emojiCount = emojiOnly ? getEmojiCount(msg.text) : 0;
-                  return (
-                    <div className={`message-bubble ${msg.isAlbum ? 'album-bubble' : ''} ${emojiOnly ? `emoji-only-bubble count-${emojiCount}` : ''}`}>
-                      {(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) && (
-                        <div className="selection-indicator-badge" aria-hidden="true">
-                          <Check size={12} strokeWidth={2.8} />
-                        </div>
-                      )}
-                      {!selectionMode && (
-                        <div className="message-actions-container">
-                          <button 
-                            className="msg-action-btn" 
-                            title="Reply"
-                            aria-label="Reply to message"
-                            onClick={() => {
-                              const targetMsg = msg.isAlbum ? msg.albumItems[0] : msg;
-                              setReplyingTo({
-                                id: targetMsg.id,
-                                sender: targetMsg.sender,
-                                text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
-                                mediaType: targetMsg.mediaType || null,
-                                fileMetadata: targetMsg.fileMetadata || null
-                              });
-                              setTimeout(() => {
-                                if (textareaRef.current) {
-                                  textareaRef.current.blur();
-                                  textareaRef.current.focus();
-                                  textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                                }
-                              }, 50);
-                            }}
-                          >
-                            <CornerUpLeft size={12} />
-                          </button>
-                        </div>
-                      )}
-                      {msg.replyTo && (
-                        <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
-                          <span className="reply-context-sender">{msg.replyTo.sender}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                            {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') && (
-                              <div className="reply-image-thumbnail">
-                                <ImagePreviewLoader fileMetadata={msg.replyTo.fileMetadata} />
-                              </div>
-                            )}
-                            <p className="reply-context-text">
-                              {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
-                                ? 'Photo'
-                                : msg.replyTo.text
-                              }
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {renderMessageContent(msg, index === groupedMessages.length - 1)}
+                <div className={`message-bubble ${msg.isAlbum ? 'album-bubble' : ''} ${isOnlyEmojiMsg ? `emoji-only-bubble count-${emojiCount}` : ''}`}>
+                  {(msg.isAlbum ? msg.allIds.some(id => selectedIds.includes(id)) : selectedIds.includes(msg.id)) && (
+                    <div className="selection-indicator-badge" aria-hidden="true">
+                      <Check size={12} strokeWidth={2.8} />
                     </div>
-                  );
-                })()}
+                  )}
+                  {!selectionMode && (
+                    <div className="message-actions-container">
+                      <button 
+                        className="msg-action-btn" 
+                        title="Reply"
+                        aria-label="Reply to message"
+                        onClick={() => {
+                          const targetMsg = msg.isAlbum ? msg.albumItems[0] : msg;
+                          setReplyingTo({
+                            id: targetMsg.id,
+                            sender: targetMsg.sender,
+                            text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                            mediaType: targetMsg.mediaType || null,
+                            fileMetadata: targetMsg.fileMetadata || null
+                          });
+                          setTimeout(() => {
+                            if (textareaRef.current) {
+                              textareaRef.current.blur();
+                              textareaRef.current.focus();
+                              textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }
+                          }, 50);
+                        }}
+                      >
+                        <CornerUpLeft size={12} />
+                      </button>
+                    </div>
+                  )}
+                  {msg.replyTo && (
+                    <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
+                      <span className="reply-context-sender">{msg.replyTo.sender}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                        {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') && (
+                          <div className="reply-image-thumbnail">
+                            <ImagePreviewLoader fileMetadata={msg.replyTo.fileMetadata} />
+                          </div>
+                        )}
+                        <p className="reply-context-text">
+                          {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
+                            ? 'Photo'
+                            : msg.replyTo.text
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {renderMessageContent(msg, index === groupedMessages.length - 1)}
+                </div>
                 <div className="message-meta">
                   <span>
                     {formatMessageTime(msg.timestamp)}
