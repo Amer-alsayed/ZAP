@@ -220,6 +220,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
 
   const [activeCategory, setActiveCategory] = useState('recents');
   const [searchQuery, setSearchQuery] = useState('');
+  const [renderedCategoryCount, setRenderedCategoryCount] = useState(2);
   const scrollContainerRef = useRef(null);
   const searchInputRef = useRef(null);
   const isScrollingRef = useRef(false);
@@ -239,6 +240,14 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
     return [...list, ...EMOJI_CATEGORIES];
   }, [recentEmojis]);
 
+  // Progressively mount remaining categories right after initial paint for instant 0ms open
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setRenderedCategoryCount(allCategoriesWithRecents.length);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [allCategoriesWithRecents.length]);
+
   // Dock items
   const dockCategories = useMemo(() => {
     return allCategoriesWithRecents.map(c => ({
@@ -251,7 +260,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
   // Search filter across categories
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) {
-      return allCategoriesWithRecents;
+      return allCategoriesWithRecents.slice(0, renderedCategoryCount);
     }
     const query = searchQuery.trim().toLowerCase();
     return EMOJI_CATEGORIES.map(cat => {
@@ -263,7 +272,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         emojis: cat.emojis.filter(e => e.includes(query))
       };
     }).filter(cat => cat.emojis.length > 0);
-  }, [searchQuery, allCategoriesWithRecents]);
+  }, [searchQuery, allCategoriesWithRecents, renderedCategoryCount]);
 
   // Record emoji selection into history / frequently used (capped at MAX_RECENT_EMOJIS)
   const handleSelectEmojiWithTracking = useCallback((emoji) => {
@@ -281,6 +290,7 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
   // Smooth gliding to target category section
   const handleCategoryClick = useCallback((categoryId) => {
     setActiveCategory(categoryId);
+    setRenderedCategoryCount(allCategoriesWithRecents.length);
     if (searchQuery) setSearchQuery('');
     
     const container = scrollContainerRef.current;
@@ -296,11 +306,14 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
         isScrollingRef.current = false;
       }, 350);
     }
-  }, [searchQuery]);
+  }, [searchQuery, allCategoriesWithRecents.length]);
 
   // High-performance RAF scroll watcher
   const handleScroll = useCallback(() => {
     if (isScrollingRef.current || searchQuery) return;
+    if (renderedCategoryCount < allCategoriesWithRecents.length) {
+      setRenderedCategoryCount(allCategoriesWithRecents.length);
+    }
     if (rafIdRef.current) return;
 
     rafIdRef.current = requestAnimationFrame(() => {

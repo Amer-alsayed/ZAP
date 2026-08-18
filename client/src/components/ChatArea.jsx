@@ -1129,8 +1129,17 @@ const ChatArea = React.memo(function ChatArea({
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isClosingEmojiPicker, setIsClosingEmojiPicker] = useState(false);
+  const [hasMountedEmojiPicker, setHasMountedEmojiPicker] = useState(false);
   const emojiPickerRef = useRef(null);
   const emojiBtnRef = useRef(null);
+
+  // Pre-warm emoji picker in background during idle time for 0ms instant first open
+  useEffect(() => {
+    const idleTimer = setTimeout(() => {
+      setHasMountedEmojiPicker(true);
+    }, 800);
+    return () => clearTimeout(idleTimer);
+  }, []);
 
   const closeEmojiPicker = useCallback(() => {
     if (!showEmojiPicker || isClosingEmojiPicker) return;
@@ -1145,6 +1154,7 @@ const ChatArea = React.memo(function ChatArea({
     if (showEmojiPicker) {
       closeEmojiPicker();
     } else {
+      setHasMountedEmojiPicker(true);
       if (showAttachMenu) closeAttachMenu();
       setShowEmojiPicker(true);
     }
@@ -1727,25 +1737,53 @@ const ChatArea = React.memo(function ChatArea({
     };
   }, [activeContact.username]);
 
-  // Scroll to bottom synchronously on mount / active contact change (runs before paint)
+  const prevContactUsernameRef = useRef(activeContact.username);
+
+  // Scroll to bottom synchronously on mount / active contact change / history load (runs before paint)
   useLayoutEffect(() => {
-    if (messagesContainerRef.current) {
+    const isNewContact = prevContactUsernameRef.current !== activeContact.username;
+    prevContactUsernameRef.current = activeContact.username;
+
+    if (isNewContact) {
+      setIsLastMessageVisible(true);
+      setIsScrolledUp(false);
+      isScrolledUpRef.current = false;
+      prevMessageCountRef.current = activeContact?.messages?.length || 0;
+    }
+
+    if (messagesContainerRef.current && (isNewContact || !isScrolledUpRef.current)) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
-    prevMessageCountRef.current = activeContact?.messages?.length || 0;
-    setIsLastMessageVisible(true);
-    setIsScrolledUp(false);
-    isScrolledUpRef.current = false;
     
-    if (markAllMessagesAsReadLocal) {
-      markAllMessagesAsReadLocal(activeContact.username);
+    if (isNewContact) {
+      if (markAllMessagesAsReadLocal) {
+        markAllMessagesAsReadLocal(activeContact.username);
+      }
+      
+      // Reset textarea height to 36px baseline
+      if (textareaRef.current) {
+        textareaRef.current.style.height = '36px';
+      }
     }
-    
-    // Reset textarea height to 36px baseline
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '36px';
-    }
-  }, [activeContact.username, markAllMessagesAsReadLocal]);
+
+    // Double-frame check to guarantee bottom scroll as DOM elements/bubbles finish layout
+    const frameId = requestAnimationFrame(() => {
+      if (messagesContainerRef.current && (isNewContact || !isScrolledUpRef.current)) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+    });
+
+    const timerId = setTimeout(() => {
+      if (messagesContainerRef.current && (isNewContact || !isScrolledUpRef.current)) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+    }, 60);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      clearTimeout(timerId);
+    };
+  }, [activeContact.username, activeContact?.messages?.length, markAllMessagesAsReadLocal]);
 
   // Immediately mark unread messages as read when looking at bottom view
   useEffect(() => {
@@ -3168,10 +3206,13 @@ const ChatArea = React.memo(function ChatArea({
             </div>
 
             {/* Apple Emoji Picker Popover */}
-            {(showEmojiPicker || isClosingEmojiPicker) && (
+            {hasMountedEmojiPicker && (
               <div 
                 ref={emojiPickerRef} 
                 className={`apple-emoji-popover-wrapper ${isClosingEmojiPicker ? 'is-closing' : ''}`}
+                style={{
+                  display: (showEmojiPicker || isClosingEmojiPicker) ? 'block' : 'none'
+                }}
               >
                 <AppleEmojiPicker 
                   onSelectEmoji={handleInsertEmoji} 
