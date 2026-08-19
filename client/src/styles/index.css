@@ -8027,9 +8027,12 @@ textarea {
 
 .sidebar-minimized .contact-info {
   max-width: 0;
+  width: 0;
   opacity: 0;
+  overflow: hidden !important;
   transform: translateX(-12px);
   pointer-events: none;
+  display: none !important;
 }
 
 .sidebar-minimized .sidebar-footer {
