@@ -11,6 +11,7 @@ import { uploadEncryptedFile } from '../services/api';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
 import { getSocket } from '../services/socket';
 import { renderAvatar } from './Sidebar';
+import ZapLogo from './ZapLogo';
 import { loadOrFetchDecryptedMedia, setCachedMedia, getMemoryMediaUrl, warmupMediaCache, inferMimeType } from '../services/mediaCache';
 import { soundEngine } from '../services/soundEffects';
 
@@ -3914,7 +3915,7 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
         <div className="image-skeleton-loader">
           <div className="media-decrypt-spinner-badge">
             <div className="media-decrypt-spinner-ring" />
-            <Shield size={16} className="media-decrypt-icon" />
+            <ZapLogo size={22} variant="accent" glow className="media-decrypt-logo" />
           </div>
           {fileMetadata?.size && (
             <span className="media-decrypt-size-pill">
