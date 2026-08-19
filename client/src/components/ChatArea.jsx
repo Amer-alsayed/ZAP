@@ -417,6 +417,87 @@ const readBlobBufferSafely = async (blob) => {
   });
 };
 
+// Automatically normalize and optimize mobile camera photos (e.g. 48MP/108MP HEIC or large JPEGs)
+// down to high-definition 2560px Web/Mobile friendly JPEG for instant encryption and reliable transmission
+const optimizeImageForSending = async (file) => {
+  if (!file) return file;
+  const inferredMime = inferMimeType(file.name || '', file.type || '');
+  if (!inferredMime.startsWith('image/') || inferredMime === 'image/gif') {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    let objectUrl = null;
+    try {
+      objectUrl = URL.createObjectURL(file);
+      const img = new window.Image();
+
+      img.onload = () => {
+        try {
+          const maxDim = 2560;
+          let { naturalWidth: width, naturalHeight: height } = img;
+
+          if (!width || !height) {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            return resolve(file);
+          }
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            return resolve(file);
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (objectUrl) URL.revokeObjectURL(objectUrl);
+              if (blob && blob.size > 0 && (blob.size < file.size || file.size > 2 * 1024 * 1024)) {
+                const cleanName = (file.name || 'photo.jpg').replace(/\.[^/.]+$/, '') + '.jpg';
+                const optimizedFile = new File([blob], cleanName, {
+                  type: 'image/jpeg',
+                  lastModified: Date.now()
+                });
+                resolve(optimizedFile);
+              } else {
+                resolve(file);
+              }
+            },
+            'image/jpeg',
+            0.88
+          );
+        } catch (err) {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          resolve(file);
+        }
+      };
+
+      img.onerror = () => {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        resolve(file);
+      };
+
+      img.src = objectUrl;
+    } catch (e) {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    }
+  });
+};
+
 // Fullscreen Interactive Album Gallery Modal
 const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
@@ -520,7 +601,7 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
       {/* Top Navigation Bar */}
       <div className="album-gallery-header">
         <div className="album-gallery-title-info">
-          <span className="album-gallery-counter">{activeIndex + 1} of {total}</span>
+          {total > 1 && <span className="album-gallery-counter">{activeIndex + 1} of {total}</span>}
           {file?.name && <span className="album-gallery-filename">{file.name}</span>}
         </div>
         <div className="album-gallery-actions">
@@ -1705,6 +1786,7 @@ const ChatArea = React.memo(function ChatArea({
   const [activeFileInfo, setActiveFileInfo] = useState(null);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isLastMessageVisible, setIsLastMessageVisible] = useState(true);
+  const [activeGalleryModal, setActiveGalleryModal] = useState(null);
   const lastMessageRef = useRef(null);
 
   const unreadMessagesCount = useMemo(() => {
@@ -2409,19 +2491,18 @@ const ChatArea = React.memo(function ChatArea({
       setUploading(true);
       const filesToUpload = [...selectedFiles];
       setSelectedFiles([]); // Clear queue immediately
+      const totalFiles = filesToUpload.length;
 
       try {
-        const totalFiles = filesToUpload.length;
-
         for (let idx = 0; idx < totalFiles; idx++) {
-          const fileToUpload = filesToUpload[idx];
+          const rawFile = filesToUpload[idx];
           const fileBasePct = (idx / totalFiles) * 100;
           const filePctWeight = (1 / totalFiles);
 
           const updateProgress = (stagePct, status) => {
             const overallPercent = Math.min(99, Math.round(fileBasePct + (stagePct * filePctWeight)));
             setUploadProgress({
-              filename: fileToUpload.name,
+              filename: rawFile.name,
               current: idx + 1,
               total: totalFiles,
               percent: overallPercent,
@@ -2429,7 +2510,12 @@ const ChatArea = React.memo(function ChatArea({
             });
           };
 
-          updateProgress(10, 'Encrypting...');
+          updateProgress(5, 'Preparing file...');
+
+          // Normalize mobile photos (HEIC/high-MP) to fast web-ready high-res format
+          let fileToUpload = await optimizeImageForSending(rawFile);
+
+          updateProgress(15, 'Encrypting...');
 
           // 1. Read file as ArrayBuffer safely (supporting Android content URI files)
           let fileBuffer = fileToUpload._preloadedBuffer || await readBlobBufferSafely(fileToUpload);
@@ -2437,6 +2523,10 @@ const ChatArea = React.memo(function ChatArea({
             try {
               fileBuffer = await new Response(fileToUpload).arrayBuffer();
             } catch (e) {}
+          }
+
+          if (!fileBuffer || fileBuffer.byteLength === 0) {
+            throw new Error(`Could not read data for "${fileToUpload.name}". Please try selecting the file again.`);
           }
 
           updateProgress(25, 'Encrypting...');
@@ -2461,16 +2551,36 @@ const ChatArea = React.memo(function ChatArea({
 
           updateProgress(35, 'Uploading...');
 
-          // 5. Upload encrypted file payload with real-time XHR upload progress
-          const { fileUrl } = await uploadEncryptedFile(
-            fileToUpload.name, 
-            encryptedBase64, 
-            currentUserToken,
-            (uploadPct) => {
-              const stagePct = 35 + (uploadPct * 0.60);
-              updateProgress(stagePct, 'Uploading...');
+          // 5. Upload encrypted file payload with real-time XHR upload progress & auto-retry
+          let uploadResult = null;
+          let lastUploadError = null;
+
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              uploadResult = await uploadEncryptedFile(
+                fileToUpload.name, 
+                encryptedBase64, 
+                currentUserToken,
+                (uploadPct) => {
+                  const stagePct = 35 + (uploadPct * 0.60);
+                  updateProgress(stagePct, 'Uploading...');
+                }
+              );
+              break;
+            } catch (err) {
+              lastUploadError = err;
+              if (attempt === 0) {
+                updateProgress(35, 'Retrying upload...');
+                await new Promise(r => setTimeout(r, 600));
+              }
             }
-          );
+          }
+
+          if (!uploadResult) {
+            throw lastUploadError || new Error('Upload failed');
+          }
+
+          const { fileUrl } = uploadResult;
 
           updateProgress(98, 'Sending...');
 
@@ -2534,18 +2644,12 @@ const ChatArea = React.memo(function ChatArea({
   const handlePaste = (e) => {
     const items = e.clipboardData?.items;
     if (!items) return;
-
     const pastedFiles = [];
     for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith('image/')) {
-        const file = items[i].getAsFile();
-        if (file) {
-          if (file.size > 15 * 1024 * 1024) {
-            notify(`File "${file.name}" exceeds 15MB limit.`, 'warning', 'File Size Limit');
-            continue;
-          }
-          pastedFiles.push(file);
-        }
+      const item = items[i];
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) pastedFiles.push(file);
       }
     }
     if (pastedFiles.length > 0) {
@@ -2563,20 +2667,22 @@ const ChatArea = React.memo(function ChatArea({
     
     const validFiles = [];
     for (const f of files) {
-      if (f.size > 15 * 1024 * 1024) {
+      if (f.size > 50 * 1024 * 1024) {
+        notify(`"${f.name}" exceeds the maximum file size of 50MB.`, 'error', 'File Too Large');
         continue;
       }
       try {
-        const buffer = await readBlobBufferSafely(f);
+        const optimized = await optimizeImageForSending(f);
+        const buffer = await readBlobBufferSafely(optimized);
         if (buffer && buffer.byteLength > 0) {
-          const safeFile = new File([buffer], f.name, {
-            type: f.type || 'application/octet-stream',
-            lastModified: f.lastModified || Date.now()
+          const safeFile = new File([buffer], optimized.name, {
+            type: optimized.type || 'application/octet-stream',
+            lastModified: optimized.lastModified || Date.now()
           });
           safeFile._preloadedBuffer = buffer;
           validFiles.push(safeFile);
         } else {
-          validFiles.push(f);
+          validFiles.push(optimized);
         }
       } catch (readErr) {
         console.warn('File selection buffer fallback:', readErr);
@@ -3047,9 +3153,15 @@ const ChatArea = React.memo(function ChatArea({
       if (isImage) {
         element = (
           <div className="image-message-wrapper">
-            <ImagePreviewLoader fileMetadata={file} onImageClick={onImageClick ? (src) => {
-              if (!selectionModeRef.current) onImageClick(src);
-            } : undefined} onImageLoad={handleImageLoad} />
+            <ImagePreviewLoader 
+              fileMetadata={file} 
+              onImageClick={() => {
+                if (!selectionModeRef.current) {
+                  setActiveGalleryModal({ items: [msg], initialIndex: 0 });
+                }
+              }} 
+              onImageLoad={handleImageLoad} 
+            />
           </div>
         );
       } else if (isVideo) {
@@ -3637,6 +3749,14 @@ const ChatArea = React.memo(function ChatArea({
           </div>
         </div>
       </div>
+
+      {activeGalleryModal && (
+        <AlbumGalleryModal
+          items={activeGalleryModal.items}
+          initialIndex={activeGalleryModal.initialIndex || 0}
+          onClose={() => setActiveGalleryModal(null)}
+        />
+      )}
     </div>
   );
 });
