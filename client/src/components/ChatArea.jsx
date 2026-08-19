@@ -2056,7 +2056,7 @@ const ChatArea = React.memo(function ChatArea({
 
   const prevContactUsernameRef = useRef(null);
 
-  // Scroll to bottom when selecting contact / mounting chat
+  // Scroll to bottom when selecting contact / mounting chat & lock across initial layout paint frames
   useLayoutEffect(() => {
     const isNewContact = prevContactUsernameRef.current !== activeContact.username;
     prevContactUsernameRef.current = activeContact.username;
@@ -2066,15 +2066,48 @@ const ChatArea = React.memo(function ChatArea({
       setIsScrolledUp(false);
       isScrolledUpRef.current = false;
       prevMessageCountRef.current = activeContact?.messages?.length || 0;
+      
+      // Perform immediate instant scroll
       scrollToBottomInstant();
+
+      // Pin scroll to bottom over subsequent frames as fonts, images, and layout stabilize
+      let frameCount = 0;
+      let rafId;
+      const pinToBottom = () => {
+        if (messagesContainerRef.current && !isScrolledUpRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+        frameCount++;
+        if (frameCount < 12) {
+          rafId = requestAnimationFrame(pinToBottom);
+        }
+      };
+      rafId = requestAnimationFrame(pinToBottom);
+
+      const t1 = setTimeout(() => scrollToBottomInstant(), 50);
+      const t2 = setTimeout(() => scrollToBottomInstant(), 150);
+      const t3 = setTimeout(() => scrollToBottomInstant(), 350);
+
+      return () => {
+        if (rafId) cancelAnimationFrame(rafId);
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
   }, [activeContact.username, scrollToBottomInstant]);
 
-  // Scroll to bottom when message history is populated from SQLite
+  // Scroll to bottom when message history is populated or changed from SQLite
   useLayoutEffect(() => {
     const currentCount = activeContact?.messages?.length || 0;
     if (currentCount > 0 && !isScrolledUpRef.current) {
       scrollToBottomInstant();
+      const rafId = requestAnimationFrame(() => {
+        if (messagesContainerRef.current && !isScrolledUpRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      });
+      return () => cancelAnimationFrame(rafId);
     }
   }, [activeContact?.messages?.length, scrollToBottomInstant]);
 
