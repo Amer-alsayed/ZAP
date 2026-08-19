@@ -11,7 +11,7 @@ import { uploadEncryptedFile } from '../services/api';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
 import { getSocket } from '../services/socket';
 import { renderAvatar } from './Sidebar';
-import { loadOrFetchDecryptedMedia, setCachedMedia, getMemoryMediaUrl, warmupMediaCache } from '../services/mediaCache';
+import { loadOrFetchDecryptedMedia, setCachedMedia, getMemoryMediaUrl, warmupMediaCache, inferMimeType } from '../services/mediaCache';
 import { soundEngine } from '../services/soundEffects';
 
 const getSafetyNumber = (keyA, keyB) => {
@@ -2092,8 +2092,13 @@ const ChatArea = React.memo(function ChatArea({
             status: 'Finalizing E2EE message...'
           });
 
-          // Save local copy in IndexedDB
-          setCachedMedia(fileUrl, fileToUpload, fileToUpload.type || 'application/octet-stream');
+          const inferredMime = inferMimeType(fileToUpload.name, fileToUpload.type);
+          const localBlob = (fileToUpload.type === inferredMime)
+            ? fileToUpload
+            : new Blob([fileBuffer], { type: inferredMime });
+
+          // Save local copy in IndexedDB and memory cache
+          setCachedMedia(fileUrl, localBlob, inferredMime);
 
           // 6. Export JWK session key
           const fileSessionKeyJwk = await window.crypto.subtle.exportKey('jwk', fileSessionKey);
@@ -2109,7 +2114,7 @@ const ChatArea = React.memo(function ChatArea({
               url: fileUrl,
               name: fileToUpload.name,
               size: fileToUpload.size,
-              mimeType: fileToUpload.type || 'application/octet-stream',
+              mimeType: inferredMime,
               keyJwk: fileSessionKeyJwk,
               iv: bufferToBase64(iv)
             },
@@ -2655,8 +2660,9 @@ const ChatArea = React.memo(function ChatArea({
 
     if (msg.mediaType === 'file') {
       const file = msg.fileMetadata || {};
-      const isImage = file.mimeType?.startsWith('image/');
-      const isVideo = file.mimeType?.startsWith('video/');
+      const inferredMime = inferMimeType(file.name || file.fileName || file.filename || '', file.mimeType || '');
+      const isImage = inferredMime.startsWith('image/');
+      const isVideo = inferredMime.startsWith('video/');
 
       let element;
       if (isImage) {
@@ -3491,12 +3497,27 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
         <img 
           className={`message-image ${isLoaded ? 'loaded' : ''}`}
           src={imgSrc} 
-          alt={fileMetadata.name} 
+          alt="" 
           decoding="async"
           onClick={onImageClick ? () => onImageClick(fullResUrlRef.current || imgSrc) : undefined}
           onLoad={() => {
             setIsLoaded(true);
             if (onImageLoad) onImageLoad();
+          }}
+          onError={() => {
+            if (fileMetadata?.url) {
+              loadOrFetchDecryptedMedia(fileMetadata).then((blob) => {
+                const correctMime = inferMimeType(fileMetadata.name, fileMetadata.mimeType);
+                const fixedBlob = new Blob([blob], { type: correctMime });
+                const newUrl = URL.createObjectURL(fixedBlob);
+                setImgSrc(newUrl);
+                setIsLoaded(true);
+              }).catch(() => {
+                setError('Image failed to load');
+              });
+            } else {
+              setError('Image failed to load');
+            }
           }}
           style={{
             cursor: onImageClick ? 'pointer' : 'default'

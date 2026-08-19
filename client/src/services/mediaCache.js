@@ -162,13 +162,43 @@ export async function setCachedMedia(url, blob, mimeType = '', thumbBlob = null)
 }
 
 /**
+ * Robust MIME type inference helper
+ */
+export function inferMimeType(filename = '', providedMime = '') {
+  if (providedMime && providedMime !== 'application/octet-stream' && providedMime.trim() !== '') {
+    return providedMime;
+  }
+  const ext = filename ? filename.split('.').pop().toLowerCase() : '';
+  const map = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    bmp: 'image/bmp',
+    heic: 'image/heic',
+    heif: 'image/heif',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+    wav: 'audio/wav',
+    m4a: 'audio/mp4',
+    pdf: 'application/pdf'
+  };
+  return map[ext] || providedMime || 'application/octet-stream';
+}
+
+/**
  * Load or fetch and decrypt media.
  * Checks Memory first, then IndexedDB. If missing, fetches from server, decrypts, saves to IndexedDB & Memory, and returns Blob.
- * @param {Object} fileMetadata { url, keyJwk, iv, mimeType }
+ * @param {Object} fileMetadata { url, keyJwk, iv, mimeType, name }
  * @returns {Promise<Blob>}
  */
 export async function loadOrFetchDecryptedMedia(fileMetadata) {
-  const { url, keyJwk, iv, mimeType } = fileMetadata;
+  const { url, keyJwk, iv, mimeType, name } = fileMetadata;
   if (!url) throw new Error('Invalid file metadata: missing URL');
 
   // 1. Check in-memory instant cache (0ms)
@@ -211,7 +241,7 @@ export async function loadOrFetchDecryptedMedia(fileMetadata) {
   );
 
   // 6. Build decrypted blob and store in memory & IndexedDB for instant future access
-  const targetMime = mimeType || 'application/octet-stream';
+  const targetMime = inferMimeType(name, mimeType);
   const blob = new Blob([decryptedBuffer], { type: targetMime });
   const fullUrl = URL.createObjectURL(blob);
   setMemoryMedia(url, fullUrl, fullUrl, blob);

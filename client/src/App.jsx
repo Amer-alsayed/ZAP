@@ -1631,10 +1631,10 @@ export default function App() {
     }
 
     setIsNavigatingBack(true);
+    setActiveContact(null);
+    setShowSettings(false);
+    setShowRecents(false);
     setTimeout(() => {
-      setActiveContact(null);
-      setShowSettings(false);
-      setShowRecents(false);
       setIsNavigatingBack(false);
       isNavigatingBackRef.current = false;
     }, 300); // Smooth 300ms slide-back transition

@@ -6091,14 +6091,17 @@ textarea {
   }
 
   .contact-item:hover,
-  .contact-item:focus {
+  .contact-item:focus,
+  .contact-item.active,
+  .contact-item.active:hover,
+  .contact-item.active:focus {
     background: transparent !important;
+    border-color: transparent !important;
     transform: none !important;
   }
 
-  .contact-item.active:hover,
-  .contact-item.active:focus {
-    background: rgba(var(--accent-rgb), 0.16) !important;
+  .contact-item.active .avatar {
+    border-color: rgba(255, 255, 255, 0.1) !important;
   }
 
   .control-btn:hover,
