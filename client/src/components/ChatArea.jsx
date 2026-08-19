@@ -2411,16 +2411,25 @@ const ChatArea = React.memo(function ChatArea({
       setSelectedFiles([]); // Clear queue immediately
 
       try {
-        for (let idx = 0; idx < filesToUpload.length; idx++) {
+        const totalFiles = filesToUpload.length;
+
+        for (let idx = 0; idx < totalFiles; idx++) {
           const fileToUpload = filesToUpload[idx];
-          
-          setUploadProgress({
-            filename: fileToUpload.name,
-            current: idx + 1,
-            total: filesToUpload.length,
-            percent: 15,
-            status: 'Reading file data...'
-          });
+          const fileBasePct = (idx / totalFiles) * 100;
+          const filePctWeight = (1 / totalFiles);
+
+          const updateProgress = (stagePct, status) => {
+            const overallPercent = Math.min(99, Math.round(fileBasePct + (stagePct * filePctWeight)));
+            setUploadProgress({
+              filename: fileToUpload.name,
+              current: idx + 1,
+              total: totalFiles,
+              percent: overallPercent,
+              status
+            });
+          };
+
+          updateProgress(10, 'Encrypting...');
 
           // 1. Read file as ArrayBuffer safely (supporting Android content URI files)
           let fileBuffer = fileToUpload._preloadedBuffer || await readBlobBufferSafely(fileToUpload);
@@ -2430,13 +2439,7 @@ const ChatArea = React.memo(function ChatArea({
             } catch (e) {}
           }
 
-          setUploadProgress({
-            filename: fileToUpload.name,
-            current: idx + 1,
-            total: filesToUpload.length,
-            percent: 42,
-            status: 'Encrypting (AES-256-GCM)...'
-          });
+          updateProgress(25, 'Encrypting...');
 
           // 2. Generate AES-GCM session key
           const fileSessionKey = await window.crypto.subtle.generateKey(
@@ -2453,27 +2456,23 @@ const ChatArea = React.memo(function ChatArea({
             fileBuffer
           );
 
-          setUploadProgress({
-            filename: fileToUpload.name,
-            current: idx + 1,
-            total: filesToUpload.length,
-            percent: 74,
-            status: 'Uploading encrypted payload...'
-          });
-
           // 4. Base64 convert
           const encryptedBase64 = bufferToBase64(encryptedFileBuffer);
 
-          // 5. Upload encrypted file payload
-          const { fileUrl } = await uploadEncryptedFile(fileToUpload.name, encryptedBase64, currentUserToken);
+          updateProgress(35, 'Uploading...');
 
-          setUploadProgress({
-            filename: fileToUpload.name,
-            current: idx + 1,
-            total: filesToUpload.length,
-            percent: 95,
-            status: 'Finalizing E2EE message...'
-          });
+          // 5. Upload encrypted file payload with real-time XHR upload progress
+          const { fileUrl } = await uploadEncryptedFile(
+            fileToUpload.name, 
+            encryptedBase64, 
+            currentUserToken,
+            (uploadPct) => {
+              const stagePct = 35 + (uploadPct * 0.60);
+              updateProgress(stagePct, 'Uploading...');
+            }
+          );
+
+          updateProgress(98, 'Sending...');
 
           const inferredMime = inferMimeType(fileToUpload.name, fileToUpload.type);
           const localBlob = (fileToUpload.type === inferredMime)

@@ -74,17 +74,50 @@ export const searchUser = async (username, token) => {
  * @param {string} token 
  * @returns {Promise<{ fileUrl: string }>}
  */
-export const uploadEncryptedFile = async (filename, fileDataBase64, token) => {
-  const response = await fetch(`${BASE_URL}/api/upload`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ filename, fileData: fileDataBase64 })
-  });
+export const uploadEncryptedFile = (filename, fileDataBase64, token, onProgress) => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BASE_URL}/api/upload`);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
-  return parseJsonResponse(response, 'File upload failed');
+    if (xhr.upload && typeof onProgress === 'function') {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = (event.loaded / event.total) * 100;
+          onProgress(percent);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      let data = null;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch (e) {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          return resolve(data);
+        }
+        return reject(new Error(`File upload failed (Server returned ${xhr.status})`));
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(data?.error || `File upload failed (${xhr.status})`));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during file upload'));
+    };
+
+    xhr.onabort = () => {
+      reject(new Error('File upload was aborted'));
+    };
+
+    xhr.send(JSON.stringify({ filename, fileData: fileDataBase64 }));
+  });
 };
 
 export { BASE_URL };
