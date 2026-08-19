@@ -823,6 +823,9 @@ const MessageList = React.memo(({
 }) => {
   const [swipeState, setSwipeState] = useState({ msgId: null, offset: 0, isSwiping: false });
   const swipeStartRef = useRef(null);
+  const activeSwipeElRef = useRef(null);
+  const activeSwipeIndicatorRef = useRef(null);
+  const swipeOffsetRef = useRef(0);
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -1124,8 +1127,8 @@ const MessageList = React.memo(({
             onTouchCancel={() => {
               cancelLongPress();
               if (activeSwipeElRef.current) {
-                activeSwipeElRef.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
-                activeSwipeElRef.style.transform = 'translate3d(0, 0, 0)';
+                activeSwipeElRef.current.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                activeSwipeElRef.current.style.transform = 'translate3d(0, 0, 0)';
               }
               if (activeSwipeIndicatorRef.current) {
                 activeSwipeIndicatorRef.current.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
