@@ -5331,7 +5331,7 @@ textarea {
     width: 100% !important;
     max-width: 100vw !important;
     box-sizing: border-box !important;
-    overflow: hidden !important;
+    overflow: visible !important;
   }
 
   .chat-input-row {
