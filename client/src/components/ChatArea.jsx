@@ -1779,27 +1779,42 @@ const ChatArea = React.memo(function ChatArea({
     };
   }, [activeContact.username]);
 
+  const isSmoothScrollingRef = useRef(false);
+  const smoothScrollTimerRef = useRef(null);
+
   const handleScroll = useCallback((e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 40;
+
+    if (isSmoothScrollingRef.current) {
+      if (isAtBottom) {
+        isScrolledUpRef.current = false;
+        setIsScrolledUp(false);
+        isSmoothScrollingRef.current = false;
+      }
+      return;
+    }
+
     isScrolledUpRef.current = !isAtBottom;
     setIsScrolledUp(!isAtBottom);
   }, []);
-  const isSmoothScrollingRef = useRef(false);
 
   const scrollToBottom = () => {
     isScrolledUpRef.current = false;
     setIsScrolledUp(false);
     setIsLastMessageVisible(true);
     if (messagesContainerRef.current) {
+      if (smoothScrollTimerRef.current) {
+        clearTimeout(smoothScrollTimerRef.current);
+      }
       isSmoothScrollingRef.current = true;
       messagesContainerRef.current.scrollTo({
         top: messagesContainerRef.current.scrollHeight,
         behavior: 'smooth'
       });
-      setTimeout(() => {
+      smoothScrollTimerRef.current = setTimeout(() => {
         isSmoothScrollingRef.current = false;
-      }, 400);
+      }, 500);
     }
     if (markAllMessagesAsReadLocal) {
       markAllMessagesAsReadLocal(activeContact.username);
@@ -2288,6 +2303,12 @@ const ChatArea = React.memo(function ChatArea({
     }
 
     const observer = new IntersectionObserver(([entry]) => {
+      if (isSmoothScrollingRef.current) {
+        if (entry.isIntersecting) {
+          setIsLastMessageVisible(true);
+        }
+        return;
+      }
       setIsLastMessageVisible(entry.isIntersecting);
     }, {
       root: messagesContainerRef.current,
@@ -3269,7 +3290,7 @@ const ChatArea = React.memo(function ChatArea({
       <div className="chat-input-wrapper">
         {/* Floating Scroll-to-Bottom Button / Typing Indicator */}
         <button 
-          className={`scroll-to-bottom-btn glass ${((isScrolledUp || !isLastMessageVisible) && !isInlineTypingVisible) ? 'visible' : ''} ${(activeContact.isTyping && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
+          className={`scroll-to-bottom-btn glass ${(isScrolledUp && !isInlineTypingVisible) ? 'visible' : ''} ${(activeContact.isTyping && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
           onClick={scrollToBottom} 
           title="Scroll to bottom"
           aria-label="Scroll to bottom"
