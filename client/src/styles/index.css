@@ -5901,6 +5901,169 @@ textarea {
   }
 }
 
+/* ==========================================================================
+   MOBILE TOUCH: ELIMINATE STICKY HOVER & LINGERING HIGHLIGHTS ON MOBILE
+   ========================================================================== */
+@media (hover: none), (pointer: coarse), (max-width: 768px) {
+  /* 1. Global Touch Tap Highlight Reset */
+  *, *::before, *::after {
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  /* 2. Remove sticky focus rings on tap */
+  button:focus:not(:focus-visible),
+  [role="button"]:focus:not(:focus-visible),
+  a:focus:not(:focus-visible) {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* 3. Neutralize sticky hover transforms and lingering background/border changes on all mobile buttons */
+  button:hover,
+  [role="button"]:hover,
+  .back-btn:hover,
+  .input-circle-btn:hover,
+  .input-emoji-btn:hover,
+  .avatar-action-pill:hover,
+  .avatar-action-pill.danger-pill:hover,
+  .recents-icon-btn:hover,
+  .recents-icon-btn.call:hover,
+  .recents-info-btn:hover,
+  .recents-row:hover,
+  .contact-item:hover,
+  .contact-item.has-hover:hover,
+  .sidebar-calls-btn:hover,
+  .sidebar-settings-btn:hover,
+  .sidebar-profile-btn:hover,
+  .add-contact-btn:hover,
+  .search-action-btn:hover,
+  .call-btn:hover,
+  .reply-preview-close:hover,
+  .attach-menu-item:hover,
+  .apple-emoji-btn:hover,
+  .apple-category-btn:hover,
+  .control-btn:hover,
+  .settings-nav-btn:hover,
+  .settings-section-card:hover,
+  .settings-close-btn:hover,
+  .search-clear-btn:hover,
+  .file-preview-pill:hover,
+  .clear-all-files-btn:hover,
+  .message-reply-context:hover {
+    background-color: inherit;
+    border-color: inherit;
+    color: inherit;
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  /* Retain correct base button appearances */
+  .back-btn:hover {
+    color: var(--text-muted) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    transform: none !important;
+  }
+
+  .input-circle-btn:hover {
+    background: rgba(18, 18, 18, 0.8) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    transform: none !important;
+  }
+
+  .input-circle-btn.send-btn:hover {
+    background: var(--accent-main) !important;
+    color: #ffffff !important;
+    transform: none !important;
+  }
+
+  .avatar-action-pill:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    transform: none !important;
+  }
+
+  .avatar-action-pill.danger-pill:hover {
+    background: rgba(239, 68, 68, 0.1) !important;
+    color: #f87171 !important;
+    border-color: rgba(239, 68, 68, 0.2) !important;
+    transform: none !important;
+  }
+
+  .recents-icon-btn.call:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: var(--text-primary) !important;
+    transform: none !important;
+  }
+
+  .recents-info-btn:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: var(--text-muted) !important;
+    transform: none !important;
+  }
+
+  .recents-info-btn.active:hover {
+    background: rgba(var(--accent-rgb), 0.2) !important;
+    border-color: rgba(var(--accent-rgb), 0.45) !important;
+    color: var(--accent-color) !important;
+  }
+
+  .sidebar-calls-btn:hover,
+  .sidebar-settings-btn:hover {
+    color: var(--text-muted) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    transform: none !important;
+  }
+
+  .sidebar-calls-btn.active:hover,
+  .sidebar-settings-btn.active:hover {
+    color: var(--accent-text) !important;
+    background: rgba(var(--accent-rgb), 0.16) !important;
+    border-color: rgba(var(--accent-rgb), 0.35) !important;
+  }
+
+  .recents-row:hover {
+    background-color: transparent !important;
+  }
+
+  .contact-item:hover {
+    background: transparent !important;
+    transform: none !important;
+  }
+
+  .contact-item.active:hover {
+    background: rgba(var(--accent-rgb), 0.16) !important;
+  }
+
+  .control-btn:hover {
+    color: var(--text-muted) !important;
+    transform: none !important;
+  }
+
+  .control-btn.active:hover {
+    color: var(--accent-text) !important;
+  }
+
+  /* 4. Instant, crisp native-like active press feedback (ONLY while finger is touching the screen) */
+  button:active,
+  .back-btn:active,
+  .input-circle-btn:active,
+  .avatar-action-pill:active,
+  .recents-icon-btn:active,
+  .recents-info-btn:active,
+  .sidebar-calls-btn:active,
+  .sidebar-settings-btn:active {
+    transform: scale(0.95) !important;
+    opacity: 0.85 !important;
+    transition: transform 0.08s ease, opacity 0.08s ease !important;
+  }
+}
+
 /* Quoted Message Reply Box Styling */
 .message-reply-context {
   position: relative;
