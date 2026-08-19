@@ -868,6 +868,7 @@ const MessageList = React.memo(({
                 }
                 if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) {
                   cancelLongPress();
+                  swipeStartRef.current = null;
                   return;
                 }
                 startLongPress(msg);
@@ -887,6 +888,11 @@ const MessageList = React.memo(({
                   return;
                 }
                 if (selectionMode) return;
+                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) {
+                  cancelLongPress();
+                  swipeStartRef.current = null;
+                  return;
+                }
                 cancelLongPress();
                 if (!swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
                 const touch = e.touches[0];
@@ -2733,6 +2739,10 @@ const ChatArea = React.memo(function ChatArea({
                 onMouseDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
                 onTouchStart={(e) => { e.stopPropagation(); cancelLongPress(); }}
                 onPointerDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
+                onInput={(e) => {
+                  const seekPct = parseFloat(e.target.value) / 100;
+                  if (!selectionModeRef.current) togglePlayAudio(msg.id, file, seekPct, false);
+                }}
                 onChange={(e) => {
                   const seekPct = parseFloat(e.target.value) / 100;
                   if (!selectionModeRef.current) togglePlayAudio(msg.id, file, seekPct, false);
