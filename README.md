@@ -1,4 +1,4 @@
-# Chatra
+# ZAP
 
 An anonymous, end-to-end encrypted (E2EE) real-time messaging and WebRTC voice/video application. Built with Node.js, Express, Socket.IO, and React (Vite).
 
@@ -6,7 +6,7 @@ An anonymous, end-to-end encrypted (E2EE) real-time messaging and WebRTC voice/v
 
 ## Architecture & Security Model
 
-Chatra uses a **zero-knowledge server model**. The server routes encrypted payloads and manages peer signaling, but holds no private keys, passwords, or plaintext message data.
+ZAP uses a **zero-knowledge server model**. The server routes encrypted payloads and manages peer signaling, but holds no private keys, passwords, or plaintext message data.
 
 ### 1. End-to-End Encryption (E2EE)
 * **Key Agreement**: Diffie-Hellman key exchange over ECDH (`P-256`) curve via the browser's native Web Crypto API (`window.crypto.subtle`).

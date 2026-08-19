@@ -23,6 +23,7 @@ const getSafetyNumber = (keyA, keyB) => {
 };
 
 import Login from './components/Login';
+import ZapLogo from './components/ZapLogo';
 import { clearMediaCache } from './services/mediaCache';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
@@ -2752,7 +2753,7 @@ export default function App() {
   // Secure sign out with in-app confirmation modal
   const handleLogout = () => {
     showConfirm({
-      title: 'Sign out of Chatra?',
+      title: 'Sign out of ZAP?',
       message: 'Your encryption keys are stored locally on this device. Make sure you know your password to sign back in.',
       confirmText: 'Sign Out',
       cancelText: 'Cancel',
@@ -2787,10 +2788,7 @@ export default function App() {
         <div className={`app-preloader ${isPreloaderFading ? 'fading-out' : ''}`}>
           <div className="preloader-logo-container">
             <div className="preloader-glow"></div>
-            <svg className="preloader-logo" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              <path d="m9 11 2 2 4-4" stroke="var(--accent-color)" strokeWidth="2"/>
-            </svg>
+            <ZapLogo size={64} glow className="preloader-logo" />
           </div>
           <div className="preloader-bar-bg">
             <div className="preloader-bar"></div>
@@ -2817,7 +2815,7 @@ export default function App() {
                   ) : (
                     <>
                       <RefreshCw size={16} className="spin-icon" />
-                      <span>Connecting to Chatra Server...</span>
+                      <span>Connecting to ZAP Server...</span>
                     </>
                   )}
                 </div>

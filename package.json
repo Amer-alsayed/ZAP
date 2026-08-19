@@ -1,5 +1,5 @@
 {
-  "name": "chatra-monorepo",
+  "name": "zap-monorepo",
   "version": "1.0.0",
   "description": "Anonymous E2EE Real-time Chat Application",
   "main": "server/server.js",

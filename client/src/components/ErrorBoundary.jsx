@@ -59,7 +59,7 @@ export class ErrorBoundary extends React.Component {
               Application Encountered an Error
             </h2>
             <p style={{ fontSize: '14px', color: '#888888', marginBottom: '16px', lineHeight: '1.5' }}>
-              Chatra encountered an unexpected error. Your encryption keys and messages remain safe.
+              ZAP encountered an unexpected error. Your encryption keys and messages remain safe.
             </p>
             {this.state.error && (
               <div style={{

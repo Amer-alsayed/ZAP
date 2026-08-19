@@ -3372,6 +3372,14 @@ button {
   margin: 0 auto;
 }
 
+.single-image-bubble .image-loader-container.is-decrypting {
+  min-width: 220px;
+  min-height: 180px;
+  width: 240px;
+  max-width: 280px;
+  aspect-ratio: 4 / 3;
+}
+
 .image-message-wrapper img,
 .image-loader-container img,
 .message-image {

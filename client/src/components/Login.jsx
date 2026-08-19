@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Shield, User, Lock, KeyRound, AlertTriangle } from 'lucide-react';
+import ZapLogo from './ZapLogo';
 import { deriveKeysFromPassword, generateKeyPairs, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys } from '../services/crypto';
 import { registerUser, loginUser } from '../services/api';
 
@@ -177,8 +178,8 @@ export default function Login({ onAuthSuccess }) {
     <div className="auth-wrapper">
       <div className={`auth-card glass ${isFocused ? 'inputs-focused' : ''}`}>
         <div className="auth-logo">
-          <Shield size={50} strokeWidth={1.5} />
-          <h1>Chatra</h1>
+          <ZapLogo size={64} glow />
+          <h1>ZAP</h1>
           <p>Anonymous End-to-End Encrypted Chat</p>
         </div>
 
@@ -231,7 +232,7 @@ export default function Login({ onAuthSuccess }) {
           <div className={`warning-box-container ${isRegister ? 'visible' : ''}`}>
             <div className="warning-box">
               <AlertTriangle size={16} style={{ float: 'left', marginRight: '8px', marginTop: '2px' }} />
-              <strong>Warning:</strong> Chatra uses Zero-Knowledge encryption. 
+              <strong>Warning:</strong> ZAP uses Zero-Knowledge encryption. 
               If you lose your password, your private key and chat history CANNOT be recovered.
             </div>
           </div>
@@ -249,7 +250,7 @@ export default function Login({ onAuthSuccess }) {
             </>
           ) : (
             <>
-              New to Chatra?{' '}
+              New to ZAP?{' '}
               <span onClick={() => { setIsRegister(true); setError(''); }}>Create account</span>
             </>
           )}

@@ -1,5 +1,5 @@
 {
-  "name": "chatra-server",
+  "name": "zap-server",
   "version": "1.0.0",
   "description": "Backend for Anonymous E2EE Chat Application",
   "main": "server.js",

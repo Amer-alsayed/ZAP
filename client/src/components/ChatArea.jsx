@@ -655,7 +655,7 @@ const MediaAlbumGrid = React.memo(function MediaAlbumGrid({ albumItems, onImageC
                     onImageClick={() => {
                       if (!selectionMode) setGalleryIndex(idx);
                     }}
-                    onImageLoad={isLast && idx === 0 ? handleImageLoad : undefined} 
+                    onImageLoad={handleImageLoad} 
                   />
                 ) : isVideo ? (
                   <VideoPreviewLoader fileMetadata={file} />
@@ -2056,6 +2056,41 @@ const ChatArea = React.memo(function ChatArea({
 
   const prevContactUsernameRef = useRef(null);
 
+  // Auto-pin scroll position to bottom whenever the messages container or wrapper resizes (e.g. images load/decrypt, history arrives, fonts load), UNLESS the user has intentionally scrolled up.
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    const wrapper = messagesBounceWrapperRef.current;
+    if (!container || !wrapper) return;
+
+    if (!isScrolledUpRef.current) {
+      container.scrollTop = container.scrollHeight;
+    }
+
+    let rafId = null;
+
+    const handleResize = () => {
+      if (!isScrolledUpRef.current && !isSmoothScrollingRef.current) {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          if (container && !isScrolledUpRef.current) {
+            container.scrollTop = container.scrollHeight;
+          }
+        });
+      }
+    };
+
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(handleResize);
+      resizeObserver.observe(wrapper);
+    }
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      if (resizeObserver) resizeObserver.disconnect();
+    };
+  }, [activeContact.username]);
+
   // Scroll to bottom when selecting contact / mounting chat & lock across initial layout paint frames
   useLayoutEffect(() => {
     const isNewContact = prevContactUsernameRef.current !== activeContact.username;
@@ -2078,21 +2113,23 @@ const ChatArea = React.memo(function ChatArea({
           messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
         }
         frameCount++;
-        if (frameCount < 12) {
+        if (frameCount < 16) {
           rafId = requestAnimationFrame(pinToBottom);
         }
       };
       rafId = requestAnimationFrame(pinToBottom);
 
-      const t1 = setTimeout(() => scrollToBottomInstant(), 50);
-      const t2 = setTimeout(() => scrollToBottomInstant(), 150);
-      const t3 = setTimeout(() => scrollToBottomInstant(), 350);
+      const t1 = setTimeout(() => { if (!isScrolledUpRef.current) scrollToBottomInstant(); }, 50);
+      const t2 = setTimeout(() => { if (!isScrolledUpRef.current) scrollToBottomInstant(); }, 150);
+      const t3 = setTimeout(() => { if (!isScrolledUpRef.current) scrollToBottomInstant(); }, 350);
+      const t4 = setTimeout(() => { if (!isScrolledUpRef.current) scrollToBottomInstant(); }, 600);
 
       return () => {
         if (rafId) cancelAnimationFrame(rafId);
         clearTimeout(t1);
         clearTimeout(t2);
         clearTimeout(t3);
+        clearTimeout(t4);
       };
     }
   }, [activeContact.username, scrollToBottomInstant]);
@@ -2126,15 +2163,15 @@ const ChatArea = React.memo(function ChatArea({
       const lastMsg = activeContact.messages[activeContact.messages.length - 1];
       const isSentByMe = lastMsg && lastMsg.sender !== activeContact.username;
       
-      // Auto-scroll if the message was sent by us OR the previous last message was visible in view
-      if (isSentByMe || isLastMessageVisible) {
-        if (isLastMessageVisible) {
+      // Auto-scroll if the message was sent by us OR the previous last message was visible in view OR user is not scrolled up
+      if (isSentByMe || isLastMessageVisible || !isScrolledUpRef.current) {
+        if (isLastMessageVisible || !isScrolledUpRef.current) {
           // At-bottom: Lock scroll position frame-by-frame during the entry bubble animation
           const startTime = performance.now();
           let frameId;
           
           const keepScrollAtBottom = (now) => {
-            if (messagesContainerRef.current) {
+            if (messagesContainerRef.current && !isScrolledUpRef.current) {
               messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
             }
             if (now - startTime < 400) {
@@ -2162,24 +2199,24 @@ const ChatArea = React.memo(function ChatArea({
     prevMessageCountRef.current = currentCount;
   }, [activeContact?.messages?.length]);
 
-  const handleImageLoad = () => {
+  const handleImageLoad = useCallback(() => {
     // If the user was already looking at the bottom, pin the scroll position as the decrypted image loads
-    if (isLastMessageVisible) {
+    if (!isScrolledUpRef.current) {
       const startTime = performance.now();
       let frameId;
       
       const keepScrollAtBottom = (now) => {
-        if (messagesContainerRef.current) {
+        if (messagesContainerRef.current && !isScrolledUpRef.current) {
           messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
         }
-        if (now - startTime < 200) {
+        if (now - startTime < 250) {
           frameId = requestAnimationFrame(keepScrollAtBottom);
         }
       };
       
       frameId = requestAnimationFrame(keepScrollAtBottom);
     }
-  };
+  }, []);
 
   // Observe unread messages and mark them as read when they enter the viewport
   useEffect(() => {
@@ -2981,7 +3018,7 @@ const ChatArea = React.memo(function ChatArea({
           <div className="image-message-wrapper">
             <ImagePreviewLoader fileMetadata={file} onImageClick={onImageClick ? (src) => {
               if (!selectionModeRef.current) onImageClick(src);
-            } : undefined} onImageLoad={isLast ? handleImageLoad : undefined} />
+            } : undefined} onImageLoad={handleImageLoad} />
           </div>
         );
       } else if (isVideo) {
@@ -3206,7 +3243,7 @@ const ChatArea = React.memo(function ChatArea({
         <div className="messages-bounce-wrapper" ref={messagesBounceWrapperRef}>
           <div className="e2ee-banner">
             <Shield size={14} />
-            <span>Messages and media are end-to-end encrypted. No one else, not even Chatra, can read them.</span>
+            <span>Messages and media are end-to-end encrypted. No one else, not even ZAP, can read them.</span>
           </div>
 
           <MessageList
