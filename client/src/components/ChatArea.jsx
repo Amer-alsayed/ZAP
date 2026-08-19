@@ -3915,7 +3915,7 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
         <div className="image-skeleton-loader">
           <div className="media-decrypt-spinner-badge">
             <div className="media-decrypt-spinner-ring" />
-            <ZapLogo size={22} variant="accent" glow className="media-decrypt-logo" />
+            <ZapLogo size={22} variant="accent" glow={false} className="media-decrypt-logo" />
           </div>
           {fileMetadata?.size && (
             <span className="media-decrypt-size-pill">

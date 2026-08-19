@@ -3466,13 +3466,13 @@ button {
   height: 52px;
   border-radius: 50%;
   background: rgba(18, 18, 18, 0.85);
-  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), inset 0 0 12px rgba(var(--accent-rgb), 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   flex-shrink: 0;
 }
 
@@ -3480,21 +3480,13 @@ button {
   position: absolute;
   inset: -1px;
   border-radius: 50%;
-  border: 2.5px solid transparent;
+  border: 2px solid transparent;
   border-top-color: var(--accent-color);
-  border-right-color: rgba(var(--accent-rgb), 0.45);
   animation: spin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.4);
 }
 
 .media-decrypt-logo {
-  transition: transform 0.3s ease;
-  animation: pulseLogo 2s ease-in-out infinite alternate;
-}
-
-@keyframes pulseLogo {
-  0% { transform: scale(0.94); opacity: 0.85; }
-  100% { transform: scale(1.06); opacity: 1; }
+  opacity: 0.95;
 }
 
 .media-decrypt-size-pill {
@@ -3504,7 +3496,7 @@ button {
   background: rgba(18, 18, 18, 0.75);
   padding: 3px 10px;
   border-radius: 12px;
-  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.2px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
