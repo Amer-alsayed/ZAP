@@ -1807,7 +1807,10 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, []);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (e) => {
+    if (e?.currentTarget) {
+      e.currentTarget.blur();
+    }
     isScrolledUpRef.current = false;
     setIsScrolledUp(false);
     setIsLastMessageVisible(true);

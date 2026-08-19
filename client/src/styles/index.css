@@ -6122,9 +6122,6 @@ textarea {
     left: 50% !important;
   }
 
-  .scroll-to-bottom-btn:hover,
-  .scroll-to-bottom-btn:focus,
-  .scroll-to-bottom-btn:active,
   .scroll-to-bottom-btn.visible,
   .scroll-to-bottom-btn.visible:hover,
   .scroll-to-bottom-btn.visible:focus,
