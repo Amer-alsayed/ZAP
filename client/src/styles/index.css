@@ -5902,7 +5902,7 @@ textarea {
 }
 
 /* ==========================================================================
-   MOBILE TOUCH: CLEAN TOUCH RESET (NO HIGHLIGHTS, FULL INTERACTIVITY)
+   MOBILE TOUCH: CLEAN TOUCH RESET (NO HIGHLIGHTS, NO STICKY HOVER)
    ========================================================================== */
 @media (max-width: 768px), (hover: none), (pointer: coarse) {
   /* 1. Eliminate native tap highlight colors and focus boxes */
@@ -5916,19 +5916,168 @@ textarea {
   }
 
   button:focus,
+  button:focus-visible,
   [role="button"]:focus,
-  a:focus {
+  [role="button"]:focus-visible,
+  a:focus,
+  a:focus-visible {
     outline: none !important;
     box-shadow: none !important;
   }
 
-  /* 2. Floating Scroll-to-Bottom Button Centering on Mobile */
+  /* 2. Neutralize button hover/focus highlights so they never stay lit up on mobile */
+  .back-btn:hover,
+  .back-btn:focus,
+  .back-btn:active {
+    color: var(--text-muted) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    transform: none !important;
+  }
+
+  .header-action-btn:hover,
+  .header-action-btn:focus,
+  .header-action-btn:active {
+    color: var(--text-muted) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    transform: none !important;
+  }
+
+  .sidebar-settings-btn:hover,
+  .sidebar-settings-btn:focus,
+  .sidebar-settings-btn:active,
+  .sidebar-calls-btn:hover,
+  .sidebar-calls-btn:focus,
+  .sidebar-calls-btn:active {
+    color: var(--text-muted) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    transform: none !important;
+  }
+
+  .sidebar-settings-btn.active,
+  .sidebar-calls-btn.active,
+  .sidebar-settings-btn.active:hover,
+  .sidebar-calls-btn.active:hover,
+  .sidebar-settings-btn.active:focus,
+  .sidebar-calls-btn.active:focus {
+    color: var(--accent-text) !important;
+    background-color: var(--accent-surface) !important;
+    border-color: var(--accent-border) !important;
+    transform: none !important;
+  }
+
+  .input-circle-btn:hover,
+  .input-circle-btn:focus,
+  .input-circle-btn:active {
+    background: rgba(18, 18, 18, 0.8) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    transform: none !important;
+  }
+
+  .input-circle-btn.send-btn:hover,
+  .input-circle-btn.send-btn:focus {
+    background: var(--accent-main) !important;
+    color: #ffffff !important;
+    transform: none !important;
+  }
+
+  .input-emoji-btn:hover,
+  .input-emoji-btn:focus,
+  .input-emoji-btn:active {
+    background: transparent !important;
+    color: var(--text-muted) !important;
+    transform: none !important;
+  }
+
+  .input-emoji-btn.active:hover,
+  .input-emoji-btn.active:focus {
+    background: rgba(var(--accent-rgb), 0.16) !important;
+    color: var(--accent-color) !important;
+  }
+
+  .avatar-action-pill:hover,
+  .avatar-action-pill:focus,
+  .avatar-action-pill:active {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    transform: none !important;
+  }
+
+  .avatar-action-pill.danger-pill:hover,
+  .avatar-action-pill.danger-pill:focus,
+  .avatar-action-pill.danger-pill:active {
+    background: rgba(239, 68, 68, 0.1) !important;
+    color: #f87171 !important;
+    border-color: rgba(239, 68, 68, 0.2) !important;
+    transform: none !important;
+  }
+
+  .recents-icon-btn.call:hover,
+  .recents-icon-btn.call:focus,
+  .recents-icon-btn.call:active {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: var(--text-primary) !important;
+    transform: none !important;
+  }
+
+  .recents-info-btn:hover,
+  .recents-info-btn:focus,
+  .recents-info-btn:active {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: var(--text-muted) !important;
+    transform: none !important;
+  }
+
+  .recents-info-btn.active:hover,
+  .recents-info-btn.active:focus {
+    background: rgba(var(--accent-rgb), 0.2) !important;
+    border-color: rgba(var(--accent-rgb), 0.45) !important;
+    color: var(--accent-color) !important;
+    transform: none !important;
+  }
+
   .scroll-to-bottom-btn {
     left: 50% !important;
   }
 
-  .scroll-to-bottom-btn.visible {
+  .scroll-to-bottom-btn:hover,
+  .scroll-to-bottom-btn:focus,
+  .scroll-to-bottom-btn:active,
+  .scroll-to-bottom-btn.visible,
+  .scroll-to-bottom-btn.visible:hover,
+  .scroll-to-bottom-btn.visible:focus,
+  .scroll-to-bottom-btn.visible:active {
+    background: rgba(18, 18, 18, 0.85) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    color: var(--text-muted) !important;
     transform: translateX(-50%) translateY(0) scale(1) !important;
+  }
+
+  .contact-item:hover,
+  .contact-item:focus {
+    background: transparent !important;
+    transform: none !important;
+  }
+
+  .contact-item.active:hover,
+  .contact-item.active:focus {
+    background: rgba(var(--accent-rgb), 0.16) !important;
+  }
+
+  .control-btn:hover,
+  .control-btn:focus {
+    color: var(--text-muted) !important;
+    transform: none !important;
+  }
+
+  .control-btn.active:hover,
+  .control-btn.active:focus {
+    color: var(--accent-text) !important;
   }
 }
 

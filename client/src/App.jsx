@@ -174,6 +174,21 @@ export default function App() {
     restoreSession();
   }, []);
 
+  // On mobile/touch devices, immediately blur clicked buttons to prevent lingering focus/hover states
+  useEffect(() => {
+    const handleTouchEnd = (e) => {
+      if (e.target.closest('button, [role="button"], .back-btn, .header-action-btn, .sidebar-settings-btn, .sidebar-calls-btn, .input-circle-btn, .scroll-to-bottom-btn')) {
+        setTimeout(() => {
+          if (document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.getAttribute('role') === 'button')) {
+            document.activeElement.blur();
+          }
+        }, 50);
+      }
+    };
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    return () => window.removeEventListener('touchend', handleTouchEnd);
+  }, []);
+
   // Apply theme preferences (glass mode and accent color) synchronously on boot
   useEffect(() => {
     const savedRgb = localStorage.getItem('chatra_theme_rgb');
