@@ -6362,7 +6362,22 @@ textarea {
 }
 
 .swipe-reply-indicator {
-  display: none;
+  display: flex;
+  position: absolute;
+  left: -32px;
+  top: 50%;
+  transform: translateY(-50%) scale(0);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
 }
 
 /* Message Hover Action Container */

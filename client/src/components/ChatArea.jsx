@@ -1025,82 +1025,44 @@ const MessageList = React.memo(({
                   toggleSelected(msg);
                 }
               }}
-              onMouseDown={(e) => {
-                if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) return;
-                if (selectionMode) return;
-                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) return;
-                startLongPress(msg);
-              }}
-              onMouseUp={cancelLongPress}
-              onMouseLeave={cancelLongPress}
-              onTouchStart={(e) => {
-                if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
-                  return;
-                }
-                if (selectionMode) {
-                  e.preventDefault();
-                  return;
-                }
-                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) {
-                  cancelLongPress();
-                  swipeStartRef.current = null;
-                  return;
-                }
-                startLongPress(msg);
-                if (window.matchMedia && !window.matchMedia('(pointer: coarse)').matches) return;
-                const touch = e.touches[0];
-                const wrapper = e.currentTarget.querySelector('.message-wrapper');
-                const indicator = wrapper?.querySelector('.swipe-reply-indicator');
-                activeSwipeElRef.current = wrapper;
-                activeSwipeIndicatorRef.current = indicator;
-                swipeOffsetRef.current = 0;
-                swipeStartRef.current = { x: touch.clientX, y: touch.clientY, msgId: msg.id };
-              }}
-            onClick={() => {
-              if (longPressTriggeredRef.current) {
-                longPressTriggeredRef.current = false;
+            onPointerDown={(e) => {
+              if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) return;
+              if (selectionMode || e.button === 2) return;
+              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn')) {
                 return;
               }
-              if (selectionMode) toggleSelected(msg);
+              startLongPress(msg);
+              const wrapper = e.currentTarget.querySelector('.message-wrapper');
+              const indicator = wrapper?.querySelector('.swipe-reply-indicator');
+              activeSwipeElRef.current = wrapper;
+              activeSwipeIndicatorRef.current = indicator;
+              swipeOffsetRef.current = 0;
+              swipeStartRef.current = { x: e.clientX, y: e.clientY, msgId: msg.id, pointerId: e.pointerId };
+              try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
             }}
-            onTouchMove={(e) => {
-              if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
-                return;
-              }
-              if (selectionMode) return;
-              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) {
-                cancelLongPress();
-                swipeStartRef.current = null;
-                return;
-              }
-              cancelLongPress();
-              if (!swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
-              const touch = e.touches[0];
-              const deltaX = touch.clientX - swipeStartRef.current.x;
-              const deltaY = touch.clientY - swipeStartRef.current.y;
+            onPointerMove={(e) => {
+              if (selectionMode || !swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
+              const deltaX = e.clientX - swipeStartRef.current.x;
+              const deltaY = e.clientY - swipeStartRef.current.y;
 
-              if (deltaX > 0 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                const clampedOffset = Math.min(deltaX * 0.6, 75);
+              if (deltaX > 5 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                cancelLongPress();
+                const clampedOffset = Math.min((deltaX - 5) * 0.65, 75);
                 swipeOffsetRef.current = clampedOffset;
                 if (activeSwipeElRef.current) {
                   activeSwipeElRef.current.style.transition = 'none';
                   activeSwipeElRef.current.style.transform = `translateX(${clampedOffset}px)`;
                 }
                 if (activeSwipeIndicatorRef.current) {
-                  const progress = Math.min(clampedOffset / 30, 1);
+                  const progress = Math.min(clampedOffset / 28, 1);
+                  activeSwipeIndicatorRef.current.style.transition = 'none';
                   activeSwipeIndicatorRef.current.style.opacity = progress;
                   activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
                 }
               }
             }}
-            onTouchEnd={() => {
-              if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
-                swipeStartRef.current = null;
-                activeSwipeElRef.current = null;
-                activeSwipeIndicatorRef.current = null;
-                swipeOffsetRef.current = 0;
-                return;
-              }
+            onPointerUp={(e) => {
+              try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
               if (selectionMode) return;
               cancelLongPress();
 
@@ -1118,7 +1080,7 @@ const MessageList = React.memo(({
                 indicator.style.transform = 'translateY(-50%) scale(0)';
               }
 
-              if (swipeStartRef.current?.msgId === msg.id && currentOffset >= 30) {
+              if (swipeStartRef.current?.msgId === msg.id && currentOffset >= 22) {
                 const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
                 setReplyingTo({
                   id: targetMsg.id,
@@ -1143,7 +1105,8 @@ const MessageList = React.memo(({
               activeSwipeIndicatorRef.current = null;
               swipeOffsetRef.current = 0;
             }}
-            onTouchCancel={() => {
+            onPointerCancel={(e) => {
+              try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
               if (selectionMode) return;
               cancelLongPress();
               if (activeSwipeElRef.current) {
@@ -1159,6 +1122,13 @@ const MessageList = React.memo(({
               activeSwipeElRef.current = null;
               activeSwipeIndicatorRef.current = null;
               swipeOffsetRef.current = 0;
+            }}
+            onClick={() => {
+              if (longPressTriggeredRef.current) {
+                longPressTriggeredRef.current = false;
+                return;
+              }
+              if (selectionMode) toggleSelected(msg);
             }}
           >
             {(() => {
