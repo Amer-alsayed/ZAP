@@ -56,7 +56,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '20mb' })); // Support base64 uploads up to 20MB
+app.use(express.json({ limit: '60mb' })); // Support base64 uploads up to 60MB
 
 // Create uploads directory if it doesn't exist
 if (!fs.existsSync(config.uploadsDir)) {
@@ -142,8 +142,8 @@ app.post('/api/upload', uploadLimiter, authenticateToken, async (req, res) => {
     // Write file asynchronously from base64 buffer
     const buffer = Buffer.from(cleanBase64, 'base64');
 
-    if (buffer.length > 20 * 1024 * 1024) {
-      return res.status(400).json({ error: 'File size exceeds maximum allowable threshold (20MB)' });
+    if (buffer.length > 50 * 1024 * 1024) {
+      return res.status(400).json({ error: 'File size exceeds maximum allowable threshold (50MB)' });
     }
 
     await fs.promises.writeFile(filePath, buffer);

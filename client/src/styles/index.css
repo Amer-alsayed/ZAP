@@ -5498,22 +5498,77 @@ textarea {
     width: min(240px, 75vw) !important;
   }
 
-  /* 3. Mobile Chat Header */
+  /* 3. Mobile Chat Header & Selection Mode Header */
   .chat-header {
     height: 64px !important;
     min-height: 64px !important;
     padding: 0 12px !important;
   }
 
-  .chat-header-name h2 {
-    font-size: 15.5px !important;
+  .chat-header-info {
+    gap: 10px !important;
+    min-width: 0 !important;
+    flex: 1 !important;
+    overflow: hidden !important;
   }
 
-  .back-btn {
+  .chat-header-name {
+    min-width: 0 !important;
+    flex: 1 !important;
+    overflow: hidden !important;
+  }
+
+  .chat-header-name h2 {
+    font-size: 15.5px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .back-btn,
+  .header-action-btn,
+  .selection-copy-header-btn,
+  .selection-delete-header-btn {
     width: 38px !important;
     height: 38px !important;
     min-width: 38px !important;
     min-height: 38px !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .header-action-btn svg,
+  .back-btn svg,
+  .selection-copy-header-btn svg,
+  .selection-delete-header-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .chat-header-actions,
+  .selection-header-actions {
+    gap: 8px !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .selection-count-label {
+    min-width: 28px !important;
+    height: 28px !important;
+    padding: 0 8px !important;
+    border-radius: 14px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
+    flex-shrink: 0 !important;
   }
 
   /* 4. Mobile Messages List & Spacing */

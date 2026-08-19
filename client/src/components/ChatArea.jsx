@@ -3479,6 +3479,7 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
     return null;
   });
   const [error, setError] = useState(null);
+  const hasRetriedRef = useRef(false);
   const [isLoaded, setIsLoaded] = useState(() => {
     if (!fileUrl) return false;
     return Boolean(getMemoryMediaUrl(fileUrl, isFullRes) || globalMediaSessionCache.has(fileUrl));
@@ -3578,7 +3579,8 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
             if (onImageLoad) onImageLoad();
           }}
           onError={() => {
-            if (fileMetadata?.url) {
+            if (!hasRetriedRef.current && fileMetadata?.url) {
+              hasRetriedRef.current = true;
               loadOrFetchDecryptedMedia(fileMetadata).then((blob) => {
                 const correctMime = inferMimeType(fileMetadata.name, fileMetadata.mimeType);
                 const fixedBlob = new Blob([blob], { type: correctMime });
