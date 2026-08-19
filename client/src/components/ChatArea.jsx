@@ -102,9 +102,65 @@ const getEmojiCount = (text) => {
   return segments.length;
 };
 
-// Format text with clickable links
+// Audio Progress Event Bus to isolate audio scrubber updates from the rest of the app
+class AudioProgressManager {
+  constructor() {
+    this.listeners = new Map();
+    this.currentProgress = new Map();
+  }
+  subscribe(msgId, callback) {
+    if (!this.listeners.has(msgId)) {
+      this.listeners.set(msgId, new Set());
+    }
+    this.listeners.get(msgId).add(callback);
+    if (this.currentProgress.has(msgId)) {
+      const { progress, currentTime } = this.currentProgress.get(msgId);
+      callback(progress, currentTime);
+    }
+    return () => {
+      const set = this.listeners.get(msgId);
+      if (set) {
+        set.delete(callback);
+        if (set.size === 0) this.listeners.delete(msgId);
+      }
+    };
+  }
+  emit(msgId, progress, currentTime) {
+    this.currentProgress.set(msgId, { progress, currentTime });
+    const set = this.listeners.get(msgId);
+    if (set) {
+      set.forEach(cb => cb(progress, currentTime));
+    }
+  }
+  getProgress(msgId) {
+    return this.currentProgress.get(msgId)?.progress || 0;
+  }
+  clear(msgId) {
+    this.currentProgress.delete(msgId);
+    const set = this.listeners.get(msgId);
+    if (set) {
+      set.forEach(cb => cb(0, 0));
+    }
+  }
+}
+const audioProgressManager = new AudioProgressManager();
+
+// Format text with clickable links (with LRU memoization to avoid regex thrashing on scroll)
+const formattedTextCache = new Map();
+const MAX_TEXT_CACHE = 600;
+
 const renderFormattedText = (text) => {
   if (!text || typeof text !== 'string') return text;
+  if (formattedTextCache.has(text)) {
+    return formattedTextCache.get(text);
+  }
+
+  // Fast-path: If text has no URL indicators, skip regex completely (0ms)
+  if (!text.includes('http://') && !text.includes('https://') && !text.includes('www.')) {
+    if (formattedTextCache.size > MAX_TEXT_CACHE) formattedTextCache.clear();
+    formattedTextCache.set(text, text);
+    return text;
+  }
   
   const URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|www\.[^\s<]+[^<.,:;"')\]\s])/gi;
   const parts = [];
@@ -147,7 +203,10 @@ const renderFormattedText = (text) => {
     parts.push(text.substring(lastIndex));
   }
 
-  return parts.length > 0 ? parts : text;
+  const result = parts.length > 0 ? parts : text;
+  if (formattedTextCache.size > MAX_TEXT_CACHE) formattedTextCache.clear();
+  formattedTextCache.set(text, result);
+  return result;
 };
 
 // Group consecutive image/video media into visual albums, consecutive file attachments into multi-file cards,
@@ -634,6 +693,115 @@ const MediaAlbumGrid = React.memo(function MediaAlbumGrid({ albumItems, onImageC
     </>
   );
 });
+// ==========================================
+// Isolated Voice Note Player Component
+// Subscribes locally to audioProgressManager so MessageList never re-renders during playback
+// ==========================================
+const VoiceNotePlayerItem = React.memo(({
+  msg,
+  file,
+  isSent,
+  isPlaying,
+  playbackRate,
+  onTogglePlay,
+  onPlaybackRateChange,
+  selectionModeRef,
+  formatMessageTime,
+  formatTime
+}) => {
+  const [progress, setProgress] = useState(() => audioProgressManager.getProgress(msg.id));
+  const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const totalDuration = file?.duration || 0;
+
+  useEffect(() => {
+    const unsub = audioProgressManager.subscribe(msg.id, (prog, currentSec) => {
+      setProgress(prog);
+      setCurrentTimeSec(currentSec);
+    });
+    return unsub;
+  }, [msg.id]);
+
+  const displayTime = isPlaying || progress > 0
+    ? currentTimeSec
+    : (progress / 100) * totalDuration;
+
+  return (
+    <div className="voice-note-player-compact">
+      <VoiceNotePreloader fileMetadata={file} />
+      {/* Row 1 (Top): Circular Play Button + Progress Scrubber Track */}
+      <div className="voice-row-top">
+        <button 
+          className="play-pause-btn-compact" 
+          onClick={() => { if (!selectionModeRef?.current) onTogglePlay(msg.id, file); }}
+          aria-label={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" style={{ marginLeft: '1.5px' }} />}
+        </button>
+
+        <div 
+          className="voice-slider-container"
+          onMouseDown={(e) => { e.stopPropagation(); }}
+          onTouchStart={(e) => { e.stopPropagation(); }}
+          onPointerDown={(e) => { e.stopPropagation(); }}
+        >
+          <input 
+            type="range"
+            className="voice-slider"
+            min="0"
+            max="100"
+            step="0.1"
+            value={progress}
+            onMouseDown={(e) => { e.stopPropagation(); }}
+            onTouchStart={(e) => { e.stopPropagation(); }}
+            onPointerDown={(e) => { e.stopPropagation(); }}
+            onInput={(e) => {
+              const seekPct = parseFloat(e.target.value) / 100;
+              if (!selectionModeRef?.current) onTogglePlay(msg.id, file, seekPct, false);
+            }}
+            onChange={(e) => {
+              const seekPct = parseFloat(e.target.value) / 100;
+              if (!selectionModeRef?.current) onTogglePlay(msg.id, file, seekPct, false);
+            }}
+            style={{
+              background: `linear-gradient(to right, var(--accent-color) ${progress}%, rgba(255, 255, 255, 0.15) ${progress}%)`
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Row 2 (Bottom): Duration (Left) + Speed & Timestamp (Right) */}
+      <div className="voice-row-bottom">
+        <span className="voice-duration">
+          {formatTime(displayTime)} / {formatTime(totalDuration)}
+        </span>
+        <div className="voice-bottom-right">
+          <button 
+            className="voice-speed-btn" 
+            title={`Playback speed ${playbackRate}x`}
+            aria-label={`Playback speed ${playbackRate}x`}
+            onClick={(e) => {
+              e.stopPropagation();
+              const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
+              onPlaybackRateChange(nextRate);
+            }}
+          >
+            {playbackRate}x
+          </button>
+          <span className="voice-inline-meta">
+            <span className="inline-meta-time">{formatMessageTime(msg.timestamp)}</span>
+            {isSent && (
+              <span className="inline-meta-ticks">
+                {msg.status === 0 && <span className="tick-single">✓</span>}
+                {msg.status === 1 && <span className="tick-delivered">✓✓</span>}
+                {msg.status === 2 && <span className="tick-read">✓✓</span>}
+              </span>
+            )}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 // ==========================================
 // MessageList Component (Memoized for peak performance)
@@ -787,7 +955,7 @@ const MessageList = React.memo(({
               )}
               <div 
                 id={`msg-${msg.id}`}
-                ref={index === messages.length - 1 ? lastMessageRef : null}
+                ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
                 className="system-call-log-container"
               >
                 <div className="system-call-log-card glass">
@@ -1383,7 +1551,6 @@ const ChatArea = React.memo(function ChatArea({
 
   // Audio players reference map (for voice note playing)
   const [playingAudioId, setPlayingAudioId] = useState(null);
-  const [audioProgress, setAudioProgress] = useState({}); // msgId -> percentage
   const activeAudioRef = useRef(null);
   const activeAudioUrlRef = useRef(null);
   const activeAudioMsgIdRef = useRef(null);
@@ -1477,17 +1644,16 @@ const ChatArea = React.memo(function ChatArea({
 
   const handleScroll = useCallback((e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
-    // Mark as scrolled up the moment the bottom content (typing indicator) begins to get cut off (20px threshold)
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 20;
-    const nextScrolledUp = !isAtBottom;
-    if (isScrolledUpRef.current !== nextScrolledUp) {
-      isScrolledUpRef.current = nextScrolledUp;
-      setIsScrolledUp(nextScrolledUp);
-    }
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 40;
+    isScrolledUpRef.current = !isAtBottom;
+    setIsScrolledUp(!isAtBottom);
   }, []);
   const isSmoothScrollingRef = useRef(false);
 
   const scrollToBottom = () => {
+    isScrolledUpRef.current = false;
+    setIsScrolledUp(false);
+    setIsLastMessageVisible(true);
     if (messagesContainerRef.current) {
       isSmoothScrollingRef.current = true;
       messagesContainerRef.current.scrollTo({
@@ -1498,7 +1664,6 @@ const ChatArea = React.memo(function ChatArea({
         isSmoothScrollingRef.current = false;
       }, 400);
     }
-    setIsLastMessageVisible(true);
     if (markAllMessagesAsReadLocal) {
       markAllMessagesAsReadLocal(activeContact.username);
     }
@@ -1746,9 +1911,15 @@ const ChatArea = React.memo(function ChatArea({
     };
   }, [activeContact.username]);
 
-  const prevContactUsernameRef = useRef(activeContact.username);
+  const scrollToBottomInstant = useCallback(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  }, []);
 
-  // Scroll to bottom synchronously on mount / active contact change / history load (runs before paint)
+  const prevContactUsernameRef = useRef(null);
+
+  // Scroll to bottom when selecting contact / mounting chat
   useLayoutEffect(() => {
     const isNewContact = prevContactUsernameRef.current !== activeContact.username;
     prevContactUsernameRef.current = activeContact.username;
@@ -1758,44 +1929,17 @@ const ChatArea = React.memo(function ChatArea({
       setIsScrolledUp(false);
       isScrolledUpRef.current = false;
       prevMessageCountRef.current = activeContact?.messages?.length || 0;
+      scrollToBottomInstant();
     }
+  }, [activeContact.username, scrollToBottomInstant]);
 
-    if (isNewContact) {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-      }
-      if (markAllMessagesAsReadLocal) {
-        markAllMessagesAsReadLocal(activeContact.username);
-      }
-      
-      // Reset textarea height to 36px baseline
-      if (textareaRef.current) {
-        textareaRef.current.style.height = '36px';
-      }
-
-      // Double-frame check to guarantee bottom scroll as DOM elements/bubbles finish layout
-      const frameId = requestAnimationFrame(() => {
-        if (messagesContainerRef.current) {
-          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-        }
-      });
-
-      const timerId = setTimeout(() => {
-        if (messagesContainerRef.current) {
-          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-        }
-      }, 60);
-
-      return () => {
-        cancelAnimationFrame(frameId);
-        clearTimeout(timerId);
-      };
-    } else if (!isScrolledUpRef.current && !isSmoothScrollingRef.current) {
-      if (messagesContainerRef.current && isLastMessageVisible) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-      }
+  // Scroll to bottom when message history is populated from SQLite
+  useLayoutEffect(() => {
+    const currentCount = activeContact?.messages?.length || 0;
+    if (currentCount > 0 && !isScrolledUpRef.current) {
+      scrollToBottomInstant();
     }
-  }, [activeContact.username, activeContact?.messages?.length, markAllMessagesAsReadLocal]);
+  }, [activeContact?.messages?.length, scrollToBottomInstant]);
 
   // Immediately mark unread messages as read when looking at bottom view
   useEffect(() => {
@@ -1841,7 +1985,7 @@ const ChatArea = React.memo(function ChatArea({
         }
       }
     } else if (currentCount > prevMessageCountRef.current) {
-      if (messagesContainerRef.current && isLastMessageVisible) {
+      if (messagesContainerRef.current && (!isScrolledUpRef.current || isLastMessageVisible)) {
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
       }
     }
@@ -2511,7 +2655,7 @@ const ChatArea = React.memo(function ChatArea({
         const newTime = seekPercentage * duration;
         if (!isNaN(newTime)) {
           audio.currentTime = newTime;
-          setAudioProgress(prev => ({ ...prev, [msgId]: (newTime / duration) * 100 }));
+          audioProgressManager.emit(msgId, (newTime / duration) * 100, newTime);
         }
       }
 
@@ -2550,19 +2694,19 @@ const ChatArea = React.memo(function ChatArea({
       audio.ontimeupdate = () => {
         if (audio.duration) {
           const progress = (audio.currentTime / audio.duration) * 100;
-          setAudioProgress(prev => ({ ...prev, [msgId]: progress }));
+          audioProgressManager.emit(msgId, progress, audio.currentTime);
         }
       };
 
       audio.onended = () => {
         setPlayingAudioId(null);
-        setAudioProgress(prev => ({ ...prev, [msgId]: 0 }));
+        audioProgressManager.clear(msgId);
       };
 
       audio.playbackRate = playbackRate;
 
       const duration = fileMetadata?.duration || 0;
-      const initialProgress = audioProgress[msgId] || (seekPercentage !== null ? seekPercentage * 100 : 0);
+      const initialProgress = audioProgressManager.getProgress(msgId) || (seekPercentage !== null ? seekPercentage * 100 : 0);
       const startPct = seekPercentage !== null ? seekPercentage : (initialProgress / 100);
 
       audio.onloadedmetadata = () => {
@@ -2572,10 +2716,7 @@ const ChatArea = React.memo(function ChatArea({
         }
       };
 
-      setAudioProgress(prev => ({
-        ...prev,
-        [msgId]: startPct * 100
-      }));
+      audioProgressManager.emit(msgId, startPct * 100, startPct * duration);
 
       const startPlayback = forceAutoPlay !== null ? forceAutoPlay : (seekPercentage === null);
       if (startPlayback) {
@@ -2592,7 +2733,7 @@ const ChatArea = React.memo(function ChatArea({
         notify('Failed to decrypt and play voice note.', 'error', 'Audio Playback Error');
       }
     }
-  }, [playbackRate, audioProgress]);
+  }, [playbackRate]);
 
   const handlePlaybackRateChange = useCallback((newRate) => {
     setPlaybackRate(newRate);
@@ -2708,89 +2849,21 @@ const ChatArea = React.memo(function ChatArea({
     if (msg.mediaType === 'voice') {
       const file = msg.fileMetadata;
       const isPlaying = playingAudioId === msg.id;
-      const progress = audioProgress[msg.id] || 0;
-      const totalDuration = file.duration || 0;
-
-      // Compute display time: current position if active audio is loaded, else progress ratio * totalDuration
-      const currentTimeSec = (activeAudioMsgIdRef.current === msg.id && activeAudioRef.current)
-        ? activeAudioRef.current.currentTime
-        : (progress / 100) * totalDuration;
 
       return (
-        <div className="voice-note-player-compact">
-          <VoiceNotePreloader fileMetadata={file} />
-          {/* Row 1 (Top): Circular Play Button + Progress Scrubber Track */}
-          <div className="voice-row-top">
-            <button 
-              className="play-pause-btn-compact" 
-              onClick={() => { if (!selectionModeRef.current) togglePlayAudio(msg.id, file); }}
-              aria-label={isPlaying ? "Pause" : "Play"}
-            >
-              {isPlaying ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" style={{ marginLeft: '1.5px' }} />}
-            </button>
-
-            <div 
-              className="voice-slider-container"
-              onMouseDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
-              onTouchStart={(e) => { e.stopPropagation(); cancelLongPress(); }}
-              onPointerDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
-            >
-              <input 
-                type="range"
-                className="voice-slider"
-                min="0"
-                max="100"
-                step="0.1"
-                value={progress}
-                onMouseDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
-                onTouchStart={(e) => { e.stopPropagation(); cancelLongPress(); }}
-                onPointerDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
-                onInput={(e) => {
-                  const seekPct = parseFloat(e.target.value) / 100;
-                  if (!selectionModeRef.current) togglePlayAudio(msg.id, file, seekPct, false);
-                }}
-                onChange={(e) => {
-                  const seekPct = parseFloat(e.target.value) / 100;
-                  if (!selectionModeRef.current) togglePlayAudio(msg.id, file, seekPct, false);
-                }}
-                style={{
-                  background: `linear-gradient(to right, var(--accent-color) ${progress}%, rgba(255, 255, 255, 0.15) ${progress}%)`
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Row 2 (Bottom): Duration (Left) + Speed & Timestamp (Right) */}
-          <div className="voice-row-bottom">
-            <span className="voice-duration">
-              {formatTime(currentTimeSec)} / {formatTime(totalDuration)}
-            </span>
-            <div className="voice-bottom-right">
-              <button 
-                className="voice-speed-btn" 
-                title={`Playback speed ${playbackRate}x`}
-                aria-label={`Playback speed ${playbackRate}x`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
-                  handlePlaybackRateChange(nextRate);
-                }}
-              >
-                {playbackRate}x
-              </button>
-              <span className="voice-inline-meta">
-                <span className="inline-meta-time">{formatMessageTime(msg.timestamp)}</span>
-                {isSent && (
-                  <span className="inline-meta-ticks">
-                    {msg.status === 0 && <span className="tick-single">✓</span>}
-                    {msg.status === 1 && <span className="tick-delivered">✓✓</span>}
-                    {msg.status === 2 && <span className="tick-read">✓✓</span>}
-                  </span>
-                )}
-              </span>
-            </div>
-          </div>
-        </div>
+        <VoiceNotePlayerItem 
+          key={msg.id}
+          msg={msg}
+          file={file}
+          isSent={isSent}
+          isPlaying={isPlaying}
+          playbackRate={playbackRate}
+          onTogglePlay={togglePlayAudio}
+          onPlaybackRateChange={handlePlaybackRateChange}
+          selectionModeRef={selectionModeRef}
+          formatMessageTime={formatMessageTime}
+          formatTime={formatTime}
+        />
       );
     }
     if (msg.mediaType === 'call') {
@@ -2858,7 +2931,7 @@ const ChatArea = React.memo(function ChatArea({
     }
     // Default plaintext
     return renderFormattedText(msg.text);
-  }, [playingAudioId, audioProgress, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick, activeContact?.username]);
+  }, [playingAudioId, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick, activeContact?.username]);
 
   return (
     <div className={`chat-area ${isNavigatingBack ? 'navigating-back' : ''}`}>
@@ -2981,7 +3054,7 @@ const ChatArea = React.memo(function ChatArea({
             selectionCancelRef={selectionCancelRef}
             onSelectionModeChange={handleSelectionModeChange}
           />
-          <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} style={{ height: '1px', minHeight: '1px', width: '100%', pointerEvents: 'none' }} />
         </div>
       </div>
 

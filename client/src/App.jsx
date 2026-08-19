@@ -267,6 +267,8 @@ export default function App() {
   const [showRecents, setShowRecents] = useState(false);
 
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
+  const [navigatingBackFrom, setNavigatingBackFrom] = useState(null);
+  const lastActiveContactRef = useRef(null);
 
   // E2EE Shared Secrets cache: username -> AES-GCM CryptoKey
   const sharedSecrets = useRef({});
@@ -1379,11 +1381,20 @@ export default function App() {
   // ==========================================
   // Fetching Chat History (Phase 4)
   // ==========================================
+  const normalizeMessageTimestamp = (ts) => {
+    if (!ts) return new Date().toISOString();
+    if (typeof ts === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(ts)) {
+      return ts.replace(' ', 'T') + 'Z';
+    }
+    return ts;
+  };
+
   const decryptMessagesBatch = async (encryptedMsgs, contact) => {
     const decryptedMsgs = [];
     const secret = await getSharedSecret(contact);
 
     for (const msg of encryptedMsgs) {
+      const normTimestamp = normalizeMessageTimestamp(msg.timestamp);
       try {
         const senderPubKey = msg.sender.toLowerCase() === currentUser.username.toLowerCase()
           ? currentUser.keys.publicSigningKey
@@ -1400,7 +1411,7 @@ export default function App() {
             id: msg.id,
             sender: msg.sender,
             recipient: msg.recipient,
-            timestamp: msg.timestamp,
+            timestamp: normTimestamp,
             text: '⚠️ ERROR: Message failed cryptographic integrity verification.',
             mediaType: 'text',
             status: msg.delivered
@@ -1415,7 +1426,7 @@ export default function App() {
           id: msg.id,
           sender: msg.sender,
           recipient: msg.recipient,
-          timestamp: msg.timestamp,
+          timestamp: normTimestamp,
           text: decryptedPayload.text || '',
           mediaType: decryptedPayload.type !== 'text' ? decryptedPayload.type : null,
           fileMetadata: decryptedPayload.fileMetadata || null,
@@ -1428,13 +1439,14 @@ export default function App() {
           id: msg.id,
           sender: msg.sender,
           recipient: msg.recipient,
-          timestamp: msg.timestamp,
+          timestamp: normTimestamp,
           text: '❌ Decryption Failed: Secure keys mismatch.',
           mediaType: 'text',
           status: msg.delivered
         });
       }
     }
+    decryptedMsgs.sort((a, b) => (new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) || ((a.id || 0) - (b.id || 0)));
     return decryptedMsgs;
   };
 
@@ -1448,6 +1460,7 @@ export default function App() {
     // 1. Instantly display active contact screen with cached messages to avoid blank page delays
     const cachedContact = contacts.find(c => c.username.toLowerCase() === contact.username.toLowerCase());
     const targetContact = cachedContact || contact;
+    lastActiveContactRef.current = targetContact;
     setActiveContact(targetContact);
 
     try {
@@ -1630,12 +1643,18 @@ export default function App() {
       return;
     }
 
+    const source = showSettings ? 'settings' : activeContact ? 'chat' : showRecents ? 'recents' : null;
+    if (activeContact) {
+      lastActiveContactRef.current = activeContact;
+    }
+    setNavigatingBackFrom(source);
     setIsNavigatingBack(true);
     setActiveContact(null);
     setShowSettings(false);
     setShowRecents(false);
     setTimeout(() => {
       setIsNavigatingBack(false);
+      setNavigatingBackFrom(null);
       isNavigatingBackRef.current = false;
     }, 300); // Smooth 300ms slide-back transition
   };
@@ -2871,7 +2890,7 @@ export default function App() {
                   showBackButton={showRecents}
                 />
 
-                {(showSettings || (isNavigatingBack && !activeContact && !showRecents)) && (
+                {(showSettings || (isNavigatingBack && navigatingBackFrom === 'settings')) && (
                   <SettingsView
                     currentUser={currentUser}
                     onBack={handleBackToMenu}
@@ -2897,16 +2916,16 @@ export default function App() {
                   />
                 )}
 
-                {(activeContact || (isNavigatingBack && activeContact)) && (
+                {(activeContact || (isNavigatingBack && navigatingBackFrom === 'chat')) && (
                   <ChatArea
                     currentUser={currentUser}
-                    activeContact={activeContact}
-                    isBlocked={activeContact && blockedUsers.includes(activeContact.username.toLowerCase())}
+                    activeContact={activeContact || lastActiveContactRef.current}
+                    isBlocked={(activeContact || lastActiveContactRef.current) && blockedUsers.includes((activeContact || lastActiveContactRef.current).username.toLowerCase())}
                     onUnblockContact={handleUnblockContact}
                     onSendMessage={handleSendMessage}
                     onInitiateCall={handleInitiateCall}
                     currentUserToken={currentUser.token}
-                    sharedSecret={sharedSecrets.current[activeContact?.username.toLowerCase()]}
+                    sharedSecret={sharedSecrets.current[(activeContact || lastActiveContactRef.current)?.username.toLowerCase()]}
                     onBack={handleBackToMenu}
                     isNavigatingBack={isNavigatingBack}
                     markMessageAsReadLocal={markMessageAsReadLocal}

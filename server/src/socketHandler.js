@@ -628,17 +628,26 @@ export const socketHandler = (io) => {
           params.push(beforeId);
         }
 
-        query += ` ORDER BY timestamp ASC`;
+        query += ` ORDER BY timestamp ASC, id ASC`;
 
         const parsedLimit = parseInt(limit, 10);
         const safeLimit = (!isNaN(parsedLimit) && parsedLimit > 0) ? Math.min(parsedLimit, 500) : 500;
         query += ` LIMIT ?`;
         params.push(safeLimit);
 
-        const messages = await dbAll(query, params);
+        const formattedMessages = messages.map(m => {
+          let ts = m.timestamp;
+          if (typeof ts === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(ts)) {
+            ts = ts.replace(' ', 'T') + 'Z';
+          }
+          return {
+            ...m,
+            timestamp: ts
+          };
+        });
 
         if (typeof callback === 'function') {
-          callback({ success: true, messages });
+          callback({ success: true, messages: formattedMessages });
         }
       } catch (error) {
         logger.error('Error fetching chat history:', error);
