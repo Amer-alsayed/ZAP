@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Phone, Video, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Phone, Video, ShieldCheck, ArrowLeft, Info } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 
 export default function Dashboard({ currentUser, contacts, onInitiateCall, onSelectContact, onBack, showBackButton }) {
@@ -276,7 +276,7 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
     <div className="recents-container">
       {/* FaceTime-style Top Header */}
       <div className="recents-header">
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="recents-header-left">
           {showBackButton && (
             <button className="back-btn" onClick={onBack} title="Back" aria-label="Back to conversations" style={{ marginRight: '8px' }}>
               <ArrowLeft size={20} />
@@ -306,8 +306,8 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
             Missed
           </button>
         </div>
-        
-        <div style={{ width: '80px' }} /> {/* Spacer to balance the title on desktop */}
+
+        <div className="recents-header-right" />
       </div>
 
       {/* Recents Scrollable List */}
@@ -365,15 +365,6 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
                                       : `${(log.status === 'missed' || log.status === 'cancelled') ? 'Missed' : 'Incoming'} ${log.callType === 'video' ? 'Video Call' : 'Voice Call'}`
                                   )}
                                 </span>
-                                {log.count > 1 && (
-                                  <button 
-                                    className="recents-expand-toggle-btn"
-                                    onClick={(e) => toggleExpand(log.id, e)}
-                                    title={isExpanded ? "Hide attempts" : "Show all attempts"}
-                                  >
-                                    {isExpanded ? "Hide" : "Details"}
-                                  </button>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -383,11 +374,24 @@ export default function Dashboard({ currentUser, contacts, onInitiateCall, onSel
                             <span className="recents-time">{formatCallTimeOnly(log.timestamp)}</span>
                             
                             <div className="recents-actions">
-                              {/* Direct Call Back button */}
+                              {/* Details / Attempts Info button on the left */}
+                              {log.count > 1 && (
+                                <button 
+                                  className={`recents-info-btn ${isExpanded ? 'active' : ''}`}
+                                  onClick={(e) => toggleExpand(log.id, e)}
+                                  title={isExpanded ? "Hide call attempts" : "Show call details"}
+                                  aria-label={isExpanded ? "Hide call attempts" : "Show call details"}
+                                >
+                                  <Info size={17} />
+                                </button>
+                              )}
+
+                              {/* Direct Call Back button on the right */}
                               <button 
                                 className="recents-icon-btn call" 
                                 title={`Call back ${log.callType}`}
                                 onClick={() => onInitiateCall(log.callType, log.contact?.username)}
+                                aria-label={`Call back ${log.callType}`}
                               >
                                 {log.callType === 'video' ? <Video size={17} /> : <Phone size={17} />}
                               </button>

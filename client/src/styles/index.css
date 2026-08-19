@@ -5651,20 +5651,59 @@ textarea {
   /* Segmented control centering and header adjustment in mobile mode */
   .recents-header {
     display: flex !important;
+    flex-direction: column !important;
     align-items: center !important;
-    justify-content: space-between !important;
-    padding: 0 16px !important;
+    justify-content: center !important;
+    padding: 12px 16px 14px 16px !important;
+    height: auto !important;
+    min-height: auto !important;
+    gap: 12px !important;
     position: relative !important;
+  }
+
+  .recents-header-left {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  .recents-header-right {
+    display: none !important;
   }
 
   .recents-header .segmented-control {
     position: relative !important;
     transform: none !important;
+    width: min(240px, 85vw) !important;
+    height: 36px !important;
+    margin: 0 auto !important;
+    align-self: center !important;
   }
 
   .recents-title {
-    font-size: 16px !important;
+    font-size: 17px !important;
+    font-weight: 700 !important;
     margin: 0 !important;
+  }
+
+  .recents-row {
+    padding: 10px 16px !important;
+  }
+
+  .recents-right {
+    gap: 10px !important;
+  }
+
+  .recents-actions {
+    gap: 6px !important;
+  }
+
+  .recents-icon-btn,
+  .recents-info-btn {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
   }
 
   .contact-info {
@@ -6843,17 +6882,18 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
 }
 
 .avatar-action-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
-  border-radius: 8px;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -6861,6 +6901,8 @@ textarea {
   transition: all 0.2s ease;
   text-decoration: none !important;
   box-shadow: none !important;
+  white-space: nowrap !important;
+  flex-shrink: 0;
 }
 
 .avatar-action-pill:hover {
@@ -6876,7 +6918,7 @@ textarea {
   background: rgba(239, 68, 68, 0.1);
   color: #f87171;
   border-color: rgba(239, 68, 68, 0.2);
-  gap: 4px;
+  gap: 5px;
 }
 
 .avatar-action-pill.danger-pill:hover {
@@ -8120,8 +8162,8 @@ textarea {
   height: 72px;
   min-height: 72px;
   padding: 0 24px;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   border: none !important;
   background: rgba(0, 0, 0, 0.75) !important;
@@ -8129,6 +8171,16 @@ textarea {
   -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
   box-sizing: border-box;
+}
+
+.recents-header-left {
+  display: flex;
+  align-items: center;
+  justify-self: start;
+}
+
+.recents-header-right {
+  justify-self: end;
 }
 
 .recents-title {
@@ -8142,6 +8194,7 @@ textarea {
 .segmented-control {
   position: relative;
   display: flex;
+  justify-self: center;
   background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -8490,6 +8543,39 @@ textarea {
 
 .recents-icon-btn:active {
   transform: scale(0.95);
+}
+
+.recents-info-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  box-sizing: border-box;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.recents-info-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: scale(1.06);
+}
+
+.recents-info-btn:active {
+  transform: scale(0.94);
+}
+
+.recents-info-btn.active {
+  background: rgba(var(--accent-rgb), 0.2) !important;
+  border-color: rgba(var(--accent-rgb), 0.45) !important;
+  color: var(--accent-color) !important;
 }
 
 .recents-group-header {
