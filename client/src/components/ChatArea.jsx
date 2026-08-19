@@ -1008,8 +1008,7 @@ const MessageList = React.memo(({
               data-msg-id={msg.id}
               data-timestamp={msg.timestamp}
               style={{ 
-                '--msg-delay': staggerIndex,
-                touchAction: 'pan-y'
+                '--msg-delay': staggerIndex
               }}
               onContextMenu={(e) => e.preventDefault()}
               onClickCapture={(e) => {
@@ -1025,62 +1024,80 @@ const MessageList = React.memo(({
                   toggleSelected(msg);
                 }
               }}
-            onPointerDown={(e) => {
-              if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) return;
-              if (selectionMode || e.button === 2) return;
+            onTouchStart={(e) => {
+              if (window.__isMediaModalOpen || selectionMode) return;
               if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn')) {
                 return;
               }
               startLongPress(msg);
+              const touch = e.touches[0];
               const wrapper = e.currentTarget.querySelector('.message-wrapper');
               const indicator = wrapper?.querySelector('.swipe-reply-indicator');
               activeSwipeElRef.current = wrapper;
               activeSwipeIndicatorRef.current = indicator;
               swipeOffsetRef.current = 0;
-              swipeStartRef.current = { x: e.clientX, y: e.clientY, msgId: msg.id, pointerId: e.pointerId };
-              try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+              swipeStartRef.current = { x: touch.clientX, y: touch.clientY, msgId: msg.id, isSwiping: false, isSent };
             }}
-            onPointerMove={(e) => {
+            onTouchMove={(e) => {
               if (selectionMode || !swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
-              const deltaX = e.clientX - swipeStartRef.current.x;
-              const deltaY = e.clientY - swipeStartRef.current.y;
+              const touch = e.touches[0];
+              const deltaX = touch.clientX - swipeStartRef.current.x;
+              const deltaY = touch.clientY - swipeStartRef.current.y;
+              const absX = Math.abs(deltaX);
+              const absY = Math.abs(deltaY);
 
-              if (deltaX > 5 && Math.abs(deltaX) > Math.abs(deltaY)) {
+              // Direction: Allow rightward swipe (deltaX > 0) or leftward swipe for sent messages (deltaX < 0)
+              const isValidDirection = isSent ? (deltaX < 0 || deltaX > 0) : (deltaX > 0);
+
+              if (!swipeStartRef.current.isSwiping) {
+                if (absX > 6 && absX > absY * 0.5 && isValidDirection) {
+                  swipeStartRef.current.isSwiping = true;
+                  cancelLongPress();
+                } else if (absY > 20 && absY > absX * 1.5) {
+                  swipeStartRef.current = null;
+                  return;
+                }
+              }
+
+              if (swipeStartRef.current?.isSwiping) {
                 cancelLongPress();
-                const clampedOffset = Math.min((deltaX - 5) * 0.65, 75);
-                swipeOffsetRef.current = clampedOffset;
+                // Direction multiplier: positive moves right, negative moves left
+                const directionSign = deltaX < 0 ? -1 : 1;
+                const rawMagnitude = Math.max(0, absX - 4);
+                const clampedMagnitude = Math.min(rawMagnitude * 0.75, 75);
+                const appliedOffset = clampedMagnitude * directionSign;
+
+                swipeOffsetRef.current = appliedOffset;
                 if (activeSwipeElRef.current) {
                   activeSwipeElRef.current.style.transition = 'none';
-                  activeSwipeElRef.current.style.transform = `translateX(${clampedOffset}px)`;
+                  activeSwipeElRef.current.style.transform = `translate3d(${appliedOffset}px, 0, 0)`;
                 }
                 if (activeSwipeIndicatorRef.current) {
-                  const progress = Math.min(clampedOffset / 28, 1);
+                  const progress = Math.min(clampedMagnitude / 18, 1);
                   activeSwipeIndicatorRef.current.style.transition = 'none';
                   activeSwipeIndicatorRef.current.style.opacity = progress;
                   activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
                 }
               }
             }}
-            onPointerUp={(e) => {
-              try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
-              if (selectionMode) return;
+            onTouchEnd={() => {
               cancelLongPress();
-
+              const wasSwiping = swipeStartRef.current?.isSwiping;
               const currentOffset = swipeOffsetRef.current;
               const el = activeSwipeElRef.current;
               const indicator = activeSwipeIndicatorRef.current;
 
               if (el) {
                 el.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
-                el.style.transform = 'translateX(0px)';
+                el.style.transform = 'translate3d(0, 0, 0)';
               }
               if (indicator) {
-                indicator.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+                indicator.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
                 indicator.style.opacity = '0';
                 indicator.style.transform = 'translateY(-50%) scale(0)';
               }
 
-              if (swipeStartRef.current?.msgId === msg.id && currentOffset >= 22) {
+              if (wasSwiping && Math.abs(currentOffset) >= 15) {
                 const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
                 setReplyingTo({
                   id: targetMsg.id,
@@ -1094,27 +1111,24 @@ const MessageList = React.memo(({
                 }
                 setTimeout(() => {
                   if (textareaRef.current) {
-                    textareaRef.current.blur();
                     textareaRef.current.focus();
                     textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                   }
-                }, 60);
+                }, 50);
               }
               swipeStartRef.current = null;
               activeSwipeElRef.current = null;
               activeSwipeIndicatorRef.current = null;
               swipeOffsetRef.current = 0;
             }}
-            onPointerCancel={(e) => {
-              try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
-              if (selectionMode) return;
+            onTouchCancel={() => {
               cancelLongPress();
               if (activeSwipeElRef.current) {
-                activeSwipeElRef.current.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
-                activeSwipeElRef.current.style.transform = 'translateX(0px)';
+                activeSwipeElRef.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                activeSwipeElRef.style.transform = 'translate3d(0, 0, 0)';
               }
               if (activeSwipeIndicatorRef.current) {
-                activeSwipeIndicatorRef.current.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+                activeSwipeIndicatorRef.current.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
                 activeSwipeIndicatorRef.current.style.opacity = '0';
                 activeSwipeIndicatorRef.current.style.transform = 'translateY(-50%) scale(0)';
               }
@@ -1122,6 +1136,114 @@ const MessageList = React.memo(({
               activeSwipeElRef.current = null;
               activeSwipeIndicatorRef.current = null;
               swipeOffsetRef.current = 0;
+            }}
+            onMouseDown={(e) => {
+              if (window.__isMediaModalOpen || selectionMode || e.button !== 0) return;
+              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn')) {
+                return;
+              }
+              startLongPress(msg);
+              const wrapper = e.currentTarget.querySelector('.message-wrapper');
+              const indicator = wrapper?.querySelector('.swipe-reply-indicator');
+              activeSwipeElRef.current = wrapper;
+              activeSwipeIndicatorRef.current = indicator;
+              swipeOffsetRef.current = 0;
+              swipeStartRef.current = { x: e.clientX, y: e.clientY, msgId: msg.id, isSwiping: false, isMouse: true, isSent };
+            }}
+            onMouseMove={(e) => {
+              if (!swipeStartRef.current || !swipeStartRef.current.isMouse || swipeStartRef.current.msgId !== msg.id) return;
+              const deltaX = e.clientX - swipeStartRef.current.x;
+              const deltaY = e.clientY - swipeStartRef.current.y;
+              const absX = Math.abs(deltaX);
+              const absY = Math.abs(deltaY);
+              const isValidDirection = isSent ? (deltaX < 0 || deltaX > 0) : (deltaX > 0);
+
+              if (!swipeStartRef.current.isSwiping) {
+                if (absX > 6 && absX > absY * 0.5 && isValidDirection) {
+                  swipeStartRef.current.isSwiping = true;
+                  cancelLongPress();
+                }
+              }
+
+              if (swipeStartRef.current.isSwiping) {
+                cancelLongPress();
+                const directionSign = deltaX < 0 ? -1 : 1;
+                const rawMagnitude = Math.max(0, absX - 4);
+                const clampedMagnitude = Math.min(rawMagnitude * 0.75, 75);
+                const appliedOffset = clampedMagnitude * directionSign;
+
+                swipeOffsetRef.current = appliedOffset;
+                if (activeSwipeElRef.current) {
+                  activeSwipeElRef.current.style.transition = 'none';
+                  activeSwipeElRef.current.style.transform = `translate3d(${appliedOffset}px, 0, 0)`;
+                }
+                if (activeSwipeIndicatorRef.current) {
+                  const progress = Math.min(clampedMagnitude / 18, 1);
+                  activeSwipeIndicatorRef.current.style.transition = 'none';
+                  activeSwipeIndicatorRef.current.style.opacity = progress;
+                  activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
+                }
+              }
+            }}
+            onMouseUp={() => {
+              if (swipeStartRef.current?.isMouse) {
+                cancelLongPress();
+                const wasSwiping = swipeStartRef.current?.isSwiping;
+                const currentOffset = swipeOffsetRef.current;
+                const el = activeSwipeElRef.current;
+                const indicator = activeSwipeIndicatorRef.current;
+
+                if (el) {
+                  el.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                  el.style.transform = 'translate3d(0, 0, 0)';
+                }
+                if (indicator) {
+                  indicator.style.transition = 'opacity 0.22s ease, transform 0.22s ease';
+                  indicator.style.opacity = '0';
+                  indicator.style.transform = 'translateY(-50%) scale(0)';
+                }
+
+                if (wasSwiping && Math.abs(currentOffset) >= 15) {
+                  const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
+                  setReplyingTo({
+                    id: targetMsg.id,
+                    sender: targetMsg.sender,
+                    text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                    mediaType: targetMsg.mediaType || null,
+                    fileMetadata: targetMsg.fileMetadata || null
+                  });
+                  setTimeout(() => {
+                    if (textareaRef.current) {
+                      textareaRef.current.focus();
+                      textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                  }, 50);
+                }
+                swipeStartRef.current = null;
+                activeSwipeElRef.current = null;
+                activeSwipeIndicatorRef.current = null;
+                swipeOffsetRef.current = 0;
+              } else {
+                cancelLongPress();
+              }
+            }}
+            onMouseLeave={() => {
+              if (swipeStartRef.current?.isMouse) {
+                if (activeSwipeElRef.current) {
+                  activeSwipeElRef.current.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                  activeSwipeElRef.current.style.transform = 'translate3d(0, 0, 0)';
+                }
+                if (activeSwipeIndicatorRef.current) {
+                  activeSwipeIndicatorRef.current.style.transition = 'opacity 0.22s ease, transform 0.22s ease';
+                  activeSwipeIndicatorRef.current.style.opacity = '0';
+                  activeSwipeIndicatorRef.current.style.transform = 'translateY(-50%) scale(0)';
+                }
+                swipeStartRef.current = null;
+                activeSwipeElRef.current = null;
+                activeSwipeIndicatorRef.current = null;
+                swipeOffsetRef.current = 0;
+              }
+              cancelLongPress();
             }}
             onClick={() => {
               if (longPressTriggeredRef.current) {
@@ -1142,10 +1264,6 @@ const MessageList = React.memo(({
                   ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
                   data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
                   className={`message-wrapper ${isSent ? 'sent' : 'received'} ${isOnlyEmojiMsg ? 'emoji-only-wrapper' : ''} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${isSelectedMsg ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
-                  style={{
-                    transform: 'translateX(0px)',
-                    transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
-                  }}
                 >
                   {/* Swipe-to-reply spring indicator icon */}
                   <div 
