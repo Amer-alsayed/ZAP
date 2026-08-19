@@ -1783,10 +1783,10 @@ const ChatArea = React.memo(function ChatArea({
 
   const handleScroll = useCallback((e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
     if (isSmoothScrollingRef.current) {
-      if (isAtBottom) {
+      if (distanceFromBottom <= 60) {
         isSmoothScrollingRef.current = false;
         isScrolledUpRef.current = false;
         setIsScrolledUp(false);
@@ -1794,8 +1794,17 @@ const ChatArea = React.memo(function ChatArea({
       return;
     }
 
-    isScrolledUpRef.current = !isAtBottom;
-    setIsScrolledUp(!isAtBottom);
+    if (distanceFromBottom > 140) {
+      if (!isScrolledUpRef.current) {
+        isScrolledUpRef.current = true;
+        setIsScrolledUp(true);
+      }
+    } else if (distanceFromBottom <= 50) {
+      if (isScrolledUpRef.current) {
+        isScrolledUpRef.current = false;
+        setIsScrolledUp(false);
+      }
+    }
   }, []);
 
   const scrollToBottom = () => {
