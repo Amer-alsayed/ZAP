@@ -1780,21 +1780,11 @@ const ChatArea = React.memo(function ChatArea({
   }, [activeContact.username]);
 
   const isSmoothScrollingRef = useRef(false);
-  const smoothScrollTimerRef = useRef(null);
 
   const handleScroll = useCallback((e) => {
+    if (isSmoothScrollingRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = e.target;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 40;
-
-    if (isSmoothScrollingRef.current) {
-      if (isAtBottom) {
-        isScrolledUpRef.current = false;
-        setIsScrolledUp(false);
-        isSmoothScrollingRef.current = false;
-      }
-      return;
-    }
-
     isScrolledUpRef.current = !isAtBottom;
     setIsScrolledUp(!isAtBottom);
   }, []);
@@ -1804,16 +1794,19 @@ const ChatArea = React.memo(function ChatArea({
     setIsScrolledUp(false);
     setIsLastMessageVisible(true);
     if (messagesContainerRef.current) {
-      if (smoothScrollTimerRef.current) {
-        clearTimeout(smoothScrollTimerRef.current);
-      }
       isSmoothScrollingRef.current = true;
       messagesContainerRef.current.scrollTo({
         top: messagesContainerRef.current.scrollHeight,
         behavior: 'smooth'
       });
-      smoothScrollTimerRef.current = setTimeout(() => {
+      setTimeout(() => {
         isSmoothScrollingRef.current = false;
+        if (messagesContainerRef.current) {
+          const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+          const isAtBottom = scrollHeight - scrollTop - clientHeight < 40;
+          isScrolledUpRef.current = !isAtBottom;
+          setIsScrolledUp(!isAtBottom);
+        }
       }, 500);
     }
     if (markAllMessagesAsReadLocal) {
@@ -2303,12 +2296,6 @@ const ChatArea = React.memo(function ChatArea({
     }
 
     const observer = new IntersectionObserver(([entry]) => {
-      if (isSmoothScrollingRef.current) {
-        if (entry.isIntersecting) {
-          setIsLastMessageVisible(true);
-        }
-        return;
-      }
       setIsLastMessageVisible(entry.isIntersecting);
     }, {
       root: messagesContainerRef.current,
