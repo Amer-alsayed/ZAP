@@ -1086,9 +1086,9 @@ button {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Top Row: Contact Name (Left) + Timestamp (Right) */
@@ -1099,6 +1099,7 @@ button {
   gap: 8px;
   width: 100%;
   min-width: 0;
+  min-height: 18px;
 }
 
 .contact-name {
@@ -1134,6 +1135,7 @@ button {
   gap: 8px;
   width: 100%;
   min-width: 0;
+  min-height: 20px;
 }
 
 .contact-preview-text {
@@ -1158,12 +1160,13 @@ button {
 .unread-badge {
   background: var(--accent-main) !important;
   color: var(--accent-btn-text, #ffffff) !important;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 11px;
-  min-width: 22px;
-  height: 22px;
+  line-height: 1;
+  padding: 0 6px;
+  border-radius: 10px;
+  min-width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1173,6 +1176,7 @@ button {
   animation: badge-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   will-change: transform, opacity;
   box-sizing: border-box !important;
+  flex-shrink: 0;
 }
 
 /* Contact Item Typing States & Unread Badges Micro-animations */
