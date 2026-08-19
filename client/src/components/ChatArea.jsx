@@ -991,6 +991,9 @@ const MessageList = React.memo(({
 
         const prevMsg = groupedMessages[index - 1];
         const isFirstOfGroup = !prevMsg || (prevMsg.mediaType === 'call') || (prevMsg.sender?.toLowerCase() !== msg.sender?.toLowerCase());
+        const isSelectedMsg = (msg.isAlbum || msg.isMultiFile) 
+          ? msg.allIds.some(id => selectedIds.includes(id)) 
+          : selectedIds.includes(msg.id);
 
         return (
           <React.Fragment key={msg.id}>
@@ -1000,8 +1003,14 @@ const MessageList = React.memo(({
               </div>
             )}
             <div 
-              className={`message-row ${isSent ? 'sent' : 'received'} ${isFirstOfGroup ? 'is-first-of-group' : 'is-subsequent'} {((msg.isAlbum || msg.isMultiFile) ? msg.allIds.some(id => deletingIds.includes(id)) : deletingIds.includes(msg.id)) || msg.isDeleting ? 'is-deleting' : ''} ${msg.isCollapsing ? 'is-collapsing' : ''}`}
-              style={{ '--msg-delay': staggerIndex }}
+              key={msg.id || `grouped-${index}`} 
+              className={`message-row ${isSent ? 'sent' : 'received'} ${isFirstOfGroup ? 'is-first-of-group' : 'is-subsequent'} ${isSelectedMsg ? 'row-selected' : ''} ${((msg.isAlbum || msg.isMultiFile) ? msg.allIds.some(id => deletingIds.includes(id)) : deletingIds.includes(msg.id)) || msg.isDeleting ? 'is-deleting' : ''} ${msg.isCollapsing ? 'is-collapsing' : ''}`}
+              data-msg-id={msg.id}
+              data-timestamp={msg.timestamp}
+              style={{ 
+                '--msg-delay': staggerIndex,
+                touchAction: 'pan-y'
+              }}
               onContextMenu={(e) => e.preventDefault()}
               onClickCapture={(e) => {
                 if (longPressTriggeredRef.current) {
@@ -1017,11 +1026,9 @@ const MessageList = React.memo(({
                 }
               }}
               onMouseDown={(e) => {
-                if (window.__isMediaModalOpen || e.button !== 0 || selectionMode) return;
-                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) {
-                  cancelLongPress();
-                  return;
-                }
+                if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) return;
+                if (selectionMode) return;
+                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) return;
                 startLongPress(msg);
               }}
               onMouseUp={cancelLongPress}
@@ -1042,104 +1049,145 @@ const MessageList = React.memo(({
                 startLongPress(msg);
                 if (window.matchMedia && !window.matchMedia('(pointer: coarse)').matches) return;
                 const touch = e.touches[0];
+                const wrapper = e.currentTarget.querySelector('.message-wrapper');
+                const indicator = wrapper?.querySelector('.swipe-reply-indicator');
+                activeSwipeElRef.current = wrapper;
+                activeSwipeIndicatorRef.current = indicator;
+                swipeOffsetRef.current = 0;
                 swipeStartRef.current = { x: touch.clientX, y: touch.clientY, msgId: msg.id };
               }}
-              onClick={() => {
-                if (longPressTriggeredRef.current) {
-                  longPressTriggeredRef.current = false;
-                  return;
-                }
-                if (selectionMode) toggleSelected(msg);
-              }}
-              onTouchMove={(e) => {
-                if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
-                  return;
-                }
-                if (selectionMode) return;
-                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) {
-                  cancelLongPress();
-                  swipeStartRef.current = null;
-                  return;
-                }
+            onClick={() => {
+              if (longPressTriggeredRef.current) {
+                longPressTriggeredRef.current = false;
+                return;
+              }
+              if (selectionMode) toggleSelected(msg);
+            }}
+            onTouchMove={(e) => {
+              if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
+                return;
+              }
+              if (selectionMode) return;
+              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) {
                 cancelLongPress();
-                if (!swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
-                const touch = e.touches[0];
-                const deltaX = touch.clientX - swipeStartRef.current.x;
-                const deltaY = touch.clientY - swipeStartRef.current.y;
+                swipeStartRef.current = null;
+                return;
+              }
+              cancelLongPress();
+              if (!swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
+              const touch = e.touches[0];
+              const deltaX = touch.clientX - swipeStartRef.current.x;
+              const deltaY = touch.clientY - swipeStartRef.current.y;
 
-                if (deltaX > 0 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                  const clampedOffset = Math.min(deltaX * 0.6, 75);
-                  setSwipeState({ msgId: msg.id, offset: clampedOffset, isSwiping: true });
+              if (deltaX > 0 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                const clampedOffset = Math.min(deltaX * 0.6, 75);
+                swipeOffsetRef.current = clampedOffset;
+                if (activeSwipeElRef.current) {
+                  activeSwipeElRef.current.style.transition = 'none';
+                  activeSwipeElRef.current.style.transform = `translateX(${clampedOffset}px)`;
                 }
-              }}
-              onTouchEnd={() => {
-                if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
-                  swipeStartRef.current = null;
-                  setSwipeState({ msgId: null, offset: 0, isSwiping: false });
-                  return;
+                if (activeSwipeIndicatorRef.current) {
+                  const progress = Math.min(clampedOffset / 30, 1);
+                  activeSwipeIndicatorRef.current.style.opacity = progress;
+                  activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
                 }
-                if (selectionMode) return;
-                cancelLongPress();
-                if (swipeStartRef.current?.msgId === msg.id) {
-                  if (swipeState.offset >= 30) {
-                    const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
-                    setReplyingTo({
-                      id: targetMsg.id,
-                      sender: targetMsg.sender,
-                      text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
-                      mediaType: targetMsg.mediaType || null,
-                      fileMetadata: targetMsg.fileMetadata || null
-                    });
-                    if (window.navigator && window.navigator.vibrate) {
-                      try { window.navigator.vibrate(15); } catch (err) {}
-                    }
-                    setTimeout(() => {
-                      if (textareaRef.current) {
-                        textareaRef.current.blur();
-                        textareaRef.current.focus();
-                        textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                      }
-                    }, 60);
+              }
+            }}
+            onTouchEnd={() => {
+              if (window.__isMediaModalOpen || document.body.style.overflow === 'hidden' || document.querySelector('.image-lightbox-overlay.visible, .album-gallery-modal-overlay')) {
+                swipeStartRef.current = null;
+                activeSwipeElRef.current = null;
+                activeSwipeIndicatorRef.current = null;
+                swipeOffsetRef.current = 0;
+                return;
+              }
+              if (selectionMode) return;
+              cancelLongPress();
+
+              const currentOffset = swipeOffsetRef.current;
+              const el = activeSwipeElRef.current;
+              const indicator = activeSwipeIndicatorRef.current;
+
+              if (el) {
+                el.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                el.style.transform = 'translateX(0px)';
+              }
+              if (indicator) {
+                indicator.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+                indicator.style.opacity = '0';
+                indicator.style.transform = 'translateY(-50%) scale(0)';
+              }
+
+              if (swipeStartRef.current?.msgId === msg.id && currentOffset >= 30) {
+                const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
+                setReplyingTo({
+                  id: targetMsg.id,
+                  sender: targetMsg.sender,
+                  text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                  mediaType: targetMsg.mediaType || null,
+                  fileMetadata: targetMsg.fileMetadata || null
+                });
+                if (window.navigator && window.navigator.vibrate) {
+                  try { window.navigator.vibrate(15); } catch (err) {}
+                }
+                setTimeout(() => {
+                  if (textareaRef.current) {
+                    textareaRef.current.blur();
+                    textareaRef.current.focus();
+                    textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                   }
-                }
-                swipeStartRef.current = null;
-                setSwipeState({ msgId: null, offset: 0, isSwiping: false });
-              }}
-              onTouchCancel={() => {
-                if (selectionMode) return;
-                cancelLongPress();
-                swipeStartRef.current = null;
-                setSwipeState({ msgId: null, offset: 0, isSwiping: false });
-              }}
-            >
-              {(() => {
-                const isSelectedMsg = (msg.isAlbum || msg.isMultiFile) 
-                  ? msg.allIds.some(id => selectedIds.includes(id)) 
-                  : selectedIds.includes(msg.id);
+                }, 60);
+              }
+              swipeStartRef.current = null;
+              activeSwipeElRef.current = null;
+              activeSwipeIndicatorRef.current = null;
+              swipeOffsetRef.current = 0;
+            }}
+            onTouchCancel={() => {
+              if (selectionMode) return;
+              cancelLongPress();
+              if (activeSwipeElRef.current) {
+                activeSwipeElRef.current.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                activeSwipeElRef.current.style.transform = 'translateX(0px)';
+              }
+              if (activeSwipeIndicatorRef.current) {
+                activeSwipeIndicatorRef.current.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+                activeSwipeIndicatorRef.current.style.opacity = '0';
+                activeSwipeIndicatorRef.current.style.transform = 'translateY(-50%) scale(0)';
+              }
+              swipeStartRef.current = null;
+              activeSwipeElRef.current = null;
+              activeSwipeIndicatorRef.current = null;
+              swipeOffsetRef.current = 0;
+            }}
+          >
+            {(() => {
+              const isSelectedMsg = (msg.isAlbum || msg.isMultiFile) 
+                ? msg.allIds.some(id => selectedIds.includes(id)) 
+                : selectedIds.includes(msg.id);
 
-                return (
+              return (
+                <div 
+                  id={`msg-${msg.id}`} 
+                  ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
+                  data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
+                  className={`message-wrapper ${isSent ? 'sent' : 'received'} ${isOnlyEmojiMsg ? 'emoji-only-wrapper' : ''} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${isSelectedMsg ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
+                  style={{
+                    transform: 'translateX(0px)',
+                    transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                  }}
+                >
+                  {/* Swipe-to-reply spring indicator icon */}
                   <div 
-                    id={`msg-${msg.id}`} 
-                    ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
-                    data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
-                    className={`message-wrapper ${isSent ? 'sent' : 'received'} ${isOnlyEmojiMsg ? 'emoji-only-wrapper' : ''} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${isSelectedMsg ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
+                    className="swipe-reply-indicator"
                     style={{
-                      transform: swipeState.msgId === msg.id && swipeState.offset > 0 ? `translateX(${swipeState.offset}px)` : 'translateX(0px)',
-                      transition: swipeState.msgId === msg.id && swipeState.isSwiping ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                      opacity: 0,
+                      transform: 'translateY(-50%) scale(0)',
+                      pointerEvents: 'none'
                     }}
                   >
-                    {/* Swipe-to-reply spring indicator icon */}
-                    {swipeState.msgId === msg.id && swipeState.offset > 5 && (
-                      <div 
-                        className="swipe-reply-indicator"
-                        style={{
-                          opacity: Math.min(swipeState.offset / 30, 1),
-                          transform: `translateY(-50%) scale(${Math.min(swipeState.offset / 30, 1)})`
-                        }}
-                      >
-                        <CornerUpLeft size={16} color="var(--accent-color)" />
-                      </div>
-                    )}
+                    <CornerUpLeft size={16} color="var(--accent-color)" />
+                  </div>
                     <div className={`message-bubble ${isSelectedMsg ? 'is-selected' : ''} ${msg.isAlbum ? 'album-bubble' : ''} ${msg.isMultiFile ? 'multifile-bubble' : ''} ${isOnlyEmojiMsg ? `emoji-only-bubble count-${emojiCount}` : ''} ${msg.mediaType === 'file' && msg.fileMetadata?.mimeType?.startsWith('image/') ? 'single-image-bubble' : ''}`}>
                       {isSelectedMsg && (
                         <div className="selection-indicator-badge" aria-hidden="true">
@@ -1284,8 +1332,6 @@ const ChatArea = React.memo(function ChatArea({
     return () => { if (selectionCancelCallbackRef) selectionCancelCallbackRef.current = null; };
   }, [selectionCancelCallbackRef, selectionMode]);
   const [inputText, setInputText] = useState('');
-  const [swipeState, setSwipeState] = useState({ msgId: null, offset: 0, isSwiping: false });
-  const swipeStartRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingExitMode, setRecordingExitMode] = useState(null); // 'cancel' | 'send' | null
   const [isSendingVoice, setIsSendingVoice] = useState(false);
