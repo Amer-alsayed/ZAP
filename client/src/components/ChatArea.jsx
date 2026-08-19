@@ -1786,7 +1786,7 @@ const ChatArea = React.memo(function ChatArea({
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
     if (isSmoothScrollingRef.current) {
-      if (distanceFromBottom <= 60) {
+      if (distanceFromBottom <= 50) {
         isSmoothScrollingRef.current = false;
         isScrolledUpRef.current = false;
         setIsScrolledUp(false);
@@ -1794,7 +1794,7 @@ const ChatArea = React.memo(function ChatArea({
       return;
     }
 
-    if (distanceFromBottom > 140) {
+    if (distanceFromBottom > 160) {
       if (!isScrolledUpRef.current) {
         isScrolledUpRef.current = true;
         setIsScrolledUp(true);
@@ -1811,23 +1811,30 @@ const ChatArea = React.memo(function ChatArea({
     if (e?.currentTarget) {
       e.currentTarget.blur();
     }
+    isSmoothScrollingRef.current = true;
     isScrolledUpRef.current = false;
     setIsScrolledUp(false);
     setIsLastMessageVisible(true);
     if (messagesContainerRef.current) {
-      isSmoothScrollingRef.current = true;
       messagesContainerRef.current.scrollTo({
         top: messagesContainerRef.current.scrollHeight,
         behavior: 'smooth'
       });
-      setTimeout(() => {
-        isSmoothScrollingRef.current = false;
-      }, 1000);
     }
     if (markAllMessagesAsReadLocal) {
       markAllMessagesAsReadLocal(activeContact.username);
     }
   };
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const onScrollEnd = () => {
+      isSmoothScrollingRef.current = false;
+    };
+    container.addEventListener('scrollend', onScrollEnd);
+    return () => container.removeEventListener('scrollend', onScrollEnd);
+  }, [activeContact.username]);
 
   // Track very recently received messages to manage typing bubble fusion timing
   useEffect(() => {
@@ -1992,6 +1999,7 @@ const ChatArea = React.memo(function ChatArea({
     };
 
     const handleTouchStart = (e) => {
+      isSmoothScrollingRef.current = false;
       if (e.touches.length !== 1) return;
       if (rafId) {
         cancelAnimationFrame(rafId);
@@ -2039,6 +2047,7 @@ const ChatArea = React.memo(function ChatArea({
     };
 
     const handleWheel = (e) => {
+      isSmoothScrollingRef.current = false;
       const scrollTop = container.scrollTop;
       const scrollHeight = container.scrollHeight;
       const clientHeight = container.clientHeight;
