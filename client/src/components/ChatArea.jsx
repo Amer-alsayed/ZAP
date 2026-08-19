@@ -1782,9 +1782,18 @@ const ChatArea = React.memo(function ChatArea({
   const isSmoothScrollingRef = useRef(false);
 
   const handleScroll = useCallback((e) => {
-    if (isSmoothScrollingRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = e.target;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 40;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+
+    if (isSmoothScrollingRef.current) {
+      if (isAtBottom) {
+        isSmoothScrollingRef.current = false;
+        isScrolledUpRef.current = false;
+        setIsScrolledUp(false);
+      }
+      return;
+    }
+
     isScrolledUpRef.current = !isAtBottom;
     setIsScrolledUp(!isAtBottom);
   }, []);
@@ -1801,13 +1810,7 @@ const ChatArea = React.memo(function ChatArea({
       });
       setTimeout(() => {
         isSmoothScrollingRef.current = false;
-        if (messagesContainerRef.current) {
-          const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-          const isAtBottom = scrollHeight - scrollTop - clientHeight < 40;
-          isScrolledUpRef.current = !isAtBottom;
-          setIsScrolledUp(!isAtBottom);
-        }
-      }, 500);
+      }, 1000);
     }
     if (markAllMessagesAsReadLocal) {
       markAllMessagesAsReadLocal(activeContact.username);
