@@ -850,6 +850,10 @@ const MessageList = React.memo(({
               }}
               onMouseDown={(e) => {
                 if (window.__isMediaModalOpen || e.button !== 0 || selectionMode) return;
+                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) {
+                  cancelLongPress();
+                  return;
+                }
                 startLongPress(msg);
               }}
               onMouseUp={cancelLongPress}
@@ -860,6 +864,10 @@ const MessageList = React.memo(({
                 }
                 if (selectionMode) {
                   e.preventDefault();
+                  return;
+                }
+                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"]')) {
+                  cancelLongPress();
                   return;
                 }
                 startLongPress(msg);
@@ -2709,7 +2717,12 @@ const ChatArea = React.memo(function ChatArea({
               {isPlaying ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" style={{ marginLeft: '1.5px' }} />}
             </button>
 
-            <div className="voice-slider-container">
+            <div 
+              className="voice-slider-container"
+              onMouseDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
+              onTouchStart={(e) => { e.stopPropagation(); cancelLongPress(); }}
+              onPointerDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
+            >
               <input 
                 type="range"
                 className="voice-slider"
@@ -2717,6 +2730,9 @@ const ChatArea = React.memo(function ChatArea({
                 max="100"
                 step="0.1"
                 value={progress}
+                onMouseDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
+                onTouchStart={(e) => { e.stopPropagation(); cancelLongPress(); }}
+                onPointerDown={(e) => { e.stopPropagation(); cancelLongPress(); }}
                 onChange={(e) => {
                   const seekPct = parseFloat(e.target.value) / 100;
                   if (!selectionModeRef.current) togglePlayAudio(msg.id, file, seekPct, false);
