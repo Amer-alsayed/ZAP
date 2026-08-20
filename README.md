@@ -97,7 +97,11 @@ Configure the following variables in production (e.g. Render Dashboard):
 | `PORT` | Server HTTP port | `5000` |
 | `JWT_SECRET` | Secret key for signing authentication tokens | `your-secure-random-jwt-secret` |
 | `DATABASE_URL` | PostgreSQL connection URL (enables Postgres mode) | `postgres://user:pass@ep-host.region.aws.neon.tech/neondb` |
-| `CLIENT_ORIGIN` | Allowed CORS origins (comma-separated) | `https://your-domain.onrender.com` |
+---
+
+## Mobile Features
+- **Bi-Directional Swipe-to-Reply**: Low-latency non-passive gesture tracking with logarithmic spring physics, micro-haptics, and instant keyboard focus.
+- **Dynamic Viewport Fit**: Native keyboard handling without layout shifting or broken zooms.
 
 ---
 
