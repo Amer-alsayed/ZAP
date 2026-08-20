@@ -1179,9 +1179,9 @@ const MessageList = React.memo(({
               // Cancel hold-to-select on any scroll/drag
               if (absX > 8 || absY > 8) cancelLongPress();
 
-              // Strict angle lock: require 18px horizontal pull AND horizontal distance >= 1.5 * vertical distance
+              // Strict angle lock: require 14px horizontal pull AND horizontal distance >= 1.25 * vertical distance
               if (!swipeStartRef.current.isSwiping) {
-                if (absX >= 18 && absX > absY * 1.5 && isValidDirection) {
+                if (absX >= 14 && absX > absY * 1.25 && isValidDirection) {
                   swipeStartRef.current.isSwiping = true;
                   cancelLongPress();
                 } else if (absY > 8 && absY >= absX) {
@@ -1194,8 +1194,8 @@ const MessageList = React.memo(({
 
               if (swipeStartRef.current?.isSwiping && deltaX > 0) {
                 cancelLongPress();
-                const rawMagnitude = Math.max(0, deltaX - 16);
-                const clampedMagnitude = Math.min(rawMagnitude * 0.6, 68);
+                const rawMagnitude = Math.max(0, deltaX - 10);
+                const clampedMagnitude = Math.min(rawMagnitude * 0.75, 68);
                 const appliedOffset = clampedMagnitude;
 
                 swipeOffsetRef.current = appliedOffset;
@@ -1211,7 +1211,7 @@ const MessageList = React.memo(({
                     activeSwipeElRef.current.style.willChange = 'transform';
                   }
                   if (activeSwipeIndicatorRef.current) {
-                    const progress = Math.min(mag / 40, 1);
+                    const progress = Math.min(mag / 26, 1);
                     activeSwipeIndicatorRef.current.style.transition = 'none';
                     activeSwipeIndicatorRef.current.style.opacity = progress;
                     activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
@@ -1242,7 +1242,7 @@ const MessageList = React.memo(({
                 indicator.style.willChange = 'auto';
               }
 
-              if (wasSwiping && currentOffset >= 40) {
+              if (wasSwiping && currentOffset >= 24) {
                 const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
                 setReplyingTo({
                   id: targetMsg.id,
@@ -1262,11 +1262,6 @@ const MessageList = React.memo(({
                     textareaRef.current.setSelectionRange(len, len);
                   } catch (e) {}
                 }
-                requestAnimationFrame(() => {
-                  if (textareaRef.current) {
-                    textareaRef.current.focus({ preventScroll: true });
-                  }
-                });
               }
               swipeStartRef.current = null;
               activeSwipeElRef.current = null;
@@ -1944,6 +1939,9 @@ const ChatArea = React.memo(function ChatArea({
   useEffect(() => {
     if (replyingTo) {
       setActiveReplyInfo(replyingTo);
+      if (textareaRef.current && !selectionModeRef.current) {
+        textareaRef.current.focus({ preventScroll: true });
+      }
     }
   }, [replyingTo]);
 
@@ -2491,19 +2489,19 @@ const ChatArea = React.memo(function ChatArea({
         if (!inputWrapper || !container) return;
         // Only apply mobile keyboard handling
         if (window.innerWidth > 768) {
-          inputWrapper.style.transform = 'translateY(0)';
+          inputWrapper.style.transform = '';
           container.style.paddingBottom = '';
           return;
         }
         const keyboardHeight = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
         if (keyboardHeight > 40) {
-          inputWrapper.style.transform = `translateY(-${keyboardHeight}px)`;
-          container.style.paddingBottom = `${keyboardHeight + 12}px`;
+          inputWrapper.style.transform = `translate3d(0, -${keyboardHeight}px, 0)`;
+          container.style.paddingBottom = `${keyboardHeight + 8}px`;
           if (!isScrolledUpRef.current) {
             container.scrollTop = container.scrollHeight;
           }
         } else {
-          inputWrapper.style.transform = 'translateY(0)';
+          inputWrapper.style.transform = 'translate3d(0, 0, 0)';
           container.style.paddingBottom = '';
         }
       });

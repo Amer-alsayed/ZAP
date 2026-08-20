@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Phone, PhoneOff, Video, VideoOff, Mic, Image, FileText, PanelLeftClose, PanelLeftOpen, Trash2, Ban, X, AlertTriangle, Pencil } from 'lucide-react';
+import ZapLogo from './ZapLogo';
 import { searchUser } from '../services/api';
 import { emitGetUserStatus } from '../services/socket';
 
@@ -530,16 +531,11 @@ const Sidebar = React.memo(function Sidebar({
 
   return (
     <div className={`sidebar ${isMinimized ? 'sidebar-minimized' : ''}`}>
-      {/* Profile Header */}
+      {/* App Branding Header */}
       <div className="sidebar-header">
-        <div className="profile-info">
-          {renderAvatar(currentUser.username, currentUser.displayName, currentUser.avatarIcon)}
-          <div className="username-display">
-            <h3>{currentUser.displayName || currentUser.username}</h3>
-            {currentUser.displayName && (
-              <span className="user-handle">@{currentUser.username}</span>
-            )}
-          </div>
+        <div className="app-branding">
+          <ZapLogo size={32} glow />
+          <span className="app-name">ZAP</span>
         </div>
       </div>
 
