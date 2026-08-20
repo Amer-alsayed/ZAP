@@ -1380,17 +1380,22 @@ const MessageList = React.memo(({
                                 fileMetadata: targetMsg.fileMetadata || null
                               });
                               if (textareaRef.current) {
+                                const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
                                 textareaRef.current.focus();
                                 try {
                                   const len = textareaRef.current.value.length;
                                   textareaRef.current.setSelectionRange(len, len);
                                 } catch (e) {}
+                                requestAnimationFrame(() => {
+                                  if (textareaRef.current) {
+                                    if (isMobile) {
+                                      try { textareaRef.current.focus(); } catch (e) {}
+                                    } else {
+                                      textareaRef.current.focus({ preventScroll: true });
+                                    }
+                                  }
+                                });
                               }
-                              requestAnimationFrame(() => {
-                                if (textareaRef.current) {
-                                  textareaRef.current.focus({ preventScroll: true });
-                                }
-                              });
                             }}
                           >
                             <CornerUpLeft size={12} />
@@ -2780,7 +2785,12 @@ const ChatArea = React.memo(function ChatArea({
     clearReplyContext();
     if (textareaRef.current) {
       textareaRef.current.style.height = '38px';
-      textareaRef.current.focus({ preventScroll: true });
+      const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      if (isMobile) {
+        try { textareaRef.current.focus(); } catch (e) {}
+      } else {
+        textareaRef.current.focus({ preventScroll: true });
+      }
     }
 
     if (selectedFiles.length > 0) {
