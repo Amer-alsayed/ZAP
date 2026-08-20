@@ -1167,6 +1167,7 @@ const MessageList = React.memo(({
               const deltaY = touch.clientY - swipeStartRef.current.y;
               const absX = Math.abs(deltaX);
               const absY = Math.abs(deltaY);
+              const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 
               // Direction: Swiping toward the right (deltaX > 0) for BOTH sent and received messages
               const isValidDirection = deltaX > 0;
@@ -1174,11 +1175,16 @@ const MessageList = React.memo(({
               // Cancel hold-to-select on any scroll/drag
               if (absX > 8 || absY > 8) cancelLongPress();
 
-              // Initiate horizontal swipe if horizontal intent dominates
+              // Initiate horizontal swipe if horizontal intent dominates — mobile uses lower threshold for thumb reach
               if (!swipeStartRef.current.isSwiping) {
-                if (deltaX >= 10 && deltaX > absY && isValidDirection) {
+                const startThreshold = isMobile ? 6 : 10;
+                if (deltaX >= startThreshold && deltaX > absY && isValidDirection) {
                   swipeStartRef.current.isSwiping = true;
                   cancelLongPress();
+                  // Mobile: prevent vertical scroll once horizontal intent is clear
+                  if (isMobile && e.cancelable) {
+                    try { e.preventDefault(); } catch (err) {}
+                  }
                 } else if (absY > 16 && absY > absX * 1.5) {
                   // User is clearly scrolling vertically — release swipe tracking
                   cancelLongPress();
@@ -1188,6 +1194,10 @@ const MessageList = React.memo(({
               }
 
               if (swipeStartRef.current?.isSwiping && deltaX > 0) {
+                // Stop native scroll on mobile during active swipe
+                if (isMobile && e.cancelable) {
+                  try { e.preventDefault(); } catch (err) {}
+                }
                 cancelLongPress();
                 swipeStartRef.current.maxDeltaX = Math.max(swipeStartRef.current.maxDeltaX || 0, deltaX);
                 const rawMagnitude = Math.max(0, deltaX - 6);
@@ -1225,6 +1235,9 @@ const MessageList = React.memo(({
               const maxDeltaX = swipeStartRef.current?.maxDeltaX || 0;
               const el = activeSwipeElRef.current;
               const indicator = activeSwipeIndicatorRef.current;
+              const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+              const triggerOffset = isMobile ? 12 : 16;
+              const triggerDelta = isMobile ? 20 : 26;
 
               if (el) {
                 el.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
@@ -1239,7 +1252,7 @@ const MessageList = React.memo(({
                 indicator.style.willChange = 'auto';
               }
 
-              if (wasSwiping && (currentOffset >= 16 || maxDeltaX >= 26)) {
+              if (wasSwiping && (currentOffset >= triggerOffset || maxDeltaX >= triggerDelta)) {
                 setIsClosingReply(false);
                 isClosingReplyRef.current = false;
                 const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
@@ -1253,13 +1266,28 @@ const MessageList = React.memo(({
                 if (window.navigator && window.navigator.vibrate) {
                   try { window.navigator.vibrate(15); } catch (err) {}
                 }
-                // Call focus synchronously in touch gesture tick
-                if (textareaRef.current) {
-                  textareaRef.current.focus();
+                // Mobile: focus must happen synchronously inside the touchend gesture tick
+                // to satisfy iOS user-activation + survive React re-render via rAF fallback
+                const inputEl = textareaRef.current;
+                if (inputEl) {
+                  try { inputEl.focus(); } catch (e) {}
                   try {
-                    const len = textareaRef.current.value.length;
-                    textareaRef.current.setSelectionRange(len, len);
+                    const len = inputEl.value.length;
+                    inputEl.setSelectionRange(len, len);
                   } catch (e) {}
+                  if (isMobile) {
+                    // rAF + timeout fallback ensures keyboard stays open after reply bar mounts
+                    requestAnimationFrame(() => {
+                      if (inputEl && document.activeElement !== inputEl) {
+                        try { inputEl.focus(); } catch (e) {}
+                      }
+                    });
+                    setTimeout(() => {
+                      if (inputEl && document.activeElement !== inputEl) {
+                        try { inputEl.focus(); } catch (e) {}
+                      }
+                    }, 60);
+                  }
                 }
               }
               swipeStartRef.current = null;
@@ -1979,14 +2007,49 @@ const ChatArea = React.memo(function ChatArea({
     if (replyingTo) {
       setActiveReplyInfo(replyingTo);
       if (textareaRef.current && !selectionModeRef.current) {
-        if (document.activeElement === textareaRef.current) {
-          textareaRef.current.blur();
+        const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+        if (isMobile) {
+          // Mobile: avoid blur() which kills iOS keyboard — gesture tick already focused,
+          // but React re-render can steal focus, so restore via rAF without preventScroll
+          // (preventScroll:true is ignored outside user gesture on iOS and prevents keyboard)
+          const el = textareaRef.current;
+          try {
+            const len = el.value.length;
+            el.setSelectionRange(len, len);
+          } catch (e) {}
+          if (document.activeElement !== el) {
+            try { el.focus(); } catch (e) {}
+          }
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (el && document.activeElement !== el) {
+                try { el.focus(); } catch (e) {}
+                try {
+                  const len2 = el.value.length;
+                  el.setSelectionRange(len2, len2);
+                } catch (e) {}
+              }
+              if (messagesContainerRef.current && !isScrolledUpRef.current) {
+                try { messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight; } catch (e) {}
+              }
+            });
+          });
+          // Fallback timer for slower Android WebView where rAF may fire before layout commit
+          setTimeout(() => {
+            if (el && document.activeElement !== el) {
+              try { el.focus(); } catch (e) {}
+            }
+          }, 80);
+        } else {
+          if (document.activeElement === textareaRef.current) {
+            textareaRef.current.blur();
+          }
+          textareaRef.current.focus({ preventScroll: true });
+          try {
+            const len = textareaRef.current.value.length;
+            textareaRef.current.setSelectionRange(len, len);
+          } catch (e) {}
         }
-        textareaRef.current.focus({ preventScroll: true });
-        try {
-          const len = textareaRef.current.value.length;
-          textareaRef.current.setSelectionRange(len, len);
-        } catch (e) {}
       }
     }
   }, [replyingTo]);
@@ -2522,7 +2585,7 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, []);
 
-  // Smooth mobile keyboard — resizes-visual + visualViewport, no layout jank on open/close
+  // Smooth mobile keyboard — resizes-visual + visualViewport, no layout jank on open/close (mobile only)
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
@@ -2541,13 +2604,16 @@ const ChatArea = React.memo(function ChatArea({
         }
         const keyboardHeight = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
         if (keyboardHeight > 40) {
-          inputWrapper.style.transform = `translate3d(0, -${keyboardHeight}px, 0)`;
+          // With interactive-widget=resizes-visual (modern Chrome/iOS) the layout viewport
+          // already resizes, so manual transform double-offsets and can break focus.
+          // Mobile fix: keep input in normal flow, just add scroll padding so last messages stay visible.
+          inputWrapper.style.transform = '';
           container.style.paddingBottom = `${keyboardHeight + 8}px`;
           if (!isScrolledUpRef.current) {
-            container.scrollTop = container.scrollHeight;
+            try { container.scrollTop = container.scrollHeight; } catch (e) {}
           }
         } else {
-          inputWrapper.style.transform = 'translate3d(0, 0, 0)';
+          inputWrapper.style.transform = '';
           container.style.paddingBottom = '';
         }
       });
