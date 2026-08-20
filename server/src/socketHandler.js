@@ -786,6 +786,19 @@ export const socketHandler = (io) => {
       }
     });
 
+    socket.on('call-heartbeat', (data) => {
+      try {
+        const { to, state } = data || {};
+        const from = socket.user.username;
+        if (!to) return;
+        if (isUserOnline(to)) {
+          io.to(to.toLowerCase()).emit('call-heartbeat', { from, state });
+        }
+      } catch (err) {
+        logger.error('Error in call-heartbeat event:', err);
+      }
+    });
+
     socket.on('hang-up', (data) => {
       try {
         const { to, reason } = data || {};
