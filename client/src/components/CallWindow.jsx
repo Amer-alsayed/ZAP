@@ -760,7 +760,15 @@ export default function CallWindow({
                 <Minimize2 size={24} />
               </button>
             )}
-            <button className="call-btn decline" onClick={onHangUp} title="Cancel Call">
+            <button 
+              className="call-btn decline" 
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onHangUp?.();
+              }} 
+              title="Cancel Call"
+            >
               <PhoneOff size={isCallMinimized ? 18 : 24} />
             </button>
           </div>
@@ -977,7 +985,11 @@ export default function CallWindow({
                 
                 <button 
                   className="call-btn decline" 
-                  onClick={onHangUp}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onHangUp?.();
+                  }}
                   title="End Call"
                   aria-label="End Call"
                 >
@@ -1065,7 +1077,16 @@ export default function CallWindow({
                     </button>
                   )
                 )}
-                <button className="call-btn decline" onClick={onHangUp} title="Hang up" aria-label="Hang up">
+                <button 
+                  className="call-btn decline" 
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onHangUp?.();
+                  }} 
+                  title="Hang up" 
+                  aria-label="Hang up"
+                >
                   <PhoneOff size={isCallMinimized ? 18 : 20} />
                 </button>
               </div>

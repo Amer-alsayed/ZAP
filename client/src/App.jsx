@@ -2264,17 +2264,19 @@ export default function App() {
   };
 
   const handleDeclineCall = () => {
+    const target = callPartyRef.current || callParty;
     const socket = getSocket();
-    if (socket && callParty) {
-      socket.emit('hang-up', { to: callParty, reason: 'declined' });
+    if (socket && target) {
+      socket.emit('hang-up', { to: target, reason: 'declined' });
     }
     cleanupCall();
   };
 
   const handleHangUp = () => {
+    const target = callPartyRef.current || callParty;
     const socket = getSocket();
-    if (socket && callParty) {
-      socket.emit('hang-up', { to: callParty });
+    if (socket && target) {
+      socket.emit('hang-up', { to: target });
     }
     cleanupCall();
   };
