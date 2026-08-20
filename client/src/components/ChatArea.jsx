@@ -1831,13 +1831,20 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, [setReplyingTo]);
 
-  const handleClearAllFilesWithAnimation = useCallback(() => {
+  const handleClearAllFilesWithAnimation = useCallback((isFromPopState = false) => {
     if (isClearingFiles || selectedFiles.length === 0) return;
     setIsClearingFiles(true);
+    if (!isFromPopState && (window.history.state === 'files' || window.history.state?.view === 'files')) {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
     setTimeout(() => {
       setSelectedFiles([]);
       setIsClearingFiles(false);
-    }, 320);
+    }, 280);
   }, [isClearingFiles, selectedFiles.length]);
 
   const handleRemoveSingleFileWithAnimation = useCallback((idx) => {
@@ -1902,7 +1909,7 @@ const ChatArea = React.memo(function ChatArea({
 
     // 7. Clear pending file attachments if any
     if (selectedFilesRef.current?.length > 0 && !isClearingFilesRef.current) {
-      handleClearAllFilesWithAnimation();
+      handleClearAllFilesWithAnimation(true);
       return true;
     }
 
@@ -2139,6 +2146,9 @@ const ChatArea = React.memo(function ChatArea({
   useEffect(() => {
     if (selectedFiles.length > 0) {
       setActiveFileInfo(selectedFiles[0]);
+      if (window.history.state !== 'files') {
+        window.history.pushState('files', '');
+      }
     } else {
       setActiveFileInfo(null);
     }
@@ -2836,10 +2846,10 @@ const ChatArea = React.memo(function ChatArea({
 
     // Automatically close emoji picker and attach menus when sending
     if (showEmojiPicker) {
-      closeEmojiPicker();
+      closeEmojiPicker(false);
     }
     if (showAttachMenu) {
-      setShowAttachMenu(false);
+      closeAttachMenu(false);
     }
 
     // Immediately emit stop typing
@@ -2862,6 +2872,13 @@ const ChatArea = React.memo(function ChatArea({
     // Reset input fields instantly
     setInputText('');
     clearReplyContext();
+    if (window.history.state === 'files' || window.history.state?.view === 'files') {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
     if (textareaRef.current) {
       textareaRef.current.style.height = '38px';
       const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
@@ -4031,7 +4048,7 @@ const ChatArea = React.memo(function ChatArea({
             <button 
               ref={attachBtnRef}
               className={`input-circle-btn attach-btn ${showAttachMenu ? 'active-menu' : ''}`}
-              onClick={() => showAttachMenu ? closeAttachMenu() : setShowAttachMenu(true)}
+              onClick={toggleAttachMenu}
               title={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
               aria-label={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
               disabled={isRecording || uploading}
