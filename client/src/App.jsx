@@ -1108,7 +1108,10 @@ export default function App() {
       console.log(`Received call answer from ${from}`);
       if (peerConnectionRef.current) {
         try {
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+          const answerDesc = answer?.sdp 
+            ? new RTCSessionDescription(answer) 
+            : new RTCSessionDescription({ type: 'answer', sdp: answer });
+          await peerConnectionRef.current.setRemoteDescription(answerDesc);
           
           // Flush any ICE candidates queued before remoteDescription was set
           while (iceCandidatesQueue.current.length > 0) {
@@ -2280,10 +2283,10 @@ export default function App() {
 
     try {
       const pc = setupPeerConnection(target, stream);
-      await pc.setRemoteDescription({
-        type: 'offer',
-        sdp: optimizeSDP(pendingOfferRef.current.sdp)
-      });
+      const offerDesc = pendingOfferRef.current?.sdp 
+        ? new RTCSessionDescription(pendingOfferRef.current) 
+        : new RTCSessionDescription({ type: 'offer', sdp: pendingOfferRef.current });
+      await pc.setRemoteDescription(offerDesc);
 
       const answer = await pc.createAnswer();
       answer.sdp = optimizeSDP(answer.sdp);
