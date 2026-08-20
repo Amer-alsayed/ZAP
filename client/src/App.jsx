@@ -2197,7 +2197,8 @@ export default function App() {
   };
 
   const handleAcceptCall = async () => {
-    if (!callParty || !pendingOfferRef.current) return;
+    const target = callPartyRef.current || callParty;
+    if (!target || !pendingOfferRef.current) return;
 
     let stream;
     let effectiveMediaType = callMediaType;
@@ -2252,7 +2253,7 @@ export default function App() {
     setLocalStream(stream);
 
     try {
-      const pc = setupPeerConnection(callParty, stream);
+      const pc = setupPeerConnection(target, stream);
       await pc.setRemoteDescription({
         type: 'offer',
         sdp: optimizeSDP(pendingOfferRef.current.sdp)
@@ -2274,7 +2275,7 @@ export default function App() {
       const socket = getSocket();
       if (socket) {
         socket.emit('make-answer', {
-          to: callParty,
+          to: target,
           answer
         });
       }
@@ -2291,20 +2292,23 @@ export default function App() {
     }
   };
 
-  const handleDeclineCall = () => {
+  const handleDeclineCall = (reason = 'declined') => {
+    const target = callPartyRef.current || callParty;
     const socket = getSocket();
-    if (socket && callParty) {
-      socket.emit('hang-up', { to: callParty, reason: 'declined' });
+    if (socket && target) {
+      socket.emit('hang-up', { to: target, reason });
     }
-    cleanupCall();
+    cleanupCall(false, reason);
   };
 
-  const handleHangUp = () => {
+  const handleHangUp = (reason = null) => {
+    const target = callPartyRef.current || callParty;
+    const effectiveReason = reason || (callStateRef.current === 'calling' || callStateRef.current === 'ringing' ? 'cancelled' : null);
     const socket = getSocket();
-    if (socket && callParty) {
-      socket.emit('hang-up', { to: callParty });
+    if (socket && target) {
+      socket.emit('hang-up', { to: target, reason: effectiveReason });
     }
-    cleanupCall();
+    cleanupCall(false, effectiveReason);
   };
 
   const handleToggleMute = () => {
