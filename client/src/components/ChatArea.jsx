@@ -532,7 +532,7 @@ const optimizeImageForSending = async (file) => {
 };
 
 // Fullscreen Interactive Album Gallery Modal
-const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
+const AlbumGalleryModal = ({ items, initialIndex = 0, isExiting = false, onClose }) => {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [isOpen, setIsOpen] = useState(false);
   const currentItem = items[activeIndex];
@@ -618,7 +618,7 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
 
   return createPortal(
     <div 
-      className={`album-gallery-modal-overlay ${isOpen ? 'visible' : ''}`}
+      className={`album-gallery-modal-overlay ${(isOpen && !isExiting) ? 'visible' : ''}`}
       onClick={handleOverlayClick}
       onTouchStart={(e) => {
         touchStartRef.current = e.touches[0].clientX;
@@ -1168,16 +1168,19 @@ const MessageList = React.memo(({
               const absX = Math.abs(deltaX);
               const absY = Math.abs(deltaY);
 
-              // Direction: Allow rightward swipe (deltaX > 0) or leftward swipe for sent messages (deltaX < 0)
-              const isValidDirection = isSent ? (deltaX < 0 || deltaX > 0) : (deltaX > 0);
+              // Direction: Received messages swipe right (deltaX > 0), Sent messages swipe left (deltaX < 0)
+              const isValidDirection = isSent ? (deltaX < 0) : (deltaX > 0);
 
-              // Cancel hold-to-select on any scroll/drag — prevents text selection while scrolling
-              if (absX > 4 || absY > 4) cancelLongPress();
+              // Cancel hold-to-select on any scroll/drag
+              if (absX > 8 || absY > 8) cancelLongPress();
+
+              // Strict angle lock: require 18px horizontal pull AND horizontal distance >= 1.5 * vertical distance
               if (!swipeStartRef.current.isSwiping) {
-                if (absX > 6 && absX > absY * 0.5 && isValidDirection) {
+                if (absX >= 18 && absX > absY * 1.5 && isValidDirection) {
                   swipeStartRef.current.isSwiping = true;
                   cancelLongPress();
-                } else if (absY > 12 && absY > absX * 0.8) {
+                } else if (absY > 8 && absY >= absX) {
+                  // User is scrolling vertically — release swipe tracking
                   cancelLongPress();
                   swipeStartRef.current = null;
                   return;
@@ -1187,8 +1190,8 @@ const MessageList = React.memo(({
               if (swipeStartRef.current?.isSwiping) {
                 cancelLongPress();
                 const directionSign = deltaX < 0 ? -1 : 1;
-                const rawMagnitude = Math.max(0, absX - 4);
-                const clampedMagnitude = Math.min(rawMagnitude * 0.75, 75);
+                const rawMagnitude = Math.max(0, absX - 16);
+                const clampedMagnitude = Math.min(rawMagnitude * 0.6, 68);
                 const appliedOffset = clampedMagnitude * directionSign;
 
                 swipeOffsetRef.current = appliedOffset;
@@ -1204,7 +1207,7 @@ const MessageList = React.memo(({
                     activeSwipeElRef.current.style.willChange = 'transform';
                   }
                   if (activeSwipeIndicatorRef.current) {
-                    const progress = Math.min(mag / 18, 1);
+                    const progress = Math.min(mag / 40, 1);
                     activeSwipeIndicatorRef.current.style.transition = 'none';
                     activeSwipeIndicatorRef.current.style.opacity = progress;
                     activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
@@ -1235,7 +1238,7 @@ const MessageList = React.memo(({
                 indicator.style.willChange = 'auto';
               }
 
-              if (wasSwiping && Math.abs(currentOffset) >= 15) {
+              if (wasSwiping && Math.abs(currentOffset) >= 40) {
                 const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
                 setReplyingTo({
                   id: targetMsg.id,
@@ -1297,14 +1300,14 @@ const MessageList = React.memo(({
               const deltaY = e.clientY - swipeStartRef.current.y;
               const absX = Math.abs(deltaX);
               const absY = Math.abs(deltaY);
-              const isValidDirection = isSent ? (deltaX < 0 || deltaX > 0) : (deltaX > 0);
+              const isValidDirection = isSent ? (deltaX < 0) : (deltaX > 0);
 
-              if (absX > 4 || absY > 4) cancelLongPress();
+              if (absX > 8 || absY > 8) cancelLongPress();
               if (!swipeStartRef.current.isSwiping) {
-                if (absX > 6 && absX > absY * 0.5 && isValidDirection) {
+                if (absX >= 18 && absX > absY * 1.5 && isValidDirection) {
                   swipeStartRef.current.isSwiping = true;
                   cancelLongPress();
-                } else if (absY > 12 && absY > absX * 0.8) {
+                } else if (absY > 8 && absY >= absX) {
                   cancelLongPress();
                   swipeStartRef.current = null;
                   return;
@@ -1314,8 +1317,8 @@ const MessageList = React.memo(({
               if (swipeStartRef.current.isSwiping) {
                 cancelLongPress();
                 const directionSign = deltaX < 0 ? -1 : 1;
-                const rawMagnitude = Math.max(0, absX - 4);
-                const clampedMagnitude = Math.min(rawMagnitude * 0.75, 75);
+                const rawMagnitude = Math.max(0, absX - 16);
+                const clampedMagnitude = Math.min(rawMagnitude * 0.6, 68);
                 const appliedOffset = clampedMagnitude * directionSign;
 
                 swipeOffsetRef.current = appliedOffset;
@@ -1331,7 +1334,7 @@ const MessageList = React.memo(({
                     activeSwipeElRef.current.style.willChange = 'transform';
                   }
                   if (activeSwipeIndicatorRef.current) {
-                    const progress = Math.min(mag / 18, 1);
+                    const progress = Math.min(mag / 40, 1);
                     activeSwipeIndicatorRef.current.style.transition = 'none';
                     activeSwipeIndicatorRef.current.style.opacity = progress;
                     activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
@@ -1362,7 +1365,7 @@ const MessageList = React.memo(({
                   indicator.style.willChange = 'auto';
                 }
 
-                if (wasSwiping && Math.abs(currentOffset) >= 15) {
+                if (wasSwiping && Math.abs(currentOffset) >= 40) {
                   const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
                   setReplyingTo({
                     id: targetMsg.id,
@@ -1590,6 +1593,7 @@ const ChatArea = React.memo(function ChatArea({
 
   // Fullscreen interactive Album Gallery Modal state (Group of images)
   const [activeGalleryModal, setActiveGalleryModal] = useState(null);
+  const [isClosingGalleryModal, setIsClosingGalleryModal] = useState(false);
   const activeGalleryRef = useRef(null);
   useEffect(() => {
     activeGalleryRef.current = activeGalleryModal;
@@ -1597,6 +1601,7 @@ const ChatArea = React.memo(function ChatArea({
   const isClosingGalleryRef = useRef(false);
 
   const handleOpenGallery = useCallback((items, index = 0) => {
+    setIsClosingGalleryModal(false);
     setActiveGalleryModal({ items, initialIndex: index });
     if (window.history.state !== 'gallery') {
       window.history.pushState('gallery', '');
@@ -1606,7 +1611,7 @@ const ChatArea = React.memo(function ChatArea({
   const handleCloseGallery = useCallback((isFromPopState = false) => {
     if (isClosingGalleryRef.current || !activeGalleryRef.current) return;
     isClosingGalleryRef.current = true;
-    setActiveGalleryModal(null);
+    setIsClosingGalleryModal(true);
     if (!isFromPopState && window.history.state === 'gallery') {
       window.__isProgrammaticPop = true;
       window.history.back();
@@ -1615,6 +1620,8 @@ const ChatArea = React.memo(function ChatArea({
       }, 100);
     }
     setTimeout(() => {
+      setActiveGalleryModal(null);
+      setIsClosingGalleryModal(false);
       isClosingGalleryRef.current = false;
     }, 250);
   }, []);
@@ -4046,6 +4053,7 @@ const ChatArea = React.memo(function ChatArea({
         <AlbumGalleryModal
           items={activeGalleryModal.items}
           initialIndex={activeGalleryModal.initialIndex || 0}
+          isExiting={isClosingGalleryModal}
           onClose={() => handleCloseGallery(false)}
         />
       )}

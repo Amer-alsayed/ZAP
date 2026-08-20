@@ -2404,23 +2404,26 @@ button {
   backdrop-filter: blur(24px) !important;
   -webkit-backdrop-filter: blur(24px) !important;
   z-index: 1000;
-  animation: attachMenuPop 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: attachMenuPop 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transform-origin: bottom left;
+  will-change: transform, opacity;
 }
 
 .attach-menu-popover.is-closing {
-  animation: attachMenuClose 0.18s ease-in forwards;
+  animation: attachMenuClose 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
 }
 
 @keyframes attachMenuPop {
   0% {
     opacity: 0;
-    transform: scale(0.88) translateY(10px);
+    transform: scale(0.9) translateY(12px);
+    filter: blur(3px);
   }
   100% {
     opacity: 1;
     transform: scale(1) translateY(0);
+    filter: blur(0px);
   }
 }
 
@@ -2428,10 +2431,12 @@ button {
   0% {
     opacity: 1;
     transform: scale(1) translateY(0);
+    filter: blur(0px);
   }
   100% {
     opacity: 0;
-    transform: scale(0.92) translateY(8px);
+    transform: scale(0.92) translateY(10px);
+    filter: blur(3px);
   }
 }
 
@@ -2612,23 +2617,26 @@ button {
   bottom: calc(100% + 12px);
   right: 68px;
   z-index: 1050;
-  animation: appleEmojiPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: appleEmojiPopIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transform-origin: bottom right;
+  will-change: transform, opacity;
 }
 
 .apple-emoji-popover-wrapper.is-closing {
-  animation: appleEmojiPopOut 0.18s ease-in forwards;
+  animation: appleEmojiPopOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
 }
 
 @keyframes appleEmojiPopIn {
   0% {
     opacity: 0;
-    transform: translateY(12px) scale(0.96);
+    transform: translateY(14px) scale(0.95);
+    filter: blur(4px);
   }
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
+    filter: blur(0px);
   }
 }
 
@@ -2636,10 +2644,12 @@ button {
   0% {
     opacity: 1;
     transform: translateY(0) scale(1);
+    filter: blur(0px);
   }
   100% {
     opacity: 0;
-    transform: translateY(8px) scale(0.97);
+    transform: translateY(12px) scale(0.95);
+    filter: blur(4px);
   }
 }
 
@@ -3107,6 +3117,7 @@ button {
   justify-content: space-between !important;
   user-select: none;
   cursor: default;
+  pointer-events: none;
   transition: 
     background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     backdrop-filter 0.25s cubic-bezier(0.4, 0, 0.2, 1),
@@ -3119,6 +3130,7 @@ button {
   background: rgba(0, 0, 0, 0.94) !important;
   backdrop-filter: blur(28px) !important;
   -webkit-backdrop-filter: blur(28px) !important;
+  pointer-events: auto;
 }
 
 .album-gallery-header {
@@ -3264,7 +3276,7 @@ button {
   transform: scale(0.92);
   opacity: 0;
   transition: 
-    transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
     opacity 0.22s ease;
 }
 
@@ -5270,13 +5282,19 @@ textarea {
 
 /* Chat Area Exit Animation when clicking Back */
 .chat-area.navigating-back {
-  animation: chatAreaFadeOut 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: chatAreaSlideFadeOut 0.22s cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
 }
 
-@keyframes chatAreaFadeOut {
-  0% { opacity: 1; }
-  100% { opacity: 0; }
+@keyframes chatAreaSlideFadeOut {
+  0% { 
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  100% { 
+    opacity: 0;
+    transform: translate3d(24px, 0, 0);
+  }
 }
 
 /* Responsive Mobile Rules */
