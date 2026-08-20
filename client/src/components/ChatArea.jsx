@@ -1771,11 +1771,11 @@ const ChatArea = React.memo(function ChatArea({
     if (textareaRef.current) {
       textareaRef.current.blur();
     }
+    setReplyingTo(null);
     setTimeout(() => {
-      setReplyingTo(null);
       setIsClosingReply(false);
       isClosingReplyRef.current = false;
-    }, 300);
+    }, 280);
   }, [setReplyingTo]);
 
   const clearReplyContext = useCallback(() => {

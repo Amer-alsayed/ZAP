@@ -658,15 +658,8 @@ export default function App() {
         restoreActiveViewState();
         return;
       }
-      
-      // 7. Dismiss active message reply banner if active
-      if (replyingToRef.current) {
-        setReplyingTo(null);
-        restoreActiveViewState();
-        return;
-      }
 
-      // 8. Return to sidebar / contacts list if we are inside a chat, settings, or recents view
+      // 7. Return to sidebar / contacts list if we are inside a chat, settings, or recents view
       if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
         handleBackToMenu(true);
       }
@@ -1687,6 +1680,9 @@ export default function App() {
     setActiveContact(null);
     setShowSettings(false);
     setShowRecents(false);
+    activeContactRef.current = null;
+    showSettingsRef.current = false;
+    showRecentsRef.current = false;
     setTimeout(() => {
       setIsNavigatingBack(false);
       setNavigatingBackFrom(null);
