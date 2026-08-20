@@ -1001,6 +1001,9 @@ const MessageList = React.memo(({
           if (baseMsg || target) {
             const replyTarget = baseMsg || target;
             setIsClosingReply?.(false);
+            if (window.history.state !== 'reply') {
+              window.history.pushState('reply', '');
+            }
             setReplyingTo({
               id: replyTarget.id,
               sender: replyTarget.sender,
@@ -1162,6 +1165,10 @@ const MessageList = React.memo(({
         setIsClosingReply?.(false);
         const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
         
+        if (window.history.state !== 'reply') {
+          window.history.pushState('reply', '');
+        }
+
         setReplyingTo({
           id: targetMsg.id,
           sender: targetMsg.sender,
@@ -1389,6 +1396,9 @@ const MessageList = React.memo(({
                               onClick={() => {
                                 const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
                                 setIsClosingReply?.(false);
+                                if (window.history.state !== 'reply') {
+                                  window.history.pushState('reply', '');
+                                }
                                 setReplyingTo({
                                   id: targetMsg.id,
                                   sender: targetMsg.sender,
@@ -1771,6 +1781,13 @@ const ChatArea = React.memo(function ChatArea({
     if (textareaRef.current) {
       textareaRef.current.blur();
     }
+    if (!isFromPopState && (window.history.state === 'reply' || window.history.state?.view === 'reply')) {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
     setReplyingTo(null);
     setTimeout(() => {
       setIsClosingReply(false);
@@ -1778,8 +1795,15 @@ const ChatArea = React.memo(function ChatArea({
     }, 280);
   }, [setReplyingTo]);
 
-  const clearReplyContext = useCallback(() => {
+  const clearReplyContext = useCallback((skipHistoryPop = false) => {
     setReplyingTo(null);
+    if (!skipHistoryPop && (window.history.state === 'reply' || window.history.state?.view === 'reply')) {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
   }, [setReplyingTo]);
 
   const handleClearAllFilesWithAnimation = useCallback(() => {
