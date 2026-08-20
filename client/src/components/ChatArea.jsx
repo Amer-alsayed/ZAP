@@ -1243,6 +1243,8 @@ const MessageList = React.memo(({
               }
 
               if (wasSwiping && currentOffset >= 24) {
+                setIsClosingReply(false);
+                isClosingReplyRef.current = false;
                 const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
                 setReplyingTo({
                   id: targetMsg.id,
@@ -1254,8 +1256,11 @@ const MessageList = React.memo(({
                 if (window.navigator && window.navigator.vibrate) {
                   try { window.navigator.vibrate(15); } catch (err) {}
                 }
-                // Call focus synchronously in touch gesture tick so mobile browser/OS shows virtual keyboard
+                // Call focus synchronously in touch gesture tick. If already activeElement, cycle blur first so Android IME re-opens
                 if (textareaRef.current) {
+                  if (document.activeElement === textareaRef.current) {
+                    textareaRef.current.blur();
+                  }
                   textareaRef.current.focus();
                   try {
                     const len = textareaRef.current.value.length;
@@ -1729,6 +1734,9 @@ const ChatArea = React.memo(function ChatArea({
     if (isClosingReplyRef.current || !replyingToRef.current) return;
     setIsClosingReply(true);
     isClosingReplyRef.current = true;
+    if (textareaRef.current) {
+      textareaRef.current.blur();
+    }
     if (!isFromPopState && window.history.state === 'reply') {
       window.__isProgrammaticPop = true;
       window.history.back();
@@ -1744,6 +1752,9 @@ const ChatArea = React.memo(function ChatArea({
   }, [setReplyingTo]);
 
   const clearReplyContext = useCallback((skipHistoryPop = false) => {
+    if (textareaRef.current) {
+      textareaRef.current.blur();
+    }
     setReplyingTo(null);
     if (!skipHistoryPop && window.history.state === 'reply') {
       window.__isProgrammaticPop = true;
@@ -1831,6 +1842,40 @@ const ChatArea = React.memo(function ChatArea({
 
     return false;
   }, [handleCloseGallery, closeEmojiPicker, closeAttachMenu, handleCancelReplyWithAnimation, handleClearAllFilesWithAnimation]);
+
+  const handleHeaderBackClick = useCallback(() => {
+    if (selectionModeRef.current) {
+      selectionCancelRef.current?.();
+      return;
+    }
+    if (activeGalleryRef.current && !isClosingGalleryRef.current) {
+      handleCloseGallery(true);
+      return;
+    }
+    if (showEmojiPickerRef.current && !isClosingEmojiPickerRef.current) {
+      closeEmojiPicker(true);
+      return;
+    }
+    if (showAttachMenuRef.current && !isClosingAttachMenuRef.current) {
+      closeAttachMenu(true);
+      return;
+    }
+    if (isRecordingRef.current) {
+      stopRecordingRef.current?.(false);
+      return;
+    }
+    if (replyingToRef.current && !isClosingReplyRef.current) {
+      handleCancelReplyWithAnimation(false);
+      return;
+    }
+    if (selectedFilesRef.current?.length > 0 && !isClearingFilesRef.current) {
+      handleClearAllFilesWithAnimation();
+      return;
+    }
+    if (typeof onBack === 'function') {
+      onBack();
+    }
+  }, [onBack, handleCloseGallery, closeEmojiPicker, closeAttachMenu, handleCancelReplyWithAnimation, handleClearAllFilesWithAnimation]);
 
   useEffect(() => {
     if (chatBackHandlerRef) chatBackHandlerRef.current = handleChatBack;
@@ -1940,7 +1985,14 @@ const ChatArea = React.memo(function ChatArea({
     if (replyingTo) {
       setActiveReplyInfo(replyingTo);
       if (textareaRef.current && !selectionModeRef.current) {
+        if (document.activeElement === textareaRef.current) {
+          textareaRef.current.blur();
+        }
         textareaRef.current.focus({ preventScroll: true });
+        try {
+          const len = textareaRef.current.value.length;
+          textareaRef.current.setSelectionRange(len, len);
+        } catch (e) {}
       }
     }
   }, [replyingTo]);
@@ -3469,7 +3521,7 @@ const ChatArea = React.memo(function ChatArea({
       {/* Header */}
       <div className="chat-header glass">
         <div className="chat-header-info">
-          <button className={`back-btn ${selectionMode ? 'selection-back-btn' : ''}`} onClick={handleChatBack} title={selectionMode ? 'Cancel selection' : 'Back to menu'} aria-label={selectionMode ? 'Cancel selection' : 'Back to menu'}>
+          <button className={`back-btn ${selectionMode ? 'selection-back-btn' : ''}`} onClick={handleHeaderBackClick} title={selectionMode ? 'Cancel selection' : 'Back to menu'} aria-label={selectionMode ? 'Cancel selection' : 'Back to menu'}>
             <div className="btn-icon-wrapper" key={selectionMode ? 'cancel-icon' : 'back-icon'}>
               {selectionMode ? <X size={18} /> : <ArrowLeft size={18} />}
             </div>
