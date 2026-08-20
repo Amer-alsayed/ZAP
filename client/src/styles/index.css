@@ -10583,10 +10583,26 @@ textarea {
     margin-bottom: 0 !important;
   }
 
-  /* Emoji-only: keep compact */
-  .message-bubble.emoji-only-bubble.count-1 { font-size: 42px !important; }
-  .message-bubble.emoji-only-bubble.count-2 { font-size: 36px !important; }
-  .message-bubble.emoji-only-bubble.count-3 { font-size: 30px !important; }
+  /* Emoji-only: restore proper large sizing on mobile (was shrunk too much) */
+  .message-bubble.emoji-only-bubble,
+  .message-wrapper.sent .message-bubble.emoji-only-bubble,
+  .message-wrapper.received .message-bubble.emoji-only-bubble,
+  .message-wrapper.emoji-only-wrapper .message-bubble {
+    padding: 2px 4px !important;
+    letter-spacing: 3px !important;
+  }
+  .message-bubble.emoji-only-bubble.count-1,
+  .message-wrapper.sent .message-bubble.emoji-only-bubble.count-1,
+  .message-wrapper.received .message-bubble.emoji-only-bubble.count-1,
+  .message-wrapper.emoji-only-wrapper .message-bubble.count-1 { font-size: 52px !important; }
+  .message-bubble.emoji-only-bubble.count-2,
+  .message-wrapper.sent .message-bubble.emoji-only-bubble.count-2,
+  .message-wrapper.received .message-bubble.emoji-only-bubble.count-2,
+  .message-wrapper.emoji-only-wrapper .message-bubble.count-2 { font-size: 42px !important; }
+  .message-bubble.emoji-only-bubble.count-3,
+  .message-wrapper.sent .message-bubble.emoji-only-bubble.count-3,
+  .message-wrapper.received .message-bubble.emoji-only-bubble.count-3,
+  .message-wrapper.emoji-only-wrapper .message-bubble.count-3 { font-size: 34px !important; }
   .message-bubble.emoji-only-bubble .inline-message-meta { margin-top: 2px !important; }
 
   /* Date & E2EE banners — slimmer */
@@ -10616,14 +10632,42 @@ textarea {
   .reply-context-text { font-size: 11.5px !important; }
   .reply-image-thumbnail { width: 28px !important; height: 28px !important; }
 
-  /* System call logs — compact */
-  .system-call-log-card {
-    padding: 6px 12px !important;
-    gap: 7px !important;
-    border-radius: 18px !important;
-    font-size: 12px !important;
+  /* System call logs — minimal phone pill, de-cluttered from chat bubbles */
+  .system-call-log-container {
+    margin: 10px 0 8px 0 !important;
+    padding: 0 8px !important;
   }
-  .system-call-log-details { gap: 4px !important; font-size: 11.5px !important; }
+  .system-call-log-card {
+    padding: 5px 10px !important;
+    gap: 6px !important;
+    border-radius: 16px !important;
+    font-size: 11px !important;
+    max-width: 82% !important;
+    background: rgba(18, 18, 18, 0.55) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    box-shadow: none !important;
+  }
+  .system-call-log-icon {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+  }
+  .system-call-log-icon svg { width: 10px !important; height: 10px !important; }
+  .system-call-log-details { gap: 3px !important; font-size: 11px !important; flex-wrap: wrap !important; line-height: 1.2 !important; }
+  .system-call-log-text { font-size: 11px !important; font-weight: 500 !important; }
+  .system-call-duration { font-size: 10.5px !important; }
+  .system-call-time { font-size: 9px !important; opacity: 0.9 !important; }
+  .system-call-bullet { font-size: 8px !important; margin: 0 1px !important; }
+  /* Legacy call-log-card variant (bubble-embedded) also compact */
+  .call-log-card { padding: 6px 10px !important; gap: 6px !important; border-radius: 12px !important; max-width: 82% !important; }
+  .call-log-icon-container { width: 18px !important; height: 18px !important; min-width: 18px !important; }
+  .call-log-icon-container svg { width: 10px !important; height: 10px !important; }
+  .call-log-details { gap: 3px !important; }
+  .call-log-title { font-size: 11px !important; }
+  .call-log-subtitle { font-size: 10px !important; }
 
   /* ---- Media: shrink to feel like phone-native ---- */
   /* Album grids: narrower, tighter gap */
