@@ -605,15 +605,28 @@ export default function App() {
         return;
       }
 
+      // Helper to restore current view history state when an overlay/layer consumes a popstate
+      const restoreActiveViewState = () => {
+        if (activeContactRef.current && window.history.state !== 'chat') {
+          window.history.pushState('chat', '');
+        } else if (showSettingsRef.current && window.history.state !== 'settings') {
+          window.history.pushState('settings', '');
+        } else if (showRecentsRef.current && window.history.state !== 'recents') {
+          window.history.pushState('recents', '');
+        }
+      };
+
       // 1. Close lightbox viewer if active
       if (lightboxRef.current) {
         setLightboxImageSrc(null);
+        restoreActiveViewState();
         return;
       }
 
       // 2. Close safety verification modal if active
       if (showSafetyModalRef.current) {
         handleCloseSafetyModal(true);
+        restoreActiveViewState();
         return;
       }
       
@@ -623,28 +636,33 @@ export default function App() {
           document.exitFullscreen?.().catch(() => {});
         }
         setIsFullscreen(false);
+        restoreActiveViewState();
         return;
       }
       
       // 4. Minimize full-screen WebRTC call if active
       if (callStateRef.current === 'connected' && !isCallMinimizedRef.current) {
         setIsCallMinimized(true);
+        restoreActiveViewState();
         return;
       }
 
       // 5. Let active ChatArea internal layers (Album Gallery, Emoji Picker, Attach Menu, Recording, Selection, Reply, Files) consume the back event
       if (chatBackHandlerRef.current?.()) {
+        restoreActiveViewState();
         return;
       }
 
       // 6. Selection fallback if chatBackHandlerRef wasn't hooked
       if (selectionBackRef.current?.()) {
+        restoreActiveViewState();
         return;
       }
       
       // 7. Dismiss active message reply banner if active
       if (replyingToRef.current) {
         setReplyingTo(null);
+        restoreActiveViewState();
         return;
       }
 
