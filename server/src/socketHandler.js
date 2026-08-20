@@ -635,7 +635,9 @@ export const socketHandler = (io) => {
         query += ` LIMIT ?`;
         params.push(safeLimit);
 
-        const formattedMessages = messages.map(m => {
+        const messages = await dbAll(query, params);
+
+        const formattedMessages = (messages || []).map(m => {
           let ts = m.timestamp;
           if (typeof ts === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(ts)) {
             ts = ts.replace(' ', 'T') + 'Z';
