@@ -368,9 +368,17 @@ export default function App() {
   const [activeLightboxSrc, setActiveLightboxSrc] = useState(null);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [isSafetyModalClosing, setIsSafetyModalClosing] = useState(false);
+  const chatBackHandlerRef = useRef(null);
 
-  const handleCloseSafetyModal = () => {
+  const handleCloseSafetyModal = (isFromPop = false) => {
     setIsSafetyModalClosing(true);
+    if (!isFromPop && window.history.state === 'safety') {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
     setTimeout(() => {
       setShowSafetyModal(false);
       setIsSafetyModalClosing(false);
@@ -436,6 +444,9 @@ export default function App() {
 
   const handleOpenSafetyModal = useCallback(() => {
     setShowSafetyModal(true);
+    if (window.history.state !== 'safety') {
+      window.history.pushState('safety', '');
+    }
   }, []);
 
   const handleOpenLightbox = (src) => {
@@ -451,7 +462,11 @@ export default function App() {
     }
     setLightboxImageSrc(null);
     if (window.history.state === 'lightbox') {
-      window.history.replaceState(activeContactRef.current ? 'chat' : null, '');
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
     }
   };
 
@@ -578,7 +593,12 @@ export default function App() {
   // Handle native back gestures (Android back button & mobile browser back)
   useEffect(() => {
     const handlePopState = (e) => {
-      // 0. Ignore popstate if it's from voice recording, call termination, or fullscreen exit
+      // 0. Ignore popstate if this event was triggered by programmatic history.back()
+      if (window.__isProgrammaticPop) {
+        return;
+      }
+
+      // 0b. Ignore popstate if it's from voice recording, call termination, or fullscreen exit
       if (window.__isChatraRecording || window.__isPoppingRecording || window.__isPoppingCall || window.__isPoppingFullscreen) {
         window.__isPoppingCall = false;
         window.__isPoppingFullscreen = false;
@@ -593,7 +613,7 @@ export default function App() {
 
       // 2. Close safety verification modal if active
       if (showSafetyModalRef.current) {
-        handleCloseSafetyModal();
+        handleCloseSafetyModal(true);
         return;
       }
       
@@ -612,18 +632,23 @@ export default function App() {
         return;
       }
 
-      // Cancel message selection before leaving the conversation.
+      // 5. Let active ChatArea internal layers (Album Gallery, Emoji Picker, Attach Menu, Recording, Selection, Reply, Files) consume the back event
+      if (chatBackHandlerRef.current?.()) {
+        return;
+      }
+
+      // 6. Selection fallback if chatBackHandlerRef wasn't hooked
       if (selectionBackRef.current?.()) {
         return;
       }
       
-      // 5. Dismiss active message reply banner if active
+      // 7. Dismiss active message reply banner if active
       if (replyingToRef.current) {
         setReplyingTo(null);
         return;
       }
 
-      // 6. Return to sidebar / contacts list if we are inside a chat, settings, or recents view
+      // 8. Return to sidebar / contacts list if we are inside a chat, settings, or recents view
       if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
         handleBackToMenu(true);
       }
@@ -2934,6 +2959,7 @@ export default function App() {
                     onBlockContact={handleBlockContact}
                     onDeleteMessages={deleteMessagesLocal}
                     selectionCancelCallbackRef={selectionBackRef}
+                    chatBackHandlerRef={chatBackHandlerRef}
                     onOpenSafetyModal={handleOpenSafetyModal}
                     replyingTo={replyingTo}
                     setReplyingTo={setReplyingTo}

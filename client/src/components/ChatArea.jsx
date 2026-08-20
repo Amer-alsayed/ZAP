@@ -732,24 +732,7 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
 };
 
 // WhatsApp-style Media Collage Grid with Fullscreen Gallery Modal Support
-const MediaAlbumGrid = React.memo(function MediaAlbumGrid({ albumItems, onImageClick, selectionMode, isLast, handleImageLoad }) {
-  const [galleryIndex, setGalleryIndex] = useState(null);
-  // Back button: gallery closes on back, not main menu (respects emoji/attach stack)
-  useEffect(() => {
-    if (galleryIndex !== null) {
-      if (window.history.state?.gallery) return;
-      window.history.pushState({ gallery: true }, '');
-      const onPop = (e) => {
-        if (window.history.state?.gallery) return;
-        if (e) e.stopImmediatePropagation?.();
-        setGalleryIndex(null);
-      };
-      window.addEventListener('popstate', onPop, { capture: true, once: true });
-      return () => window.removeEventListener('popstate', onPop, { capture: true });
-    } else if (window.history.state?.gallery) {
-      window.history.replaceState(null, '');
-    }
-  }, [galleryIndex]);
+const MediaAlbumGrid = React.memo(function MediaAlbumGrid({ albumItems, onImageClick, selectionMode, isLast, handleImageLoad, onOpenGallery }) {
   const total = albumItems.length;
 
   const displayItems = albumItems.slice(0, 4);
@@ -760,67 +743,57 @@ const MediaAlbumGrid = React.memo(function MediaAlbumGrid({ albumItems, onImageC
   else if (total === 3) gridClass = 'album-grid-3';
 
   return (
-    <>
-      <div className="media-album-wrapper">
-        <div className={`media-album-grid ${gridClass}`}>
-          {displayItems.map((item, idx) => {
-            const isFourthWithMore = idx === 3 && total > 4;
-            const file = item.fileMetadata;
-            const isImage = file?.mimeType?.startsWith('image/');
-            const isVideo = file?.mimeType?.startsWith('video/');
+    <div className="media-album-wrapper">
+      <div className={`media-album-grid ${gridClass}`}>
+        {displayItems.map((item, idx) => {
+          const isFourthWithMore = idx === 3 && total > 4;
+          const file = item.fileMetadata;
+          const isImage = file?.mimeType?.startsWith('image/');
+          const isVideo = file?.mimeType?.startsWith('video/');
 
-            return (
-              <div 
-                key={item.id || idx} 
-                className={`album-grid-cell cell-${idx + 1}`}
-                onClick={(e) => {
-                  if (selectionMode) return;
-                  e.stopPropagation();
-                  setGalleryIndex(idx);
-                }}
-              >
-                {isImage ? (
-                  <ImagePreviewLoader 
-                    fileMetadata={file} 
-                    onImageClick={() => {
-                      if (!selectionMode) setGalleryIndex(idx);
-                    }}
-                    onImageLoad={handleImageLoad} 
-                  />
-                ) : isVideo ? (
-                  <VideoPreviewLoader fileMetadata={file} />
-                ) : null}
+          return (
+            <div 
+              key={item.id || idx} 
+              className={`album-grid-cell cell-${idx + 1}`}
+              onClick={(e) => {
+                if (selectionMode) return;
+                e.stopPropagation();
+                if (onOpenGallery) onOpenGallery(albumItems, idx);
+              }}
+            >
+              {isImage ? (
+                <ImagePreviewLoader 
+                  fileMetadata={file} 
+                  onImageClick={() => {
+                    if (!selectionMode && onOpenGallery) onOpenGallery(albumItems, idx);
+                  }}
+                  onImageLoad={handleImageLoad} 
+                />
+              ) : isVideo ? (
+                <VideoPreviewLoader fileMetadata={file} />
+              ) : null}
 
-                {isFourthWithMore && (
-                  <div 
-                    className="album-more-overlay"
-                    role="button"
-                    title={`View all ${total} media items in full screen`}
-                    onClick={(e) => {
-                      if (selectionMode) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setGalleryIndex(3);
-                    }}
-                  >
-                    <span className="album-more-text">+{remainingCount}</span>
-                    <span className="album-more-sub">See all {total}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              {isFourthWithMore && (
+                <div 
+                  className="album-more-overlay"
+                  role="button"
+                  title={`View all ${total} media items in full screen`}
+                  onClick={(e) => {
+                    if (selectionMode) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (onOpenGallery) onOpenGallery(albumItems, 3);
+                  }}
+                >
+                  <span className="album-more-text">+{remainingCount}</span>
+                  <span className="album-more-sub">See all {total}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-
-      {galleryIndex !== null && (
-        <AlbumGalleryModal 
-          items={albumItems} 
-          initialIndex={galleryIndex} 
-          onClose={() => setGalleryIndex(null)} 
-        />
-      )}
-    </>
+    </div>
   );
 });
 // ==========================================
@@ -1565,6 +1538,7 @@ const ChatArea = React.memo(function ChatArea({
   onBlockContact,
   onDeleteMessages,
   selectionCancelCallbackRef,
+  chatBackHandlerRef,
   onOpenSafetyModal,
   replyingTo,
   setReplyingTo,
@@ -1582,18 +1556,6 @@ const ChatArea = React.memo(function ChatArea({
     setSelectionCount(count);
     setSelectionCanCopy(Boolean(canCopy));
   };
-  const handleChatBack = () => {
-    if (selectionMode) {
-      selectionCancelRef.current?.();
-      return true;
-    }
-    onBack();
-    return false;
-  };
-  useEffect(() => {
-    if (selectionCancelCallbackRef) selectionCancelCallbackRef.current = handleChatBack;
-    return () => { if (selectionCancelCallbackRef) selectionCancelCallbackRef.current = null; };
-  }, [selectionCancelCallbackRef, selectionMode]);
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingExitMode, setRecordingExitMode] = useState(null); // 'cancel' | 'send' | null
@@ -1606,6 +1568,57 @@ const ChatArea = React.memo(function ChatArea({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // { filename, current, total, status, percent }
 
+  // Refs for tracking back-navigation state without stale closures
+  const isRecordingRef = useRef(false);
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+    window.__isChatraRecording = isRecording;
+  }, [isRecording]);
+  const stopRecordingRef = useRef(null);
+
+  const replyingToRef = useRef(replyingTo);
+  useEffect(() => {
+    replyingToRef.current = replyingTo;
+  }, [replyingTo]);
+  const isClosingReplyRef = useRef(false);
+
+  const selectedFilesRef = useRef(selectedFiles);
+  useEffect(() => {
+    selectedFilesRef.current = selectedFiles;
+  }, [selectedFiles]);
+  const isClearingFilesRef = useRef(false);
+
+  // Fullscreen interactive Album Gallery Modal state (Group of images)
+  const [activeGalleryModal, setActiveGalleryModal] = useState(null);
+  const activeGalleryRef = useRef(null);
+  useEffect(() => {
+    activeGalleryRef.current = activeGalleryModal;
+  }, [activeGalleryModal]);
+  const isClosingGalleryRef = useRef(false);
+
+  const handleOpenGallery = useCallback((items, index = 0) => {
+    setActiveGalleryModal({ items, initialIndex: index });
+    if (window.history.state !== 'gallery') {
+      window.history.pushState('gallery', '');
+    }
+  }, []);
+
+  const handleCloseGallery = useCallback((isFromPopState = false) => {
+    if (isClosingGalleryRef.current || !activeGalleryRef.current) return;
+    isClosingGalleryRef.current = true;
+    setActiveGalleryModal(null);
+    if (!isFromPopState && window.history.state === 'gallery') {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
+    setTimeout(() => {
+      isClosingGalleryRef.current = false;
+    }, 250);
+  }, []);
+
   // Warm up and pre-decode cached media for instant 0ms access across conversations
   useEffect(() => {
     if (activeContact?.messages?.length) {
@@ -1615,50 +1628,85 @@ const ChatArea = React.memo(function ChatArea({
 
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isClosingAttachMenu, setIsClosingAttachMenu] = useState(false);
+  const showAttachMenuRef = useRef(false);
+  useEffect(() => {
+    showAttachMenuRef.current = showAttachMenu;
+  }, [showAttachMenu]);
+  const isClosingAttachMenuRef = useRef(false);
   const attachMenuRef = useRef(null);
   const attachBtnRef = useRef(null);
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isClosingEmojiPicker, setIsClosingEmojiPicker] = useState(false);
   const [hasMountedEmojiPicker, setHasMountedEmojiPicker] = useState(true);
+  const showEmojiPickerRef = useRef(false);
+  useEffect(() => {
+    showEmojiPickerRef.current = showEmojiPicker;
+  }, [showEmojiPicker]);
+  const isClosingEmojiPickerRef = useRef(false);
   const emojiPickerRef = useRef(null);
   const emojiBtnRef = useRef(null);
 
-  const closeEmojiPicker = useCallback(() => {
-    if (!showEmojiPicker || isClosingEmojiPicker) return;
+  const closeAttachMenu = useCallback((isFromPopState = false) => {
+    if (!showAttachMenuRef.current || isClosingAttachMenuRef.current) return;
+    setIsClosingAttachMenu(true);
+    isClosingAttachMenuRef.current = true;
+    if (!isFromPopState && (window.history.state === 'attach' || window.history.state?.attachMenu)) {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
+    setTimeout(() => {
+      setShowAttachMenu(false);
+      setIsClosingAttachMenu(false);
+      isClosingAttachMenuRef.current = false;
+    }, 300);
+  }, []);
+
+  const closeEmojiPicker = useCallback((isFromPopState = false) => {
+    if (!showEmojiPickerRef.current || isClosingEmojiPickerRef.current) return;
     setIsClosingEmojiPicker(true);
+    isClosingEmojiPickerRef.current = true;
+    if (!isFromPopState && (window.history.state === 'emoji' || window.history.state?.emojiPicker)) {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
     setTimeout(() => {
       setShowEmojiPicker(false);
       setIsClosingEmojiPicker(false);
-    }, 320);
-  }, [showEmojiPicker, isClosingEmojiPicker]);
+      isClosingEmojiPickerRef.current = false;
+    }, 300);
+  }, []);
+
+  const toggleAttachMenu = useCallback(() => {
+    if (showAttachMenu) {
+      closeAttachMenu(false);
+    } else {
+      if (showEmojiPicker) closeEmojiPicker(false);
+      setShowAttachMenu(true);
+      if (window.history.state !== 'attach') {
+        window.history.pushState('attach', '');
+      }
+    }
+  }, [showAttachMenu, closeAttachMenu, showEmojiPicker, closeEmojiPicker]);
 
   const toggleEmojiPicker = useCallback(() => {
     if (showEmojiPicker) {
-      closeEmojiPicker();
+      closeEmojiPicker(false);
     } else {
       setHasMountedEmojiPicker(true);
-      if (showAttachMenu) closeAttachMenu();
+      if (showAttachMenu) closeAttachMenu(false);
       setShowEmojiPicker(true);
+      if (window.history.state !== 'emoji') {
+        window.history.pushState('emoji', '');
+      }
     }
-  }, [showEmojiPicker, closeEmojiPicker, showAttachMenu]);
-
-  // Back button: emoji picker closes on back, not main menu (checks state to respect gallery stack)
-  useEffect(() => {
-    if (showEmojiPicker && !isClosingEmojiPicker) {
-      if (window.history.state?.emojiPicker) return;
-      window.history.pushState({ emojiPicker: true }, '');
-      const onPop = (e) => {
-        if (window.history.state?.emojiPicker) return;
-        if (e) e.stopImmediatePropagation?.();
-        closeEmojiPicker();
-      };
-      window.addEventListener('popstate', onPop, { capture: true, once: true });
-      return () => window.removeEventListener('popstate', onPop, { capture: true });
-    } else if (!showEmojiPicker && window.history.state?.emojiPicker) {
-      window.history.replaceState(null, '');
-    }
-  }, [showEmojiPicker, isClosingEmojiPicker, closeEmojiPicker]);
+  }, [showEmojiPicker, closeEmojiPicker, showAttachMenu, closeAttachMenu]);
 
   const adjustTextareaHeight = useCallback((el) => {
     if (!el) return;
@@ -1733,7 +1781,7 @@ const ChatArea = React.memo(function ChatArea({
         attachBtnRef.current &&
         !attachBtnRef.current.contains(e.target)
       ) {
-        closeAttachMenu();
+        closeAttachMenu(false);
       }
       if (
         emojiPickerRef.current &&
@@ -1741,13 +1789,13 @@ const ChatArea = React.memo(function ChatArea({
         emojiBtnRef.current &&
         !emojiBtnRef.current.contains(e.target)
       ) {
-        closeEmojiPicker();
+        closeEmojiPicker(false);
       }
     };
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        closeAttachMenu();
-        closeEmojiPicker();
+        closeAttachMenu(false);
+        closeEmojiPicker(false);
       }
     };
     if (showAttachMenu || showEmojiPicker) {
@@ -1760,7 +1808,7 @@ const ChatArea = React.memo(function ChatArea({
       document.removeEventListener('touchstart', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showAttachMenu, showEmojiPicker, closeEmojiPicker]);
+  }, [showAttachMenu, showEmojiPicker, closeAttachMenu, closeEmojiPicker]);
 
   const [isBannerDismissing, setIsBannerDismissing] = useState(false);
   const [dismissedBannerUser, setDismissedBannerUser] = useState(null);
@@ -1775,14 +1823,34 @@ const ChatArea = React.memo(function ChatArea({
     }, 280);
   };
 
-  const handleCancelReplyWithAnimation = useCallback(() => {
-    if (isClosingReply || !replyingTo) return;
+  const handleCancelReplyWithAnimation = useCallback((isFromPopState = false) => {
+    if (isClosingReplyRef.current || !replyingToRef.current) return;
     setIsClosingReply(true);
+    isClosingReplyRef.current = true;
+    if (!isFromPopState && window.history.state === 'reply') {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
     setTimeout(() => {
       setReplyingTo(null);
       setIsClosingReply(false);
-    }, 320);
-  }, [isClosingReply, replyingTo, setReplyingTo]);
+      isClosingReplyRef.current = false;
+    }, 300);
+  }, [setReplyingTo]);
+
+  const clearReplyContext = useCallback((skipHistoryPop = false) => {
+    setReplyingTo(null);
+    if (!skipHistoryPop && window.history.state === 'reply') {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
+  }, [setReplyingTo]);
 
   const handleClearAllFilesWithAnimation = useCallback(() => {
     if (isClearingFiles || selectedFiles.length === 0) return;
@@ -1815,63 +1883,64 @@ const ChatArea = React.memo(function ChatArea({
     }, 280);
   };
 
-  const closeAttachMenu = () => {
-    if (!showAttachMenu) return;
-    setIsClosingAttachMenu(true);
-    window.setTimeout(() => {
-      setShowAttachMenu(false);
-      setIsClosingAttachMenu(false);
-    }, 320);
-  };
-
-  // Back button: attach menu closes on back, not main menu (respects emoji/gallery stack)
-  useEffect(() => {
-    if (showAttachMenu && !isClosingAttachMenu) {
-      if (window.history.state?.attachMenu) return;
-      window.history.pushState({ attachMenu: true }, '');
-      const onPop = (e) => {
-        if (window.history.state?.attachMenu) return;
-        if (e) e.stopImmediatePropagation?.();
-        closeAttachMenu();
-      };
-      window.addEventListener('popstate', onPop, { capture: true, once: true });
-      return () => window.removeEventListener('popstate', onPop, { capture: true });
-    } else if (!showAttachMenu && window.history.state?.attachMenu) {
-      window.history.replaceState(null, '');
+  // Centralized LIFO back handler for chat internal layers
+  const handleChatBack = useCallback(() => {
+    // 1. Close active album gallery modal if open
+    if (activeGalleryRef.current && !isClosingGalleryRef.current) {
+      handleCloseGallery(true);
+      return true;
     }
-  }, [showAttachMenu, isClosingAttachMenu]);
 
-  // Close attach popover menu on outside click or Escape key
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (
-        attachMenuRef.current && 
-        !attachMenuRef.current.contains(e.target) &&
-        attachBtnRef.current &&
-        !attachBtnRef.current.contains(e.target)
-      ) {
-        closeAttachMenu();
-      }
-    };
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        closeAttachMenu();
-      }
-    };
-    if (showAttachMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('touchstart', handleClickOutside);
-      document.addEventListener('keydown', handleKeyDown);
+    // 2. Close emoji picker if open
+    if (showEmojiPickerRef.current && !isClosingEmojiPickerRef.current) {
+      closeEmojiPicker(true);
+      return true;
     }
+
+    // 3. Close attach menu if open
+    if (showAttachMenuRef.current && !isClosingAttachMenuRef.current) {
+      closeAttachMenu(true);
+      return true;
+    }
+
+    // 4. Cancel voice recording if in progress
+    if (isRecordingRef.current) {
+      stopRecordingRef.current?.(false);
+      return true;
+    }
+
+    // 5. Cancel message selection if active
+    if (selectionModeRef.current) {
+      selectionCancelRef.current?.();
+      return true;
+    }
+
+    // 6. Dismiss reply mode with smooth animation if active
+    if (replyingToRef.current && !isClosingReplyRef.current) {
+      handleCancelReplyWithAnimation(true);
+      return true;
+    }
+
+    // 7. Clear pending file attachments if any
+    if (selectedFilesRef.current?.length > 0 && !isClearingFilesRef.current) {
+      handleClearAllFilesWithAnimation();
+      return true;
+    }
+
+    return false;
+  }, [handleCloseGallery, closeEmojiPicker, closeAttachMenu, handleCancelReplyWithAnimation, handleClearAllFilesWithAnimation]);
+
+  useEffect(() => {
+    if (chatBackHandlerRef) chatBackHandlerRef.current = handleChatBack;
+    if (selectionCancelCallbackRef) selectionCancelCallbackRef.current = handleChatBack;
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
+      if (chatBackHandlerRef) chatBackHandlerRef.current = null;
+      if (selectionCancelCallbackRef) selectionCancelCallbackRef.current = null;
     };
-  }, [showAttachMenu]);
+  }, [chatBackHandlerRef, selectionCancelCallbackRef, handleChatBack]);
 
   const openFilePicker = (acceptType = '*/*', captureType = null) => {
-    closeAttachMenu();
+    closeAttachMenu(false);
     const fileInput = document.getElementById('file-input');
     if (fileInput) {
       fileInput.accept = acceptType;
@@ -1911,7 +1980,6 @@ const ChatArea = React.memo(function ChatArea({
   const [activeFileInfo, setActiveFileInfo] = useState(null);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isLastMessageVisible, setIsLastMessageVisible] = useState(true);
-  const [activeGalleryModal, setActiveGalleryModal] = useState(null);
   const lastMessageRef = useRef(null);
   // Pagination: only render last 70 for big-chat perf (keeps DOM light)
   const [visibleCount, setVisibleCount] = useState(70);
@@ -2692,7 +2760,7 @@ const ChatArea = React.memo(function ChatArea({
 
     // Reset input fields instantly
     setInputText('');
-    setReplyingTo(null);
+    clearReplyContext();
     if (textareaRef.current) {
       textareaRef.current.style.height = '38px';
       textareaRef.current.focus({ preventScroll: true });
@@ -3009,12 +3077,6 @@ const ChatArea = React.memo(function ChatArea({
     }
   };
 
-  const isRecordingRef = useRef(isRecording);
-  useEffect(() => {
-    isRecordingRef.current = isRecording;
-    window.__isChatraRecording = isRecording;
-  }, [isRecording]);
-
   // Push history state 'recording' when voice recording is active
   useEffect(() => {
     if (isRecording) {
@@ -3114,6 +3176,7 @@ const ChatArea = React.memo(function ChatArea({
       }, 140);
     }
   };
+  stopRecordingRef.current = stopRecording;
 
   const processAndSendVoiceNote = async (audioBlob) => {
     if (!audioBlob || audioBlob.size === 0) {
@@ -3187,7 +3250,7 @@ const ChatArea = React.memo(function ChatArea({
         },
         replyTo: replyContext
       });
-      setReplyingTo(null);
+      clearReplyContext();
       soundEngine.playMessageSent();
     } catch (err) {
       console.error('Error sending voice note:', err);
@@ -3319,6 +3382,7 @@ const ChatArea = React.memo(function ChatArea({
             selectionMode={selectionModeRef.current} 
             isLast={isLast}
             handleImageLoad={handleImageLoad}
+            onOpenGallery={handleOpenGallery}
           />
           {msg.text && <p className="media-caption">{renderFormattedText(msg.text)}</p>}
         </div>
@@ -3369,7 +3433,7 @@ const ChatArea = React.memo(function ChatArea({
               fileMetadata={file} 
               onImageClick={() => {
                 if (!selectionModeRef.current) {
-                  setActiveGalleryModal({ items: [msg], initialIndex: 0 });
+                  handleOpenGallery([msg], 0);
                 }
               }} 
               onImageLoad={handleImageLoad} 
@@ -3493,7 +3557,7 @@ const ChatArea = React.memo(function ChatArea({
     }
     // Default plaintext
     return renderFormattedText(msg.text);
-  }, [playingAudioId, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick, activeContact?.username]);
+  }, [playingAudioId, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick, activeContact?.username, handleOpenGallery]);
 
   return (
     <div className={`chat-area ${isNavigatingBack ? 'navigating-back' : ''}`}>
@@ -3685,7 +3749,7 @@ const ChatArea = React.memo(function ChatArea({
                 className="reply-preview-close" 
                 onClick={(e) => {
                   e.currentTarget.blur();
-                  handleCancelReplyWithAnimation();
+                  handleCancelReplyWithAnimation(false);
                 }} 
                 title="Cancel reply" 
                 aria-label="Cancel reply"
@@ -3982,7 +4046,7 @@ const ChatArea = React.memo(function ChatArea({
         <AlbumGalleryModal
           items={activeGalleryModal.items}
           initialIndex={activeGalleryModal.initialIndex || 0}
-          onClose={() => setActiveGalleryModal(null)}
+          onClose={() => handleCloseGallery(false)}
         />
       )}
     </div>

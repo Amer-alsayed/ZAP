@@ -1874,9 +1874,12 @@ button {
   cursor: wait !important;
 }
 
-/* Media preview attachment bar */
+/* Media preview attachment bar — smooth collapse & shadow fade */
 .attachment-preview-bar {
   border-radius: 20px !important;
+  min-height: 0;
+  max-height: 0;
+  opacity: 0;
   margin-bottom: 0;
   padding: 0 10px;
   display: flex;
@@ -1884,55 +1887,58 @@ button {
   justify-content: space-between;
   backdrop-filter: blur(24px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-  
-  /* Smooth collapse transitions — professional */
-  max-height: 0;
-  opacity: 0;
   overflow: hidden;
   visibility: hidden;
   box-sizing: border-box !important;
   border: 1px solid transparent !important;
-  transform: translateY(8px) scale(0.97);
-  background: transparent;
-  box-shadow: none;
+  transform: translateY(6px) scale(0.98);
+  background: transparent !important;
+  box-shadow: 0 0 0 transparent, inset 0 0 0 transparent !important;
   transition: 
-    max-height 0.32s cubic-bezier(0.32, 0.72, 0, 1),
-    opacity 0.24s cubic-bezier(0.32, 0.72, 0, 1),
-    margin-bottom 0.32s cubic-bezier(0.32, 0.72, 0, 1),
-    padding 0.32s cubic-bezier(0.32, 0.72, 0, 1),
-    transform 0.32s cubic-bezier(0.32, 0.72, 0, 1),
-    background 0.28s ease,
-    border-color 0.28s ease,
-    box-shadow 0.28s ease,
-    backdrop-filter 0.28s ease,
-    visibility 0.32s ease;
-  will-change: max-height, opacity, transform, margin-bottom;
+    min-height 0.28s cubic-bezier(0.2, 0, 0, 1),
+    max-height 0.28s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.2s ease-out,
+    margin-bottom 0.28s cubic-bezier(0.2, 0, 0, 1),
+    padding 0.28s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.28s cubic-bezier(0.2, 0, 0, 1),
+    background 0.22s ease-out,
+    border-color 0.22s ease-out,
+    box-shadow 0.22s ease-out,
+    backdrop-filter 0.22s ease-out,
+    visibility 0.28s ease;
+  will-change: min-height, max-height, opacity, transform, margin-bottom, box-shadow;
 }
 
 .attachment-preview-bar.visible {
-  min-height: 52px;
-  max-height: 52px;
-  opacity: 1;
-  margin-bottom: 10px;
-  padding: 6px 8px 6px 12px;
-  background: rgba(18, 18, 18, 0.8) !important;
+  min-height: 52px !important;
+  max-height: 52px !important;
+  opacity: 1 !important;
+  margin-bottom: 10px !important;
+  padding: 6px 8px 6px 12px !important;
+  background: rgba(18, 18, 18, 0.82) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 20px rgba(0, 0, 0, 0.35) !important;
   backdrop-filter: blur(24px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-  visibility: visible;
-  transform: translateY(0) scale(1);
+  visibility: visible !important;
+  transform: translateY(0) scale(1) !important;
 }
 
 .attachment-preview-bar.is-exiting {
+  min-height: 0 !important;
   max-height: 0 !important;
   opacity: 0 !important;
   margin-bottom: 0 !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
-  transform: translateY(8px) scale(0.97) !important;
+  transform: translateY(6px) scale(0.98) !important;
   border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: 0 0 0 transparent, inset 0 0 0 transparent !important;
+  backdrop-filter: blur(0px) !important;
+  -webkit-backdrop-filter: blur(0px) !important;
   pointer-events: none !important;
+  visibility: visible !important;
   animation: none !important;
 }
 
@@ -1943,6 +1949,12 @@ button {
   gap: 10px;
   width: 100%;
   min-width: 0;
+  transition: opacity 0.18s ease-out, transform 0.22s ease-out;
+}
+
+.attachment-preview-bar.is-exiting .attachment-preview-inner {
+  opacity: 0 !important;
+  transform: scale(0.97) translateY(3px) !important;
 }
 
 .multi-file-preview-container {
@@ -5474,6 +5486,14 @@ textarea {
     padding: 4px 8px 4px 12px !important;
   }
 
+  .reply-preview-bar.is-exiting {
+    min-height: 0 !important;
+    max-height: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
   .reply-preview-close {
     width: 30px !important;
     height: 30px !important;
@@ -5490,6 +5510,14 @@ textarea {
     max-height: 48px !important;
     margin-bottom: 8px !important;
     padding: 4px 6px 4px 10px !important;
+  }
+
+  .attachment-preview-bar.is-exiting {
+    min-height: 0 !important;
+    max-height: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
   }
 
   .file-preview-pill {
@@ -6254,9 +6282,12 @@ textarea {
   display: block;
 }
 
-/* Reply Preview Bar above input box — professional smooth collapse */
+/* Reply Preview Bar above input box — professional smooth collapse & shadow fade */
 .reply-preview-bar {
   border-radius: 20px !important;
+  min-height: 0;
+  max-height: 0;
+  opacity: 0;
   margin-bottom: 0;
   padding: 0 10px;
   display: flex;
@@ -6264,55 +6295,58 @@ textarea {
   justify-content: space-between;
   backdrop-filter: blur(24px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-  
-  /* Smooth collapse transitions — includes transform/background for shadow fade */
-  max-height: 0;
-  opacity: 0;
   overflow: hidden;
   visibility: hidden;
   box-sizing: border-box !important;
   border: 1px solid transparent !important;
-  transform: translateY(8px) scale(0.97);
-  background: transparent;
-  box-shadow: none;
+  transform: translateY(6px) scale(0.98);
+  background: transparent !important;
+  box-shadow: 0 0 0 transparent, inset 0 0 0 transparent !important;
   transition: 
-    max-height 0.32s cubic-bezier(0.32, 0.72, 0, 1),
-    opacity 0.24s cubic-bezier(0.32, 0.72, 0, 1),
-    margin-bottom 0.32s cubic-bezier(0.32, 0.72, 0, 1),
-    padding 0.32s cubic-bezier(0.32, 0.72, 0, 1),
-    transform 0.32s cubic-bezier(0.32, 0.72, 0, 1),
-    background 0.28s ease,
-    border-color 0.28s ease,
-    box-shadow 0.28s ease,
-    backdrop-filter 0.28s ease,
-    visibility 0.32s ease;
-  will-change: max-height, opacity, transform, margin-bottom;
+    min-height 0.28s cubic-bezier(0.2, 0, 0, 1),
+    max-height 0.28s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.2s ease-out,
+    margin-bottom 0.28s cubic-bezier(0.2, 0, 0, 1),
+    padding 0.28s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.28s cubic-bezier(0.2, 0, 0, 1),
+    background 0.22s ease-out,
+    border-color 0.22s ease-out,
+    box-shadow 0.22s ease-out,
+    backdrop-filter 0.22s ease-out,
+    visibility 0.28s ease;
+  will-change: min-height, max-height, opacity, transform, margin-bottom, box-shadow;
 }
 
 .reply-preview-bar.visible {
-  min-height: 56px;
-  max-height: 56px;
-  opacity: 1;
-  margin-bottom: 10px;
-  padding: 6px 10px 6px 14px;
-  background: rgba(18, 18, 18, 0.8) !important;
+  min-height: 56px !important;
+  max-height: 56px !important;
+  opacity: 1 !important;
+  margin-bottom: 10px !important;
+  padding: 6px 10px 6px 14px !important;
+  background: rgba(18, 18, 18, 0.82) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 20px rgba(0, 0, 0, 0.35) !important;
   backdrop-filter: blur(24px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-  visibility: visible;
-  transform: translateY(0) scale(1);
+  visibility: visible !important;
+  transform: translateY(0) scale(1) !important;
 }
 
 .reply-preview-bar.is-exiting {
+  min-height: 0 !important;
   max-height: 0 !important;
   opacity: 0 !important;
   margin-bottom: 0 !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
-  transform: translateY(8px) scale(0.97) !important;
+  transform: translateY(6px) scale(0.98) !important;
   border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: 0 0 0 transparent, inset 0 0 0 transparent !important;
+  backdrop-filter: blur(0px) !important;
+  -webkit-backdrop-filter: blur(0px) !important;
   pointer-events: none !important;
+  visibility: visible !important;
   animation: none !important;
 }
 
@@ -6323,6 +6357,12 @@ textarea {
   gap: 12px;
   width: 100%;
   min-width: 0;
+  transition: opacity 0.18s ease-out, transform 0.22s ease-out;
+}
+
+.reply-preview-bar.is-exiting .reply-preview-inner {
+  opacity: 0 !important;
+  transform: scale(0.97) translateY(3px) !important;
 }
 
 .reply-preview-left {
