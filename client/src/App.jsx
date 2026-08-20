@@ -626,7 +626,15 @@ export default function App() {
         return;
       }
       
-      // 4. Minimize full-screen WebRTC call if active
+      // 4. Handle active / pending call on Back button press:
+      if (callStateRef.current === 'calling' || callStateRef.current === 'ringing') {
+        handleHangUp();
+        return;
+      }
+      if (callStateRef.current === 'incoming') {
+        handleDeclineCall();
+        return;
+      }
       if (callStateRef.current === 'connected' && !isCallMinimizedRef.current) {
         setIsCallMinimized(true);
         return;
@@ -661,15 +669,30 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Push history state 'call-maximized' when active call window is maximized
+  // Push history state for all call states (pending calling/incoming and connected maximized)
   useEffect(() => {
-    const isMaximizedCallActive = callState === 'connected' && !isCallMinimized;
-    if (isMaximizedCallActive) {
-      if (window.history.state !== 'call-maximized') {
-        window.history.pushState('call-maximized', '');
+    if (callState === 'calling' || callState === 'ringing' || callState === 'incoming') {
+      if (window.history.state !== 'call-pending') {
+        window.history.pushState('call-pending', '');
       }
-    } else {
-      if (window.history.state === 'call-maximized') {
+    } else if (callState === 'connected') {
+      if (!isCallMinimized) {
+        if (window.history.state === 'call-pending') {
+          window.history.replaceState('call-maximized', '');
+        } else if (window.history.state !== 'call-maximized') {
+          window.history.pushState('call-maximized', '');
+        }
+      } else {
+        if (window.history.state === 'call-maximized' || window.history.state === 'call-pending') {
+          window.__isPoppingCall = true;
+          window.history.back();
+          setTimeout(() => {
+            window.__isPoppingCall = false;
+          }, 100);
+        }
+      }
+    } else if (callState === 'idle') {
+      if (window.history.state === 'call-maximized' || window.history.state === 'call-pending') {
         window.__isPoppingCall = true;
         window.history.back();
         setTimeout(() => {
@@ -678,6 +701,40 @@ export default function App() {
       }
     }
   }, [callState, isCallMinimized]);
+
+  // 45-Second Unanswered Call Auto-Timeout (prevents endless ringing)
+  useEffect(() => {
+    if (callState === 'calling' || callState === 'ringing') {
+      const timer = setTimeout(() => {
+        showToast('No answer. Call ended.', 'info', 'No Answer');
+        handleHangUp();
+      }, 45000);
+      return () => clearTimeout(timer);
+    } else if (callState === 'incoming') {
+      const timer = setTimeout(() => {
+        handleDeclineCall();
+      }, 45000);
+      return () => clearTimeout(timer);
+    }
+  }, [callState]);
+
+  // Cleanly terminate active or outgoing calls when navigating away or closing window
+  useEffect(() => {
+    const handleUnloadCleanup = () => {
+      if (callStateRef.current !== 'idle' && callPartyRef.current) {
+        const socket = getSocket();
+        if (socket) {
+          socket.emit('hang-up', { to: callPartyRef.current, reason: 'unloaded' });
+        }
+      }
+    };
+    window.addEventListener('beforeunload', handleUnloadCleanup);
+    window.addEventListener('pagehide', handleUnloadCleanup);
+    return () => {
+      window.removeEventListener('beforeunload', handleUnloadCleanup);
+      window.removeEventListener('pagehide', handleUnloadCleanup);
+    };
+  }, []);
 
 
   // ==========================================
@@ -1062,6 +1119,15 @@ export default function App() {
 
     socket.on('call-ended', ({ from, reason }) => {
       console.log(`Call hung up by ${from}, reason: ${reason}`);
+      if (reason === 'offline') {
+        showToast(`${from} is currently offline.`, 'info', 'User Offline');
+      } else if (reason === 'declined') {
+        showToast(`${from} declined the call.`, 'info', 'Call Declined');
+      } else if (reason === 'busy') {
+        showToast(`${from} is on another call.`, 'info', 'User Busy');
+      } else if (reason === 'user_unavailable') {
+        showToast(`${from} is unavailable.`, 'info', 'User Unavailable');
+      }
       cleanupCall(true, reason);
     });
 

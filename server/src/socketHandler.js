@@ -715,6 +715,9 @@ export const socketHandler = (io) => {
             session.status = 'ringing';
           }
           socket.emit('call-ringing', { from: to });
+        } else {
+          activeCalls.delete(from.toLowerCase());
+          socket.emit('call-ended', { from: to, reason: 'offline' });
         }
       } catch (err) {
         logger.error('Error in call-user event:', err);
