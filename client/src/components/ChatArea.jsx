@@ -734,6 +734,22 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, onClose }) => {
 // WhatsApp-style Media Collage Grid with Fullscreen Gallery Modal Support
 const MediaAlbumGrid = React.memo(function MediaAlbumGrid({ albumItems, onImageClick, selectionMode, isLast, handleImageLoad }) {
   const [galleryIndex, setGalleryIndex] = useState(null);
+  // Back button: gallery closes on back, not main menu (respects emoji/attach stack)
+  useEffect(() => {
+    if (galleryIndex !== null) {
+      if (window.history.state?.gallery) return;
+      window.history.pushState({ gallery: true }, '');
+      const onPop = (e) => {
+        if (window.history.state?.gallery) return;
+        if (e) e.stopImmediatePropagation?.();
+        setGalleryIndex(null);
+      };
+      window.addEventListener('popstate', onPop, { capture: true, once: true });
+      return () => window.removeEventListener('popstate', onPop, { capture: true });
+    } else if (window.history.state?.gallery) {
+      window.history.replaceState(null, '');
+    }
+  }, [galleryIndex]);
   const total = albumItems.length;
 
   const displayItems = albumItems.slice(0, 4);
@@ -1606,7 +1622,7 @@ const ChatArea = React.memo(function ChatArea({
     setTimeout(() => {
       setShowEmojiPicker(false);
       setIsClosingEmojiPicker(false);
-    }, 180);
+    }, 320);
   }, [showEmojiPicker, isClosingEmojiPicker]);
 
   const toggleEmojiPicker = useCallback(() => {
@@ -1618,6 +1634,23 @@ const ChatArea = React.memo(function ChatArea({
       setShowEmojiPicker(true);
     }
   }, [showEmojiPicker, closeEmojiPicker, showAttachMenu]);
+
+  // Back button: emoji picker closes on back, not main menu (checks state to respect gallery stack)
+  useEffect(() => {
+    if (showEmojiPicker && !isClosingEmojiPicker) {
+      if (window.history.state?.emojiPicker) return;
+      window.history.pushState({ emojiPicker: true }, '');
+      const onPop = (e) => {
+        if (window.history.state?.emojiPicker) return;
+        if (e) e.stopImmediatePropagation?.();
+        closeEmojiPicker();
+      };
+      window.addEventListener('popstate', onPop, { capture: true, once: true });
+      return () => window.removeEventListener('popstate', onPop, { capture: true });
+    } else if (!showEmojiPicker && window.history.state?.emojiPicker) {
+      window.history.replaceState(null, '');
+    }
+  }, [showEmojiPicker, isClosingEmojiPicker, closeEmojiPicker]);
 
   const adjustTextareaHeight = useCallback((el) => {
     if (!el) return;
@@ -1740,7 +1773,7 @@ const ChatArea = React.memo(function ChatArea({
     setTimeout(() => {
       setReplyingTo(null);
       setIsClosingReply(false);
-    }, 220);
+    }, 320);
   }, [isClosingReply, replyingTo, setReplyingTo]);
 
   const handleClearAllFilesWithAnimation = useCallback(() => {
@@ -1749,7 +1782,7 @@ const ChatArea = React.memo(function ChatArea({
     setTimeout(() => {
       setSelectedFiles([]);
       setIsClearingFiles(false);
-    }, 220);
+    }, 320);
   }, [isClearingFiles, selectedFiles.length]);
 
   const handleRemoveSingleFileWithAnimation = useCallback((idx) => {
@@ -1761,7 +1794,7 @@ const ChatArea = React.memo(function ChatArea({
     setTimeout(() => {
       setSelectedFiles(prev => prev.filter((_, i) => i !== idx));
       setRemovingFileIndex(null);
-    }, 180);
+    }, 320);
   }, [selectedFiles.length, handleClearAllFilesWithAnimation]);
 
   const handleBlockContactWithAnimation = (username) => {
@@ -1780,8 +1813,25 @@ const ChatArea = React.memo(function ChatArea({
     window.setTimeout(() => {
       setShowAttachMenu(false);
       setIsClosingAttachMenu(false);
-    }, 180);
+    }, 320);
   };
+
+  // Back button: attach menu closes on back, not main menu (respects emoji/gallery stack)
+  useEffect(() => {
+    if (showAttachMenu && !isClosingAttachMenu) {
+      if (window.history.state?.attachMenu) return;
+      window.history.pushState({ attachMenu: true }, '');
+      const onPop = (e) => {
+        if (window.history.state?.attachMenu) return;
+        if (e) e.stopImmediatePropagation?.();
+        closeAttachMenu();
+      };
+      window.addEventListener('popstate', onPop, { capture: true, once: true });
+      return () => window.removeEventListener('popstate', onPop, { capture: true });
+    } else if (!showAttachMenu && window.history.state?.attachMenu) {
+      window.history.replaceState(null, '');
+    }
+  }, [showAttachMenu, isClosingAttachMenu]);
 
   // Close attach popover menu on outside click or Escape key
   useEffect(() => {

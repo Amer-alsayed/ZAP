@@ -1885,20 +1885,28 @@ button {
   backdrop-filter: blur(24px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   
-  /* Smooth collapse transitions */
+  /* Smooth collapse transitions — professional */
   max-height: 0;
   opacity: 0;
   overflow: hidden;
   visibility: hidden;
   box-sizing: border-box !important;
   border: 1px solid transparent !important;
+  transform: translateY(8px) scale(0.97);
+  background: transparent;
+  box-shadow: none;
   transition: 
-    max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 0.22s ease,
-    margin-bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-    padding 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.2s ease,
-    visibility 0.28s ease;
+    max-height 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.24s cubic-bezier(0.32, 0.72, 0, 1),
+    margin-bottom 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    padding 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    background 0.28s ease,
+    border-color 0.28s ease,
+    box-shadow 0.28s ease,
+    backdrop-filter 0.28s ease,
+    visibility 0.32s ease;
+  will-change: max-height, opacity, transform, margin-bottom;
 }
 
 .attachment-preview-bar.visible {
@@ -1913,12 +1921,23 @@ button {
   backdrop-filter: blur(24px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   visibility: visible;
-  animation: previewPillEntrance 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform: translateY(0) scale(1);
 }
 
 .attachment-preview-bar.is-exiting {
-  animation: previewPillExit 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+  max-height: 0 !important;
+  opacity: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  transform: translateY(8px) scale(0.97) !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(0px) !important;
+  -webkit-backdrop-filter: blur(0px) !important;
   pointer-events: none !important;
+  animation: none !important;
 }
 
 .attachment-preview-inner {
@@ -6239,7 +6258,7 @@ textarea {
   display: block;
 }
 
-/* Reply Preview Bar above input box */
+/* Reply Preview Bar above input box — professional smooth collapse */
 .reply-preview-bar {
   border-radius: 20px !important;
   margin-bottom: 0;
@@ -6250,20 +6269,28 @@ textarea {
   backdrop-filter: blur(24px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   
-  /* Smooth collapse transitions */
+  /* Smooth collapse transitions — includes transform/background for shadow fade */
   max-height: 0;
   opacity: 0;
   overflow: hidden;
   visibility: hidden;
   box-sizing: border-box !important;
   border: 1px solid transparent !important;
+  transform: translateY(8px) scale(0.97);
+  background: transparent;
+  box-shadow: none;
   transition: 
-    max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 0.22s ease,
-    margin-bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-    padding 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.2s ease,
-    visibility 0.28s ease;
+    max-height 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.24s cubic-bezier(0.32, 0.72, 0, 1),
+    margin-bottom 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    padding 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    background 0.28s ease,
+    border-color 0.28s ease,
+    box-shadow 0.28s ease,
+    backdrop-filter 0.28s ease,
+    visibility 0.32s ease;
+  will-change: max-height, opacity, transform, margin-bottom;
 }
 
 .reply-preview-bar.visible {
@@ -6278,12 +6305,23 @@ textarea {
   backdrop-filter: blur(24px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   visibility: visible;
-  animation: previewPillEntrance 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform: translateY(0) scale(1);
 }
 
 .reply-preview-bar.is-exiting {
-  animation: previewPillExit 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+  max-height: 0 !important;
+  opacity: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  transform: translateY(8px) scale(0.97) !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(0px) !important;
+  -webkit-backdrop-filter: blur(0px) !important;
   pointer-events: none !important;
+  animation: none !important;
 }
 
 .reply-preview-inner {
