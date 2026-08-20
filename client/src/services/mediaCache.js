@@ -253,16 +253,41 @@ export async function loadOrFetchDecryptedMedia(fileMetadata) {
 }
 
 /**
- * Preload and warm up all media attachments for a conversation in background
+ * Preload and warm up media attachments — throttled, concurrency-limited, and viewport-aware.
+ * For long chats we only warm the most recent 18 items and run max 2 concurrent decryptions
+ * to avoid main-thread burst that lags typing animation.
  */
 export async function warmupMediaCache(messages) {
   if (!messages || !messages.length) return;
-  const mediaList = messages
+  // Only warm the tail of long conversations — off-screen media will lazy-load via IntersectionObserver
+  const recent = messages.length > 24 ? messages.slice(-18) : messages;
+  const mediaList = recent
     .filter(m => m.mediaType === 'file' && m.fileMetadata?.url && !memoryBlobCache.has(m.fileMetadata.url))
     .map(m => m.fileMetadata);
 
   if (!mediaList.length) return;
-  Promise.all(mediaList.map(file => loadOrFetchDecryptedMedia(file).catch(() => {}))).catch(() => {});
+  // Concurrency-limited background warmup (2 at a time) via requestIdleCallback when available
+  const CONCURRENCY = 2;
+  const runBatch = async (batch) => {
+    await Promise.all(batch.map(file => loadOrFetchDecryptedMedia(file).catch(() => {})));
+  };
+  const schedule = (cb) => {
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      window.requestIdleCallback(cb, { timeout: 2000 });
+    } else {
+      setTimeout(cb, 120);
+    }
+  };
+  let idx = 0;
+  const pump = async () => {
+    if (idx >= mediaList.length) return;
+    const batch = mediaList.slice(idx, idx + CONCURRENCY);
+    idx += CONCURRENCY;
+    await runBatch(batch);
+    await new Promise(res => schedule(res));
+    return pump();
+  };
+  pump().catch(() => {});
 }
 
 /**

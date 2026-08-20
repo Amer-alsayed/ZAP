@@ -67,7 +67,17 @@ const formatSeparatorDate = (timestamp) => {
   }
 };
 
-// Detect if a message consists exclusively of 1 to 3 emojis
+// Cached grapheme segmenter — avoids 70+ Intl.Segmenter creations per render in big chats
+let _cachedSegmenter = null;
+function getGraphemeSegmenter() {
+  if (_cachedSegmenter) return _cachedSegmenter;
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    try { _cachedSegmenter = new Intl.Segmenter('en', { granularity: 'grapheme' }); } catch {}
+  }
+  return _cachedSegmenter;
+}
+const EMOJI_REGEX_CACHED = /^(\p{Extended_Pictographic}|\p{Emoji}|\u200D|\uFE0E|\uFE0F|\p{Emoji_Component}|\p{Emoji_Modifier}|\p{Emoji_Modifier_Base}|\p{Emoji_Presentation})+$/u;
+
 // Detect if a message consists exclusively of 1 to 3 emojis
 const isOnlyEmoji = (text) => {
   if (!text || typeof text !== 'string') return false;
@@ -82,21 +92,20 @@ const isOnlyEmoji = (text) => {
     return false;
   }
 
-  const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+  const segmenter = getGraphemeSegmenter();
   const segments = segmenter 
     ? Array.from(segmenter.segment(trimmed)).map(s => s.segment.trim()).filter(Boolean) 
     : Array.from(trimmed).filter(c => c.trim().length > 0);
   
   if (segments.length === 0 || segments.length > 3) return false;
   
-  const EMOJI_REGEX = /^(\p{Extended_Pictographic}|\p{Emoji}|\u200D|\uFE0E|\uFE0F|\p{Emoji_Component}|\p{Emoji_Modifier}|\p{Emoji_Modifier_Base}|\p{Emoji_Presentation})+$/u;
-  return segments.every(s => EMOJI_REGEX.test(s));
+  return segments.every(s => EMOJI_REGEX_CACHED.test(s));
 };
 
 const getEmojiCount = (text) => {
   if (!text || typeof text !== 'string') return 0;
   const trimmed = text.trim();
-  const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+  const segmenter = getGraphemeSegmenter();
   const segments = segmenter 
     ? Array.from(segmenter.segment(trimmed)).map(s => s.segment.trim()).filter(Boolean) 
     : Array.from(trimmed).filter(c => c.trim().length > 0);
@@ -146,9 +155,32 @@ class AudioProgressManager {
 }
 const audioProgressManager = new AudioProgressManager();
 
+// Lazy in-view hook — defers heavy media decryption until element nears viewport (perf for long chats)
+function useLazyInView(ref, rootMargin = '700px') {
+  const [isInView, setIsInView] = useState(false);
+  useEffect(() => {
+    if (!ref.current || isInView) return;
+    // If already cached in memory, treat as instantly in view
+    const el = ref.current;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true);
+          observer.disconnect();
+        }
+      },
+      { root: null, rootMargin, threshold: 0.01 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, isInView, rootMargin]);
+  return isInView;
+}
+
 // Format text with clickable links (with LRU memoization to avoid regex thrashing on scroll)
 const formattedTextCache = new Map();
 const MAX_TEXT_CACHE = 600;
+const URL_REGEX_CACHED = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|www\.[^\s<]+[^<.,:;"')\]\s])/gi;
 
 const renderFormattedText = (text) => {
   if (!text || typeof text !== 'string') return text;
@@ -163,12 +195,12 @@ const renderFormattedText = (text) => {
     return text;
   }
   
-  const URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|www\.[^\s<]+[^<.,:;"')\]\s])/gi;
+  URL_REGEX_CACHED.lastIndex = 0;
   const parts = [];
   let lastIndex = 0;
   let match;
 
-  while ((match = URL_REGEX.exec(text)) !== null) {
+  while ((match = URL_REGEX_CACHED.exec(text)) !== null) {
     if (match.index > lastIndex) {
       parts.push(text.substring(lastIndex, match.index));
     }
@@ -197,7 +229,7 @@ const renderFormattedText = (text) => {
       </a>
     );
 
-    lastIndex = URL_REGEX.lastIndex;
+    lastIndex = URL_REGEX_CACHED.lastIndex;
   }
 
   if (lastIndex < text.length) {
@@ -886,15 +918,36 @@ const VoiceNotePlayerItem = React.memo(({
 });
 
 // ==========================================
-// MessageList Component (Memoized for peak performance)
+// Isolated Typing Indicator — isolated to prevent MessageList re-render on typing
+// ==========================================
+const TypingIndicator = React.memo(({ isVisible, typingBubbleRef }) => {
+  return (
+    <div 
+      ref={typingBubbleRef} 
+      className={`typing-indicator-wrapper ${isVisible ? 'visible' : ''}`}
+      aria-hidden={!isVisible}
+      aria-live="polite"
+    >
+      <div className="typing-indicator-inner-grid">
+        <div className="message-wrapper received" style={{ marginBottom: '8px' }}>
+          <div className="typing-bubble">
+            <span className="typing-dot" />
+            <span className="typing-dot" />
+            <span className="typing-dot" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// ==========================================
+// MessageList Component (Memoized for peak performance — isolated from typing)
 // ==========================================
 const MessageList = React.memo(({
   messages,
   activeContactUsername,
-  activeContactIsTyping,
-  justReceivedId,
   lastMessageRef,
-  typingBubbleRef,
   scrollToMessage,
   setReplyingTo,
   textareaRef,
@@ -979,13 +1032,6 @@ const MessageList = React.memo(({
     }, 480);
   };
   const cancelLongPress = () => window.clearTimeout(longPressTimerRef.current);
-
-  const hasJustReceivedMessage = Boolean(
-    justReceivedId !== null && 
-    messages && 
-    messages.length > 0 && 
-    messages[messages.length - 1]?.id === justReceivedId
-  );
 
   return (
     <div className="message-list">
@@ -1440,20 +1486,6 @@ const MessageList = React.memo(({
           </React.Fragment>
         );
       })}
-      <div 
-        ref={typingBubbleRef} 
-        className={`typing-indicator-wrapper ${activeContactIsTyping && !hasJustReceivedMessage ? 'visible' : ''}`}
-      >
-        <div className="typing-indicator-inner-grid">
-          <div className="message-wrapper received" style={{ marginBottom: '8px' }}>
-            <div className="typing-bubble">
-              <span className="typing-dot" />
-              <span className="typing-dot" />
-              <span className="typing-dot" />
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 });
@@ -1789,6 +1821,50 @@ const ChatArea = React.memo(function ChatArea({
   const [isLastMessageVisible, setIsLastMessageVisible] = useState(true);
   const [activeGalleryModal, setActiveGalleryModal] = useState(null);
   const lastMessageRef = useRef(null);
+  // Pagination: only render last 70 for big-chat perf (keeps DOM light)
+  const [visibleCount, setVisibleCount] = useState(70);
+  const loadMoreRef = useRef(null);
+  const prevScrollHeightForPaginationRef = useRef(0);
+  const paginationThrottleRef = useRef(false);
+  const visibleMessages = useMemo(() => {
+    const msgs = activeContact?.messages || [];
+    if (msgs.length <= visibleCount) return msgs;
+    return msgs.slice(-visibleCount);
+  }, [activeContact?.messages, visibleCount]);
+
+  // Load more sentinel — when top enters viewport, expand visible window
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    const sentinel = loadMoreRef.current;
+    if (!container || !sentinel) return;
+    if ((activeContact?.messages?.length || 0) <= visibleCount) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !paginationThrottleRef.current) {
+          paginationThrottleRef.current = true;
+          const c = messagesContainerRef.current;
+          if (c) prevScrollHeightForPaginationRef.current = c.scrollHeight;
+          setVisibleCount(prev => Math.min(activeContact.messages.length, prev + 35));
+          setTimeout(() => { paginationThrottleRef.current = false; }, 650);
+        }
+      },
+      { root: container, threshold: 0.1, rootMargin: '400px 0px 0px 0px' }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [visibleMessages.length, visibleCount, activeContact?.messages?.length]);
+
+  // Preserve scroll position when pagination expands (avoid jump)
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !prevScrollHeightForPaginationRef.current) return;
+    const oldHeight = prevScrollHeightForPaginationRef.current;
+    const newHeight = container.scrollHeight;
+    if (newHeight > oldHeight) {
+      container.scrollTop = newHeight - oldHeight + container.scrollTop;
+    }
+    prevScrollHeightForPaginationRef.current = 0;
+  }, [visibleCount]);
 
   const unreadMessagesCount = useMemo(() => {
     if (!activeContact?.messages) return 0;
@@ -1833,6 +1909,8 @@ const ChatArea = React.memo(function ChatArea({
     setJustReceivedId(null);
     setIsScrolledUp(false);
     isScrolledUpRef.current = false;
+    setVisibleCount(70);
+    prevScrollHeightForPaginationRef.current = 0;
 
     // Unmount cleanup: stop active recording, revoke audio object URLs, and notify offline typing
     return () => {
@@ -1864,30 +1942,36 @@ const ChatArea = React.memo(function ChatArea({
 
   const isSmoothScrollingRef = useRef(false);
 
+  const scrollRafRef = useRef(null);
   const handleScroll = useCallback((e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    // Throttle to rAF — prevents 100+ React state updates per second on long-chat scroll that jank typing animation
+    if (scrollRafRef.current) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
-    if (isSmoothScrollingRef.current) {
-      if (distanceFromBottom <= 50) {
-        isSmoothScrollingRef.current = false;
-        isScrolledUpRef.current = false;
-        setIsScrolledUp(false);
+      if (isSmoothScrollingRef.current) {
+        if (distanceFromBottom <= 50) {
+          isSmoothScrollingRef.current = false;
+          isScrolledUpRef.current = false;
+          setIsScrolledUp(false);
+        }
+        return;
       }
-      return;
-    }
 
-    if (distanceFromBottom > 160) {
-      if (!isScrolledUpRef.current) {
-        isScrolledUpRef.current = true;
-        setIsScrolledUp(true);
+      if (distanceFromBottom > 160) {
+        if (!isScrolledUpRef.current) {
+          isScrolledUpRef.current = true;
+          setIsScrolledUp(true);
+        }
+      } else if (distanceFromBottom <= 50) {
+        if (isScrolledUpRef.current) {
+          isScrolledUpRef.current = false;
+          setIsScrolledUp(false);
+        }
       }
-    } else if (distanceFromBottom <= 50) {
-      if (isScrolledUpRef.current) {
-        isScrolledUpRef.current = false;
-        setIsScrolledUp(false);
-      }
-    }
+    });
   }, []);
 
   const scrollToBottom = (e) => {
@@ -1934,26 +2018,22 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, [activeContact?.messages?.length, activeContact.username]);
 
-  // Automatically smooth-scroll down as the typing indicator appears if the user is at the bottom
+  // Smooth scroll pinning for typing indicator — GPU-composited via scrollIntoView (no RAF layout thrashing)
   useEffect(() => {
     if (activeContact?.isTyping) {
       setJustReceivedId(null);
-      if (isLastMessageVisible && !isScrolledUp) {
-        const startTime = performance.now();
-        let frameId;
-        const keepBottomInView = (now) => {
-          if (messagesContainerRef.current) {
-            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-          }
-          if (now - startTime < 180) {
-            frameId = requestAnimationFrame(keepBottomInView);
-          }
-        };
-        frameId = requestAnimationFrame(keepBottomInView);
-        return () => cancelAnimationFrame(frameId);
+      if (!isScrolledUpRef.current && messagesContainerRef.current && typingBubbleRef.current) {
+        // Two-frame wait so CSS grid expansion has started, then smooth-scroll in sync with the animation
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (!isScrolledUpRef.current && typingBubbleRef.current && messagesContainerRef.current) {
+              typingBubbleRef.current.scrollIntoView({ behavior: 'smooth', block: 'end', inline: 'nearest' });
+            }
+          });
+        });
       }
     }
-  }, [activeContact?.isTyping, isLastMessageVisible, isScrolledUp]);
+  }, [activeContact?.isTyping]);
 
   const highlightTimersRef = useRef({});
 
@@ -1983,9 +2063,23 @@ const ChatArea = React.memo(function ChatArea({
   }, []);
 
   const scrollToMessage = useCallback((msgId) => {
-    const element = document.getElementById(`msg-${msgId}`);
+    let element = document.getElementById(`msg-${msgId}`);
     const container = messagesContainerRef.current;
-    if (!element || !container) return;
+    if (!container) return;
+    if (!element) {
+      // Paginated big chat: target is outside rendered window — expand window to include it
+      const allMsgs = activeContact?.messages || [];
+      const targetIdx = allMsgs.findIndex(m => String(m.id) === String(msgId));
+      if (targetIdx !== -1) {
+        const needed = allMsgs.length - targetIdx;
+        if (needed > visibleCount) {
+          if (container) prevScrollHeightForPaginationRef.current = container.scrollHeight;
+          setVisibleCount(needed + 5);
+          setTimeout(() => scrollToMessage(msgId), 140);
+        }
+      }
+      return;
+    }
 
     // Check if element is currently in view
     const containerRect = container.getBoundingClientRect();
@@ -2024,7 +2118,7 @@ const ChatArea = React.memo(function ChatArea({
         }, 400);
       }
     }
-  }, [triggerHighlight]);
+  }, [triggerHighlight, activeContact?.messages, visibleCount]);
 
   const prevMessageCountRef = useRef(0);
   const messagesContainerRef = useRef(null);
@@ -2270,66 +2364,50 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, [unreadMessagesCount, isLastMessageVisible, isScrolledUp, activeContact.username, markAllMessagesAsReadLocal]);
 
-  // Scroll smoothly on new messages or typing indicators
+  // Scroll smoothly on new messages — pagination-aware
   useEffect(() => {
     const currentCount = activeContact?.messages?.length || 0;
-    
-    if (currentCount === prevMessageCountRef.current + 1) {
+    const prevCount = prevMessageCountRef.current;
+    if (currentCount === prevCount + 1) {
       const lastMsg = activeContact.messages[activeContact.messages.length - 1];
       const isSentByMe = lastMsg && lastMsg.sender !== activeContact.username;
-      
-      // Auto-scroll if the message was sent by us OR the previous last message was visible in view OR user is not scrolled up
       if (isSentByMe || isLastMessageVisible || !isScrolledUpRef.current) {
-        if (isLastMessageVisible || !isScrolledUpRef.current) {
-          // At-bottom: Lock scroll position frame-by-frame during the entry bubble animation
-          const startTime = performance.now();
-          let frameId;
-          
-          const keepScrollAtBottom = (now) => {
+        if (messagesContainerRef.current && (!isScrolledUpRef.current || isLastMessageVisible)) {
+          requestAnimationFrame(() => {
             if (messagesContainerRef.current && !isScrolledUpRef.current) {
-              messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+              messagesContainerRef.current.scrollTo({
+                top: messagesContainerRef.current.scrollHeight,
+                behavior: 'smooth'
+              });
             }
-            if (now - startTime < 400) {
-              frameId = requestAnimationFrame(keepScrollAtBottom);
-            }
-          };
-          
-          frameId = requestAnimationFrame(keepScrollAtBottom);
-          return () => cancelAnimationFrame(frameId);
-        } else {
-          // Scrolled-up: Glide smoothly down to the bottom
-          if (messagesContainerRef.current) {
-            messagesContainerRef.current.scrollTo({
-              top: messagesContainerRef.current.scrollHeight,
-              behavior: 'smooth'
-            });
-          }
+          });
         }
+      } else if (isScrolledUpRef.current) {
+        const delta = currentCount - prevCount;
+        setVisibleCount(prev => Math.min(activeContact.messages.length, prev + delta));
       }
-    } else if (currentCount > prevMessageCountRef.current) {
+    } else if (currentCount > prevCount) {
       if (messagesContainerRef.current && (!isScrolledUpRef.current || isLastMessageVisible)) {
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      } else if (isScrolledUpRef.current) {
+        const delta = currentCount - prevCount;
+        setVisibleCount(prev => Math.min(activeContact.messages.length, prev + delta));
       }
     }
     prevMessageCountRef.current = currentCount;
   }, [activeContact?.messages?.length]);
 
   const handleImageLoad = useCallback(() => {
-    // If the user was already looking at the bottom, pin the scroll position as the decrypted image loads
-    if (!isScrolledUpRef.current) {
-      const startTime = performance.now();
-      let frameId;
-      
-      const keepScrollAtBottom = (now) => {
+    if (!isScrolledUpRef.current && messagesContainerRef.current) {
+      // Single smooth scroll — lets ResizeObserver + CSS handle the rest
+      requestAnimationFrame(() => {
         if (messagesContainerRef.current && !isScrolledUpRef.current) {
-          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+          messagesContainerRef.current.scrollTo({
+            top: messagesContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
         }
-        if (now - startTime < 250) {
-          frameId = requestAnimationFrame(keepScrollAtBottom);
-        }
-      };
-      
-      frameId = requestAnimationFrame(keepScrollAtBottom);
+      });
     }
   }, []);
 
@@ -3385,18 +3463,30 @@ const ChatArea = React.memo(function ChatArea({
         onScroll={handleScroll}
       >
         <div className="messages-bounce-wrapper" ref={messagesBounceWrapperRef}>
+          <div ref={loadMoreRef} style={{ height: '1px', width: '100%', pointerEvents: 'none' }} aria-hidden="true" />
+          {activeContact.messages.length > visibleCount && (
+            <div className="load-more-pill-wrapper">
+              <button 
+                className="load-more-pill glass"
+                onClick={() => {
+                  const c = messagesContainerRef.current;
+                  if (c) prevScrollHeightForPaginationRef.current = c.scrollHeight;
+                  setVisibleCount(prev => Math.min(activeContact.messages.length, prev + 40));
+                }}
+              >
+                <span>Showing {visibleMessages.length} of {activeContact.messages.length} • Tap to load older</span>
+              </button>
+            </div>
+          )}
           <div className="e2ee-banner">
             <Shield size={14} />
             <span>Messages and media are end-to-end encrypted. No one else, not even ZAP, can read them.</span>
           </div>
 
           <MessageList
-            messages={activeContact.messages}
+            messages={visibleMessages}
             activeContactUsername={activeContact.username}
-            activeContactIsTyping={activeContact.isTyping}
-            justReceivedId={justReceivedId}
             lastMessageRef={lastMessageRef}
-            typingBubbleRef={typingBubbleRef}
             scrollToMessage={scrollToMessage}
             setReplyingTo={setReplyingTo}
             textareaRef={textareaRef}
@@ -3404,6 +3494,10 @@ const ChatArea = React.memo(function ChatArea({
             onDeleteMessages={onDeleteMessages}
             selectionCancelRef={selectionCancelRef}
             onSelectionModeChange={handleSelectionModeChange}
+          />
+          <TypingIndicator 
+            isVisible={Boolean(activeContact.isTyping && !(justReceivedId !== null && activeContact.messages?.length && activeContact.messages[activeContact.messages.length - 1]?.id === justReceivedId))} 
+            typingBubbleRef={typingBubbleRef} 
           />
           <div ref={messagesEndRef} style={{ height: '1px', minHeight: '1px', width: '100%', pointerEvents: 'none' }} />
         </div>
@@ -3826,6 +3920,10 @@ const globalMediaSessionCache = new Map();
 
 function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes = false }) {
   const fileUrl = fileMetadata?.url;
+  const containerRef = useRef(null);
+  const isInViewRaw = useLazyInView(containerRef, '900px');
+  const isCachedEarly = Boolean(fileUrl && (getMemoryMediaUrl(fileUrl, isFullRes) || globalMediaSessionCache.has(fileUrl)));
+  const isInView = isCachedEarly || isInViewRaw;
   
   const [imgSrc, setImgSrc] = useState(() => {
     if (!fileUrl) return null;
@@ -3851,6 +3949,8 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
 
   useEffect(() => {
     if (!fileUrl) return;
+    // Defer heavy decrypt until near viewport — unless already cached
+    if (!isInView) return;
 
     const memoryUrl = getMemoryMediaUrl(fileUrl, isFullRes);
     if (memoryUrl) {
@@ -3904,12 +4004,12 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
     return () => {
       active = false;
     };
-  }, [fileUrl, isFullRes]);
+  }, [fileUrl, isFullRes, isInView]);
 
-  if (error) return <span style={{ color: 'var(--text-muted, #a0aec0)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}><AlertTriangle size={14} style={{ color: '#e53e3e' }} /> {error}</span>;
+  if (error) return <span ref={containerRef} style={{ color: 'var(--text-muted, #a0aec0)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}><AlertTriangle size={14} style={{ color: '#e53e3e' }} /> {error}</span>;
 
   return (
-    <div className={`image-loader-container ${isLoaded ? 'is-ready' : 'is-decrypting'}`}>
+    <div ref={containerRef} className={`image-loader-container ${isLoaded ? 'is-ready' : 'is-decrypting'}`}>
       {/* Minimalist & Premium Media Decryption Loading Card */}
       {!isLoaded && (
         <div className="image-skeleton-loader">
@@ -3931,6 +4031,7 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
           className={`message-image ${isLoaded ? 'loaded' : ''}`}
           src={imgSrc} 
           alt="" 
+          loading="lazy"
           decoding="async"
           onClick={onImageClick ? () => onImageClick(fullResUrlRef.current || imgSrc) : undefined}
           onLoad={() => {
@@ -3963,15 +4064,32 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
 }
 
 // ==========================================
-// Helper component: Decrypted video loader
+// Helper component: Decrypted video loader — lazy
 // ==========================================
 function VideoPreviewLoader({ fileMetadata }) {
   const [videoSrc, setVideoSrc] = useState(null);
   const [error, setError] = useState(false);
   const objectUrlRef = useRef(null);
+  const containerRef = useRef(null);
+  const isInViewRaw = useLazyInView(containerRef, '900px');
+  const isCached = Boolean(fileMetadata?.url && (getMemoryMediaUrl(fileMetadata.url, false) || globalMediaSessionCache.has(fileMetadata.url)));
+  const isInView = isCached || isInViewRaw;
 
   useEffect(() => {
+    if (!isInView) return;
     let active = true;
+
+    // Fast-path cache hit
+    const mem = fileMetadata?.url ? getMemoryMediaUrl(fileMetadata.url, false) : null;
+    if (mem) {
+      setVideoSrc(mem);
+      return;
+    }
+    if (fileMetadata?.url && globalMediaSessionCache.has(fileMetadata.url)) {
+      const cached = globalMediaSessionCache.get(fileMetadata.url);
+      setVideoSrc(cached.fullUrl || cached.thumbUrl);
+      return;
+    }
 
     const loadAndDecrypt = async () => {
       try {
@@ -3995,24 +4113,29 @@ function VideoPreviewLoader({ fileMetadata }) {
         objectUrlRef.current = null;
       }
     };
-  }, [fileMetadata]);
+  }, [fileMetadata, isInView]);
 
-  if (error) return <span style={{ color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={14} /> Video Decryption Failed</span>;
-  if (!videoSrc) return <span style={{ color: 'var(--text-subtle)' }}>Decrypting Video...</span>;
-  return <video className="message-video" src={videoSrc} controls />;
+  if (error) return <span ref={containerRef} style={{ color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={14} /> Video Decryption Failed</span>;
+  if (!videoSrc) return <span ref={containerRef} style={{ color: 'var(--text-subtle)' }}>{isInView ? 'Decrypting Video...' : 'Video • tap to load'}</span>;
+  return <video ref={containerRef} className="message-video" src={videoSrc} controls preload="metadata" />;
 }
 
 // ==========================================
-// Helper component: Background voice note pre-cache loader
+// Helper component: Background voice note pre-cache loader — lazy
 // ==========================================
 function VoiceNotePreloader({ fileMetadata }) {
+  const ref = useRef(null);
+  const isInViewRaw = useLazyInView(ref, '1000px');
+  const isCached = Boolean(fileMetadata?.url && getMemoryMediaUrl(fileMetadata.url, false));
+  const isInView = isCached || isInViewRaw;
   useEffect(() => {
+    if (!isInView) return;
     if (fileMetadata && fileMetadata.url) {
       loadOrFetchDecryptedMedia(fileMetadata).catch((err) => {
         console.warn('Voice note pre-cache warning:', err);
       });
     }
-  }, [fileMetadata]);
+  }, [fileMetadata, isInView]);
 
-  return null;
+  return <span ref={ref} style={{ display: 'contents' }} aria-hidden="true" />;
 }

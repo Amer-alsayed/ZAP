@@ -1314,7 +1314,7 @@ button {
   animation: pulse-glow 2s infinite;
 }
 
-/* Messages area */
+/* Messages area — GPU-optimized smooth scrolling */
 .messages-container {
   flex: 1;
   padding: 26px 30px 28px 30px;
@@ -5168,7 +5168,7 @@ textarea {
   letter-spacing: 0.5px;
 }
 
-/* Minimalist Pure Glass Typing Indicator */
+/* Minimalist Pure Glass Typing Indicator — Optimized for 60fps */
 .typing-bubble {
   display: inline-flex;
   align-items: center;
@@ -5179,21 +5179,14 @@ textarea {
   background: rgba(255, 255, 255, 0.07) !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 18px rgba(0, 0, 0, 0.28) !important;
-  backdrop-filter: blur(20px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
   width: fit-content;
   box-sizing: border-box !important;
-  animation: typingBubbleBreath 3s ease-in-out infinite alternate;
-  will-change: transform, box-shadow;
-}
-
-@keyframes typingBubbleBreath {
-  0% {
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 16px rgba(0, 0, 0, 0.25);
-  }
-  100% {
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 6px 22px rgba(0, 0, 0, 0.32), 0 0 12px rgba(var(--accent-rgb), 0.12);
-  }
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+  contain: layout paint style;
 }
 
 .typing-dot {
@@ -5203,7 +5196,9 @@ textarea {
   background: #ffffff;
   opacity: 0.32;
   animation: typingWave 1.4s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-  will-change: opacity, transform, filter;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .typing-dot:nth-child(1) {
@@ -5220,14 +5215,12 @@ textarea {
 
 @keyframes typingWave {
   0%, 60%, 100% {
-    opacity: 0.3;
-    transform: translateY(0) scale(0.85);
-    filter: none;
+    opacity: 0.32;
+    transform: translate3d(0, 0, 0) scale(0.85);
   }
   30% {
-    opacity: 0.98;
-    transform: translateY(-4.5px) scale(1.16);
-    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.45));
+    opacity: 1;
+    transform: translate3d(0, -4.5px, 0) scale(1.16);
   }
 }
 
@@ -6524,46 +6517,72 @@ textarea {
   }
 }
 
-/* Typing Indicator Animation Wrapper */
+/* Typing Indicator Animation Wrapper — GPU-Optimized Smooth Professional + max-height fallback for instant-jump fix */
 .typing-indicator-wrapper {
   display: grid;
   grid-template-rows: 0fr;
+  max-height: 0;
   opacity: 0;
   overflow: hidden;
+  contain: layout paint style;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
   transition: 
-    grid-template-rows 0.35s cubic-bezier(0.16, 1, 0.3, 1), 
-    opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), 
-    margin-top 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-    margin-bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: grid-template-rows, opacity, margin-top, margin-bottom;
+    grid-template-rows 0.48s cubic-bezier(0.22, 1, 0.36, 1), 
+    max-height 0.48s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: grid-template-rows, max-height, opacity;
   align-self: flex-start;
   width: 100%;
   flex-shrink: 0;
-  margin-top: -8px;
+  margin-top: 0;
   margin-bottom: 0;
-  overflow-anchor: none; /* Prevents height change from anchoring the scrollbar */
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow-anchor: none;
+  pointer-events: none;
 }
 
 .typing-indicator-wrapper.visible {
   grid-template-rows: 1fr;
+  max-height: 88px;
   opacity: 1;
-  margin-top: 4px;
-  margin-bottom: 12px;
+  pointer-events: auto;
 }
 
 .typing-indicator-inner-grid {
   min-height: 0;
+  overflow: hidden;
+  transform: translateZ(0);
+  padding-top: 10px;
+  padding-bottom: 14px;
 }
 
-/* Inner typing bubble spring pop entry/exit transition */
+@supports (interpolate-size: allow-keywords) {
+  .typing-indicator-wrapper {
+    interpolate-size: allow-keywords;
+  }
+}
+
+/* Inner typing bubble — GPU compositor only (transform + opacity + filter) */
 .typing-indicator-wrapper .typing-bubble {
-  transform: scale3d(0.7, 0.7, 1);
+  transform: translate3d(0, 8px, 0) scale(0.92);
   transform-origin: left bottom;
-  transition: transform 0.35s cubic-bezier(0.34, 1.4, 0.64, 1);
+  opacity: 0;
+  filter: blur(6px);
+  will-change: transform, opacity, filter;
+  backface-visibility: hidden;
+  transition: 
+    transform 0.46s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.34s cubic-bezier(0.32, 0.72, 0, 1),
+    filter 0.42s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .typing-indicator-wrapper.visible .typing-bubble {
-  transform: scale3d(1, 1, 1);
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+  filter: blur(0px);
 }
 
 /* Premium Natural Spring-Bounce Entry Animations for New Messages */
@@ -6908,6 +6927,34 @@ textarea {
   transform: scale(1.05) rotate(90deg);
 }
 
+/* Load-more pagination pill — minimal, performant */
+.load-more-pill-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px 0;
+  width: 100%;
+}
+.load-more-pill {
+  background: rgba(18, 18, 18, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
+}
+.load-more-pill:hover {
+  background: rgba(28, 28, 28, 0.95);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--text-primary);
+  transform: scale(1.03);
+}
+.load-more-pill:active { transform: scale(0.97); }
+
 /* Chat Date separators */
 .date-separator {
   display: flex;
@@ -6915,6 +6962,8 @@ textarea {
   align-items: center;
   margin: 24px 0 16px 0;
   width: 100%;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
 }
 
 .date-separator span {
