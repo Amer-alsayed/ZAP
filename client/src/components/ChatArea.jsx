@@ -1179,13 +1179,13 @@ const MessageList = React.memo(({
               // Cancel hold-to-select on any scroll/drag
               if (absX > 8 || absY > 8) cancelLongPress();
 
-              // Strict angle lock: require 14px horizontal pull AND horizontal distance >= 1.25 * vertical distance
+              // Initiate horizontal swipe if horizontal intent dominates
               if (!swipeStartRef.current.isSwiping) {
-                if (absX >= 14 && absX > absY * 1.25 && isValidDirection) {
+                if (deltaX >= 10 && deltaX > absY && isValidDirection) {
                   swipeStartRef.current.isSwiping = true;
                   cancelLongPress();
-                } else if (absY > 8 && absY >= absX) {
-                  // User is scrolling vertically — release swipe tracking
+                } else if (absY > 16 && absY > absX * 1.5) {
+                  // User is clearly scrolling vertically — release swipe tracking
                   cancelLongPress();
                   swipeStartRef.current = null;
                   return;
@@ -1194,8 +1194,9 @@ const MessageList = React.memo(({
 
               if (swipeStartRef.current?.isSwiping && deltaX > 0) {
                 cancelLongPress();
-                const rawMagnitude = Math.max(0, deltaX - 10);
-                const clampedMagnitude = Math.min(rawMagnitude * 0.75, 68);
+                swipeStartRef.current.maxDeltaX = Math.max(swipeStartRef.current.maxDeltaX || 0, deltaX);
+                const rawMagnitude = Math.max(0, deltaX - 6);
+                const clampedMagnitude = Math.min(rawMagnitude * 0.8, 68);
                 const appliedOffset = clampedMagnitude;
 
                 swipeOffsetRef.current = appliedOffset;
@@ -1211,7 +1212,7 @@ const MessageList = React.memo(({
                     activeSwipeElRef.current.style.willChange = 'transform';
                   }
                   if (activeSwipeIndicatorRef.current) {
-                    const progress = Math.min(mag / 26, 1);
+                    const progress = Math.min(mag / 20, 1);
                     activeSwipeIndicatorRef.current.style.transition = 'none';
                     activeSwipeIndicatorRef.current.style.opacity = progress;
                     activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
@@ -1226,6 +1227,7 @@ const MessageList = React.memo(({
               cancelLongPress();
               const wasSwiping = swipeStartRef.current?.isSwiping;
               const currentOffset = swipeOffsetRef.current;
+              const maxDeltaX = swipeStartRef.current?.maxDeltaX || 0;
               const el = activeSwipeElRef.current;
               const indicator = activeSwipeIndicatorRef.current;
 
@@ -1242,7 +1244,7 @@ const MessageList = React.memo(({
                 indicator.style.willChange = 'auto';
               }
 
-              if (wasSwiping && currentOffset >= 24) {
+              if (wasSwiping && (currentOffset >= 16 || maxDeltaX >= 26)) {
                 setIsClosingReply(false);
                 isClosingReplyRef.current = false;
                 const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
@@ -1256,11 +1258,8 @@ const MessageList = React.memo(({
                 if (window.navigator && window.navigator.vibrate) {
                   try { window.navigator.vibrate(15); } catch (err) {}
                 }
-                // Call focus synchronously in touch gesture tick. If already activeElement, cycle blur first so Android IME re-opens
+                // Call focus synchronously in touch gesture tick
                 if (textareaRef.current) {
-                  if (document.activeElement === textareaRef.current) {
-                    textareaRef.current.blur();
-                  }
                   textareaRef.current.focus();
                   try {
                     const len = textareaRef.current.value.length;
