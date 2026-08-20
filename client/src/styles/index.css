@@ -3443,6 +3443,7 @@ button {
 
 .image-message-wrapper img,
 .image-loader-container img,
+.album-grid-cell img,
 .message-image {
   display: block;
   width: 100%;
@@ -3457,6 +3458,14 @@ button {
   transition: opacity 0.35s ease, filter 0.35s ease;
   will-change: opacity, filter;
   z-index: 2;
+  -webkit-user-drag: none !important;
+  -khtml-user-drag: none !important;
+  -moz-user-drag: none !important;
+  -o-user-drag: none !important;
+  user-drag: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
 }
 
 .message-image.loaded {
@@ -6480,12 +6489,10 @@ textarea {
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
 }
 
-.message-wrapper.received .swipe-reply-indicator {
-  left: -32px;
-}
-
+.message-wrapper.received .swipe-reply-indicator,
 .message-wrapper.sent .swipe-reply-indicator {
-  right: -32px;
+  left: -32px;
+  right: auto;
 }
 
 /* Message Hover Action Container */

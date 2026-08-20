@@ -3007,7 +3007,14 @@ export default function App() {
               <X size={24} />
             </button>
             {activeLightboxSrc && (
-              <img src={activeLightboxSrc} className="lightbox-image" alt="Decrypted Preview" onClick={(e) => e.stopPropagation()} />
+              <img 
+                src={activeLightboxSrc} 
+                className="lightbox-image" 
+                alt="Decrypted Preview" 
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
+                onClick={(e) => e.stopPropagation()} 
+              />
             )}
           </div>
 

@@ -1148,7 +1148,12 @@ const MessageList = React.memo(({
               }}
             onTouchStart={(e) => {
               if (window.__isMediaModalOpen || selectionMode) return;
-              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn')) {
+              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container')) {
+                return;
+              }
+              // If touching an image or video in chat, allow selection on long-press but NEVER drag/move the image
+              if (e.target.closest('.media-container, .image-message-wrapper, .media-album-container, .media-album-grid, .image-loader-container, .message-image')) {
+                startLongPress(msg);
                 return;
               }
               startLongPress(msg);
@@ -1168,8 +1173,8 @@ const MessageList = React.memo(({
               const absX = Math.abs(deltaX);
               const absY = Math.abs(deltaY);
 
-              // Direction: Received messages swipe right (deltaX > 0), Sent messages swipe left (deltaX < 0)
-              const isValidDirection = isSent ? (deltaX < 0) : (deltaX > 0);
+              // Direction: Swiping toward the right (deltaX > 0) for BOTH sent and received messages
+              const isValidDirection = deltaX > 0;
 
               // Cancel hold-to-select on any scroll/drag
               if (absX > 8 || absY > 8) cancelLongPress();
@@ -1187,12 +1192,11 @@ const MessageList = React.memo(({
                 }
               }
 
-              if (swipeStartRef.current?.isSwiping) {
+              if (swipeStartRef.current?.isSwiping && deltaX > 0) {
                 cancelLongPress();
-                const directionSign = deltaX < 0 ? -1 : 1;
-                const rawMagnitude = Math.max(0, absX - 16);
+                const rawMagnitude = Math.max(0, deltaX - 16);
                 const clampedMagnitude = Math.min(rawMagnitude * 0.6, 68);
-                const appliedOffset = clampedMagnitude * directionSign;
+                const appliedOffset = clampedMagnitude;
 
                 swipeOffsetRef.current = appliedOffset;
                 pendingSwipeRef.current = { appliedOffset, clampedMagnitude };
@@ -1238,7 +1242,7 @@ const MessageList = React.memo(({
                 indicator.style.willChange = 'auto';
               }
 
-              if (wasSwiping && Math.abs(currentOffset) >= 40) {
+              if (wasSwiping && currentOffset >= 40) {
                 const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
                 setReplyingTo({
                   id: targetMsg.id,
@@ -1250,12 +1254,19 @@ const MessageList = React.memo(({
                 if (window.navigator && window.navigator.vibrate) {
                   try { window.navigator.vibrate(15); } catch (err) {}
                 }
-                setTimeout(() => {
+                // Call focus synchronously in touch gesture tick so mobile browser/OS shows virtual keyboard
+                if (textareaRef.current) {
+                  textareaRef.current.focus();
+                  try {
+                    const len = textareaRef.current.value.length;
+                    textareaRef.current.setSelectionRange(len, len);
+                  } catch (e) {}
+                }
+                requestAnimationFrame(() => {
                   if (textareaRef.current) {
                     textareaRef.current.focus({ preventScroll: true });
-                    textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                   }
-                }, 50);
+                });
               }
               swipeStartRef.current = null;
               activeSwipeElRef.current = null;
@@ -1346,13 +1357,18 @@ const MessageList = React.memo(({
                                 mediaType: targetMsg.mediaType || null,
                                 fileMetadata: targetMsg.fileMetadata || null
                               });
-                              setTimeout(() => {
+                              if (textareaRef.current) {
+                                textareaRef.current.focus();
+                                try {
+                                  const len = textareaRef.current.value.length;
+                                  textareaRef.current.setSelectionRange(len, len);
+                                } catch (e) {}
+                              }
+                              requestAnimationFrame(() => {
                                 if (textareaRef.current) {
-                                  textareaRef.current.blur();
                                   textareaRef.current.focus({ preventScroll: true });
-                                  textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                                 }
-                              }, 50);
+                              });
                             }}
                           >
                             <CornerUpLeft size={12} />
@@ -4122,6 +4138,8 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
           alt="" 
           loading="lazy"
           decoding="async"
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
           onClick={onImageClick ? () => onImageClick(fullResUrlRef.current || imgSrc) : undefined}
           onLoad={() => {
             setIsLoaded(true);
