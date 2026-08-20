@@ -1986,7 +1986,7 @@ const ChatArea = React.memo(function ChatArea({
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
       if (isSmoothScrollingRef.current) {
-        if (distanceFromBottom <= 50) {
+        if (distanceFromBottom <= 8) {
           isSmoothScrollingRef.current = false;
           isScrolledUpRef.current = false;
           setIsScrolledUp(false);
@@ -1994,12 +1994,12 @@ const ChatArea = React.memo(function ChatArea({
         return;
       }
 
-      if (distanceFromBottom > 160) {
+      if (distanceFromBottom > 20) {
         if (!isScrolledUpRef.current) {
           isScrolledUpRef.current = true;
           setIsScrolledUp(true);
         }
-      } else if (distanceFromBottom <= 50) {
+      } else if (distanceFromBottom <= 4) {
         if (isScrolledUpRef.current) {
           isScrolledUpRef.current = false;
           setIsScrolledUp(false);
@@ -2405,10 +2405,10 @@ const ChatArea = React.memo(function ChatArea({
     if (currentCount === prevCount + 1) {
       const lastMsg = activeContact.messages[activeContact.messages.length - 1];
       const isSentByMe = lastMsg && lastMsg.sender !== activeContact.username;
-      if (isSentByMe || isLastMessageVisible || !isScrolledUpRef.current) {
-        if (messagesContainerRef.current && (!isScrolledUpRef.current || isLastMessageVisible)) {
+      if (isSentByMe || (isLastMessageVisible && !isScrolledUpRef.current)) {
+        if (messagesContainerRef.current && (isSentByMe || (isLastMessageVisible && !isScrolledUpRef.current))) {
           requestAnimationFrame(() => {
-            if (messagesContainerRef.current && !isScrolledUpRef.current) {
+            if (messagesContainerRef.current && (isSentByMe || !isScrolledUpRef.current)) {
               messagesContainerRef.current.scrollTo({
                 top: messagesContainerRef.current.scrollHeight,
                 behavior: 'smooth'
@@ -2421,7 +2421,7 @@ const ChatArea = React.memo(function ChatArea({
         setVisibleCount(prev => Math.min(activeContact.messages.length, prev + delta));
       }
     } else if (currentCount > prevCount) {
-      if (messagesContainerRef.current && (!isScrolledUpRef.current || isLastMessageVisible)) {
+      if (messagesContainerRef.current && (!isScrolledUpRef.current && isLastMessageVisible)) {
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
       } else if (isScrolledUpRef.current) {
         const delta = currentCount - prevCount;
@@ -2559,7 +2559,7 @@ const ChatArea = React.memo(function ChatArea({
       setIsLastMessageVisible(entry.isIntersecting);
     }, {
       root: messagesContainerRef.current,
-      threshold: 0.05 // Consider visible if even 5% of the last message is in view
+      threshold: 0.85 // Require 85% visible to be considered at bottom — prevents drag when slightly scrolled
     });
 
     const currentLast = lastMessageRef.current;

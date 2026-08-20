@@ -641,18 +641,11 @@ button {
   transform: translateZ(0);
 }
 
-/* GPU-Accelerated Buttery Smooth Sidebar Isolation */
+/* Sidebar Isolation — keep shadows/blur during animation (no fade) */
 .app-container.is-sidebar-animating .main-content-pane {
   contain: size layout paint !important;
   overflow: hidden !important;
   will-change: width, transform;
-}
-
-.app-container.is-sidebar-animating .chat-header,
-.app-container.is-sidebar-animating .chat-input-container,
-.app-container.is-sidebar-animating .reply-preview-bar {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 .app-container.is-sidebar-animating .messages-container {
@@ -5350,7 +5343,7 @@ textarea {
     height: 72px !important; /* Exact same height as sidebar-header on mobile for perfect top-bottom symmetry */
   }
 
-  /* 1. Mobile Chat Input & Floating Controls — smooth keyboard */
+  /* 1. Mobile Chat Input & Floating Controls — smooth keyboard, no clipping for popovers */
   .chat-input-wrapper {
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)) 8px !important;
     min-height: calc(60px + env(safe-area-inset-bottom, 0px)) !important;
@@ -5362,12 +5355,10 @@ textarea {
     transform: translateZ(0);
     transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
     backface-visibility: hidden;
-    contain: layout paint;
   }
 
   .messages-container {
     transition: padding-bottom 0.32s cubic-bezier(0.32, 0.72, 0, 1);
-    will-change: padding-bottom;
   }
 
   .chat-input-row {
