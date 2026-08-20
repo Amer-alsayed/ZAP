@@ -213,7 +213,8 @@ const Sidebar = React.memo(function Sidebar({
   onToggleMinimize,
   showSettings = false,
   showRecents = false,
-  isNavigatingBack = false
+  isNavigatingBack = false,
+  sidebarBackHandlerRef = null
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState(null);
@@ -235,6 +236,15 @@ const Sidebar = React.memo(function Sidebar({
 
   // Holding / Long-press context menu state
   const [modalDialog, setModalDialog] = useState(null); // { contact, step: 'menu' | 'confirm-delete' | 'confirm-block' }
+  const modalDialogRef = useRef(modalDialog);
+  useEffect(() => {
+    modalDialogRef.current = modalDialog;
+    if (modalDialog) {
+      if (window.history.state !== 'sidebar-dialog') {
+        window.history.pushState('sidebar-dialog', '');
+      }
+    }
+  }, [modalDialog]);
   const [isModalClosing, setIsModalClosing] = useState(false);
   const longPressTimerRef = useRef(null);
   const isLongPressTriggeredRef = useRef(false);
@@ -481,14 +491,36 @@ const Sidebar = React.memo(function Sidebar({
 
   const [renameInput, setRenameInput] = useState('');
 
-  const closeModal = useCallback(() => {
-    if (isModalClosing) return;
+  const closeModal = useCallback((isFromPopState = false) => {
+    if (isModalClosing || !modalDialogRef.current) return;
     setIsModalClosing(true);
+    if (!isFromPopState && (window.history.state === 'sidebar-dialog' || window.history.state?.view === 'sidebar-dialog')) {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
     setTimeout(() => {
       setModalDialog(null);
       setIsModalClosing(false);
     }, 220);
   }, [isModalClosing]);
+
+  useEffect(() => {
+    if (sidebarBackHandlerRef) {
+      sidebarBackHandlerRef.current = () => {
+        if (modalDialogRef.current && !isModalClosing) {
+          closeModal(true);
+          return true;
+        }
+        return false;
+      };
+    }
+    return () => {
+      if (sidebarBackHandlerRef) sidebarBackHandlerRef.current = null;
+    };
+  }, [sidebarBackHandlerRef, closeModal, isModalClosing]);
 
   const handleTriggerRename = (contact) => {
     setRenameInput(contact.customName || contact.displayName || '');

@@ -75,6 +75,10 @@ export default function App() {
   // In-App Toast & Confirmation Modal State
   const [toasts, setToasts] = useState([]);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false });
+  const confirmModalRef = useRef(confirmModal);
+  useEffect(() => {
+    confirmModalRef.current = confirmModal;
+  }, [confirmModal]);
 
   const showToast = useCallback((message, type = 'error', title = null, duration = 4000) => {
     if (!message) return;
@@ -94,13 +98,23 @@ export default function App() {
   }, []);
 
   const showConfirm = useCallback((options) => {
+    if (window.history.state !== 'confirm-modal') {
+      window.history.pushState('confirm-modal', '');
+    }
     setConfirmModal({
       isOpen: true,
       ...options
     });
   }, []);
 
-  const closeConfirm = useCallback(() => {
+  const closeConfirm = useCallback((isFromPopState = false) => {
+    if (!isFromPopState && (window.history.state === 'confirm-modal' || window.history.state?.view === 'confirm-modal')) {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => {
+        window.__isProgrammaticPop = false;
+      }, 100);
+    }
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
   }, []);
 
@@ -575,6 +589,7 @@ export default function App() {
 
   const showSafetyModalRef = useRef(false);
   const selectionBackRef = useRef(null);
+  const sidebarBackHandlerRef = useRef(null);
 
   useEffect(() => {
     showSettingsRef.current = showSettings;
@@ -602,6 +617,17 @@ export default function App() {
       if (window.__isChatraRecording || window.__isPoppingRecording || window.__isPoppingCall || window.__isPoppingFullscreen) {
         window.__isPoppingCall = false;
         window.__isPoppingFullscreen = false;
+        return;
+      }
+
+      // 0c. Close confirmation modal if active (e.g. logout or delete confirmation)
+      if (confirmModalRef.current?.isOpen) {
+        closeConfirm(true);
+        return;
+      }
+
+      // 0d. Let active Sidebar internal layers (Contact Action Dialog: rename, delete, block) consume the back event
+      if (sidebarBackHandlerRef.current?.()) {
         return;
       }
 
@@ -2921,6 +2947,7 @@ export default function App() {
                 showSettings={showSettings}
                 showRecents={showRecents}
                 isNavigatingBack={isNavigatingBack}
+                sidebarBackHandlerRef={sidebarBackHandlerRef}
                 onShowSettings={() => {
                   if (window.history.state !== 'settings') {
                     window.history.pushState('settings', '');
