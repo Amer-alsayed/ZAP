@@ -1394,7 +1394,7 @@ button {
   display: grid;
   grid-template-rows: 1fr;
   width: 100%;
-  touch-action: pan-y pan-x;
+  touch-action: pan-y;
   margin-top: 4px; /* space-y-1 (4px) between consecutive messages from the same sender */
   margin-bottom: 0;
   position: relative;
@@ -1457,7 +1457,7 @@ button {
   flex-direction: column;
   max-width: 72%;
   position: relative;
-  touch-action: pan-y pan-x;
+  touch-action: pan-y;
   transform: translate3d(0, 0, 0);
   will-change: transform;
 }
@@ -6514,22 +6514,25 @@ textarea {
   position: absolute;
   top: 50%;
   transform: translateY(-50%) scale(0);
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: rgba(var(--accent-rgb), 0.2);
-  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.22);
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
   align-items: center;
   justify-content: center;
   pointer-events: none;
   z-index: 5;
   opacity: 0;
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
 }
 
 .message-wrapper.received .swipe-reply-indicator,
 .message-wrapper.sent .swipe-reply-indicator {
-  left: -32px;
+  left: -34px;
   right: auto;
 }
 
@@ -7088,6 +7091,64 @@ textarea {
   transform: scale(1.03);
 }
 .load-more-pill:active { transform: scale(0.97); }
+
+/* Professional history loader — top sticky spinner that stops fast scroll (WhatsApp/Telegram pattern) */
+.history-loading-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin: 4px auto 8px auto;
+  width: fit-content;
+  max-width: 88%;
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.88) !important;
+  border: 1px solid rgba(var(--accent-rgb), 0.22) !important;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 18px rgba(0, 0, 0, 0.36) !important;
+  backdrop-filter: blur(18px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
+  animation: historyLoaderIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+  contain: layout paint style;
+  will-change: transform, opacity;
+}
+.history-loading-bar .spinner-rotating {
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
+@keyframes historyLoaderIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.history-start-pill-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 2px 0;
+  width: 100%;
+}
+.history-start-pill {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 4px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.15px;
+}
+.messages-container.is-loading-history {
+  overscroll-behavior-y: contain;
+  /* Prevent scrolling past loader while batch renders */
+  scroll-behavior: auto;
+}
 
 /* Chat Date separators */
 .date-separator {
@@ -10583,27 +10644,47 @@ textarea {
     margin-bottom: 0 !important;
   }
 
-  /* Emoji-only: restore proper large sizing on mobile (was shrunk too much) */
+  /* Emoji-only: FORCE jumbo sizing on mobile — override inner text that was capped at 14px */
   .message-bubble.emoji-only-bubble,
   .message-wrapper.sent .message-bubble.emoji-only-bubble,
   .message-wrapper.received .message-bubble.emoji-only-bubble,
   .message-wrapper.emoji-only-wrapper .message-bubble {
     padding: 2px 4px !important;
     letter-spacing: 3px !important;
+    line-height: 1.12 !important;
+    font-size: 34px !important; /* fallback */
   }
   .message-bubble.emoji-only-bubble.count-1,
   .message-wrapper.sent .message-bubble.emoji-only-bubble.count-1,
   .message-wrapper.received .message-bubble.emoji-only-bubble.count-1,
-  .message-wrapper.emoji-only-wrapper .message-bubble.count-1 { font-size: 52px !important; }
+  .message-wrapper.emoji-only-wrapper .message-bubble.count-1,
+  .message-bubble.emoji-only-bubble.count-1 .message-text-content,
+  .message-bubble.emoji-only-bubble.count-1 .message-bubble-body,
+  .message-bubble.emoji-only-bubble.count-1 .message-bubble-body .message-text-content { font-size: 52px !important; line-height: 1.12 !important; letter-spacing: 3px !important; }
   .message-bubble.emoji-only-bubble.count-2,
   .message-wrapper.sent .message-bubble.emoji-only-bubble.count-2,
   .message-wrapper.received .message-bubble.emoji-only-bubble.count-2,
-  .message-wrapper.emoji-only-wrapper .message-bubble.count-2 { font-size: 42px !important; }
+  .message-wrapper.emoji-only-wrapper .message-bubble.count-2,
+  .message-bubble.emoji-only-bubble.count-2 .message-text-content,
+  .message-bubble.emoji-only-bubble.count-2 .message-bubble-body,
+  .message-bubble.emoji-only-bubble.count-2 .message-bubble-body .message-text-content { font-size: 42px !important; line-height: 1.12 !important; letter-spacing: 3px !important; }
   .message-bubble.emoji-only-bubble.count-3,
   .message-wrapper.sent .message-bubble.emoji-only-bubble.count-3,
   .message-wrapper.received .message-bubble.emoji-only-bubble.count-3,
-  .message-wrapper.emoji-only-wrapper .message-bubble.count-3 { font-size: 34px !important; }
-  .message-bubble.emoji-only-bubble .inline-message-meta { margin-top: 2px !important; }
+  .message-wrapper.emoji-only-wrapper .message-bubble.count-3,
+  .message-bubble.emoji-only-bubble.count-3 .message-text-content,
+  .message-bubble.emoji-only-bubble.count-3 .message-bubble-body,
+  .message-bubble.emoji-only-bubble.count-3 .message-bubble-body .message-text-content { font-size: 34px !important; line-height: 1.12 !important; letter-spacing: 2px !important; }
+  /* Ensure generic inner selectors don't clamp emoji */
+  .message-bubble.emoji-only-bubble .message-text-content,
+  .message-bubble.emoji-only-bubble .message-bubble-body,
+  .message-bubble.emoji-only-bubble .message-bubble-body .message-text-content {
+    font-size: inherit !important;
+    line-height: inherit !important;
+  }
+  .message-bubble.emoji-only-bubble .inline-message-meta { margin-top: 2px !important; font-size: 9px !important; }
+  /* Override the mobile 14px clamp on .message-text-content when inside emoji bubble */
+  .message-wrapper.emoji-only-wrapper .message-text-content { font-size: inherit !important; }
 
   /* Date & E2EE banners — slimmer */
   .date-separator { margin: 14px 0 8px 0 !important; }

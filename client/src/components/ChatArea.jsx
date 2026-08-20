@@ -940,18 +940,12 @@ const MessageList = React.memo(({
   scrollToMessage,
   setReplyingTo,
   textareaRef,
-  renderMessageContent
-  , onDeleteMessages
-  , selectionCancelRef
-  , onSelectionModeChange
+  renderMessageContent,
+  onDeleteMessages,
+  selectionCancelRef,
+  onSelectionModeChange,
+  setIsClosingReply
 }) => {
-  const [swipeState, setSwipeState] = useState({ msgId: null, offset: 0, isSwiping: false });
-  const swipeStartRef = useRef(null);
-  const activeSwipeElRef = useRef(null);
-  const activeSwipeIndicatorRef = useRef(null);
-  const swipeOffsetRef = useRef(0);
-  const swipeRafRef = useRef(null);
-  const pendingSwipeRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -998,9 +992,38 @@ const MessageList = React.memo(({
           setSelectedIds([]);
         }
       };
+      selectionCancelRef.current.reply = () => {
+        if (selectedIds.length === 1) {
+          const selId = selectedIds[0];
+          const target = messages.find(m => m.id === selId) || groupedMessages.find(m => m.id === selId || (m.allIds && m.allIds.includes(selId)));
+          const baseMsg = target ? (target.isAlbum ? target.albumItems[0] : target.isMultiFile ? target.fileItems[0] : target) : null;
+          const txt = target ? (target.isAlbum ? `[${target.albumItems.length} Photos]` : target.isMultiFile ? `[${target.fileItems.length} Files]` : (target.mediaType ? `[${target.mediaType}]` : target.text)) : '';
+          if (baseMsg || target) {
+            const replyTarget = baseMsg || target;
+            setIsClosingReply?.(false);
+            setReplyingTo({
+              id: replyTarget.id,
+              sender: replyTarget.sender,
+              text: txt,
+              mediaType: replyTarget.mediaType || null,
+              fileMetadata: replyTarget.fileMetadata || null
+            });
+            if (window.navigator && window.navigator.vibrate) try { window.navigator.vibrate(15); } catch (e) {}
+            // Synchronously focus keyboard inside user gesture
+            if (textareaRef && textareaRef.current) {
+              try {
+                textareaRef.current.focus();
+                const len = textareaRef.current.value.length;
+                textareaRef.current.setSelectionRange(len, len);
+              } catch (e) {}
+            }
+          }
+          setSelectedIds([]);
+        }
+      };
     }
     return () => { if (selectionCancelRef) selectionCancelRef.current = null; };
-  }, [selectionMode, selectedIds, selectedMsgForCopy, canCopySelected, onDeleteMessages, onSelectionModeChange, selectionCancelRef]);
+  }, [selectionMode, selectedIds, selectedMsgForCopy, canCopySelected, onDeleteMessages, onSelectionModeChange, selectionCancelRef, messages, groupedMessages, setReplyingTo, textareaRef, setIsClosingReply]);
 
   const toggleSelected = (msg) => {
     const ids = msg.isAlbum ? msg.allIds : [msg.id];
@@ -1023,6 +1046,166 @@ const MessageList = React.memo(({
     }, 480);
   };
   const cancelLongPress = () => window.clearTimeout(longPressTimerRef.current);
+
+  const handleMessageTouchStart = (msg, isSent, e) => {
+    if (window.__isMediaModalOpen || selectionMode) return;
+    if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .album-gallery-modal-overlay, .system-call-log-card')) {
+      return;
+    }
+    
+    startLongPress(msg);
+
+    const touch = e.touches[0];
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+    const rowEl = e.currentTarget;
+    const wrapper = rowEl?.querySelector('.message-wrapper');
+    const indicator = wrapper?.querySelector('.swipe-reply-indicator');
+
+    let isSwiping = false;
+    let isScrolling = false;
+    let currentOffset = 0;
+    let hasTriggeredThresholdHaptic = false;
+    let triggerThresholdMet = false;
+
+    const onWindowTouchMove = (moveEvent) => {
+      if (!moveEvent.touches || moveEvent.touches.length === 0) return;
+      const currentTouch = moveEvent.touches[0];
+      const deltaX = currentTouch.clientX - startX;
+      const deltaY = currentTouch.clientY - startY;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+
+      if (absX > 6 || absY > 6) {
+        cancelLongPress();
+      }
+
+      if (!isSwiping && !isScrolling) {
+        if (absX >= 7 && absX > absY) {
+          isSwiping = true;
+          cancelLongPress();
+        } else if (absY >= 7 && absY >= absX) {
+          isScrolling = true;
+          cancelLongPress();
+        }
+      }
+
+      if (isSwiping) {
+        if (moveEvent.cancelable) {
+          try { moveEvent.preventDefault(); } catch (err) {}
+        }
+        cancelLongPress();
+
+        const dir = deltaX >= 0 ? 1 : -1;
+        const rawMagnitude = Math.max(0, absX - 4);
+        const clampedMagnitude = Math.min(rawMagnitude * 0.75, 68);
+        currentOffset = clampedMagnitude * dir;
+
+        if (wrapper) {
+          wrapper.style.transition = 'none';
+          wrapper.style.transform = `translate3d(${currentOffset}px, 0, 0)`;
+          wrapper.style.willChange = 'transform';
+        }
+
+        if (indicator) {
+          const threshold = 24;
+          const progress = Math.min(clampedMagnitude / threshold, 1);
+          indicator.style.transition = 'none';
+          indicator.style.opacity = progress;
+
+          if (dir < 0) {
+            indicator.style.left = 'auto';
+            indicator.style.right = '-34px';
+          } else {
+            indicator.style.left = '-34px';
+            indicator.style.right = 'auto';
+          }
+
+          if (clampedMagnitude >= threshold) {
+            triggerThresholdMet = true;
+            indicator.style.transform = `translateY(-50%) scale(1.18)`;
+            if (!hasTriggeredThresholdHaptic) {
+              hasTriggeredThresholdHaptic = true;
+              if (navigator.vibrate) try { navigator.vibrate(10); } catch (err) {}
+            }
+          } else {
+            triggerThresholdMet = false;
+            indicator.style.transform = `translateY(-50%) scale(${progress * 0.95})`;
+            hasTriggeredThresholdHaptic = false;
+          }
+        }
+      }
+    };
+
+    const cleanupListeners = () => {
+      window.removeEventListener('touchmove', onWindowTouchMove, { passive: false });
+      window.removeEventListener('touchend', onWindowTouchEnd);
+      window.removeEventListener('touchcancel', onWindowTouchCancel);
+    };
+
+    const onWindowTouchEnd = () => {
+      cleanupListeners();
+      cancelLongPress();
+
+      if (wrapper) {
+        wrapper.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
+        wrapper.style.transform = 'translate3d(0, 0, 0)';
+        setTimeout(() => { if (wrapper) wrapper.style.willChange = 'auto'; }, 340);
+      }
+      if (indicator) {
+        indicator.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
+        indicator.style.opacity = '0';
+        indicator.style.transform = 'translateY(-50%) scale(0)';
+      }
+
+      if (isSwiping && triggerThresholdMet) {
+        setIsClosingReply?.(false);
+        const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
+        
+        setReplyingTo({
+          id: targetMsg.id,
+          sender: targetMsg.sender,
+          text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+          mediaType: targetMsg.mediaType || null,
+          fileMetadata: targetMsg.fileMetadata || null
+        });
+
+        if (navigator.vibrate) {
+          try { navigator.vibrate(15); } catch (err) {}
+        }
+
+        // CRITICAL FOR MOBILE KEYBOARD: Focus textarea synchronously inside this direct user touchend tick!
+        const inputEl = textareaRef?.current;
+        if (inputEl) {
+          try {
+            inputEl.focus();
+            const len = inputEl.value.length;
+            inputEl.setSelectionRange(len, len);
+          } catch (err) {}
+        }
+      }
+    };
+
+    const onWindowTouchCancel = () => {
+      cleanupListeners();
+      cancelLongPress();
+
+      if (wrapper) {
+        wrapper.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
+        wrapper.style.transform = 'translate3d(0, 0, 0)';
+        setTimeout(() => { if (wrapper) wrapper.style.willChange = 'auto'; }, 340);
+      }
+      if (indicator) {
+        indicator.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
+        indicator.style.opacity = '0';
+        indicator.style.transform = 'translateY(-50%) scale(0)';
+      }
+    };
+
+    window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
+    window.addEventListener('touchend', onWindowTouchEnd, { passive: false });
+    window.addEventListener('touchcancel', onWindowTouchCancel, { passive: false });
+  };
 
   return (
     <div className="message-list">
@@ -1076,7 +1259,7 @@ const MessageList = React.memo(({
                 </div>
               )}
               <div 
-                id={`msg-${msg.id}`}
+                id={`msg-${msg.id}`} 
                 ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
                 className="system-call-log-container"
               >
@@ -1146,261 +1329,85 @@ const MessageList = React.memo(({
                   toggleSelected(msg);
                 }
               }}
-            onTouchStart={(e) => {
-              if (window.__isMediaModalOpen || selectionMode) return;
-              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container')) {
-                return;
-              }
-              startLongPress(msg);
-              const touch = e.touches[0];
-              const wrapper = e.currentTarget.querySelector('.message-wrapper');
-              const indicator = wrapper?.querySelector('.swipe-reply-indicator');
-              activeSwipeElRef.current = wrapper;
-              activeSwipeIndicatorRef.current = indicator;
-              swipeOffsetRef.current = 0;
-              swipeStartRef.current = { x: touch.clientX, y: touch.clientY, msgId: msg.id, isSwiping: false, isSent };
-            }}
-            onTouchMove={(e) => {
-              if (selectionMode || !swipeStartRef.current || swipeStartRef.current.msgId !== msg.id) return;
-              const touch = e.touches[0];
-              const deltaX = touch.clientX - swipeStartRef.current.x;
-              const deltaY = touch.clientY - swipeStartRef.current.y;
-              const absX = Math.abs(deltaX);
-              const absY = Math.abs(deltaY);
-              const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-
-              // Direction: Swiping toward the right (deltaX > 0) for BOTH sent and received messages
-              const isValidDirection = deltaX > 0;
-
-              // Cancel hold-to-select on any scroll/drag
-              if (absX > 8 || absY > 8) cancelLongPress();
-
-              // Initiate horizontal swipe if horizontal intent dominates — mobile uses lower threshold for thumb reach
-              if (!swipeStartRef.current.isSwiping) {
-                const startThreshold = isMobile ? 6 : 10;
-                if (deltaX >= startThreshold && deltaX > absY && isValidDirection) {
-                  swipeStartRef.current.isSwiping = true;
-                  cancelLongPress();
-                  // Mobile: prevent vertical scroll once horizontal intent is clear
-                  if (isMobile && e.cancelable) {
-                    try { e.preventDefault(); } catch (err) {}
-                  }
-                } else if (absY > 16 && absY > absX * 1.5) {
-                  // User is clearly scrolling vertically — release swipe tracking
-                  cancelLongPress();
-                  swipeStartRef.current = null;
+              onTouchStart={(e) => handleMessageTouchStart(msg, isSent, e)}
+              onMouseDown={(e) => {
+                if (window.__isMediaModalOpen || selectionMode || e.button !== 0) return;
+                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container')) {
                   return;
                 }
-              }
-
-              if (swipeStartRef.current?.isSwiping && deltaX > 0) {
-                // Stop native scroll on mobile during active swipe
-                if (isMobile && e.cancelable) {
-                  try { e.preventDefault(); } catch (err) {}
-                }
+                startLongPress(msg);
+              }}
+              onMouseUp={() => {
                 cancelLongPress();
-                swipeStartRef.current.maxDeltaX = Math.max(swipeStartRef.current.maxDeltaX || 0, deltaX);
-                const rawMagnitude = Math.max(0, deltaX - 6);
-                const clampedMagnitude = Math.min(rawMagnitude * 0.8, 68);
-                const appliedOffset = clampedMagnitude;
-
-                swipeOffsetRef.current = appliedOffset;
-                pendingSwipeRef.current = { appliedOffset, clampedMagnitude };
-                if (swipeRafRef.current) cancelAnimationFrame(swipeRafRef.current);
-                swipeRafRef.current = requestAnimationFrame(() => {
-                  const pending = pendingSwipeRef.current;
-                  if (!pending) return;
-                  const { appliedOffset: off, clampedMagnitude: mag } = pending;
-                  if (activeSwipeElRef.current) {
-                    activeSwipeElRef.current.style.transition = 'none';
-                    activeSwipeElRef.current.style.transform = `translate3d(${off}px, 0, 0)`;
-                    activeSwipeElRef.current.style.willChange = 'transform';
-                  }
-                  if (activeSwipeIndicatorRef.current) {
-                    const progress = Math.min(mag / 20, 1);
-                    activeSwipeIndicatorRef.current.style.transition = 'none';
-                    activeSwipeIndicatorRef.current.style.opacity = progress;
-                    activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
-                    activeSwipeIndicatorRef.current.style.willChange = 'transform, opacity';
-                  }
-                  swipeRafRef.current = null;
-                });
-              }
-            }}
-            onTouchEnd={() => {
-              if (swipeRafRef.current) { cancelAnimationFrame(swipeRafRef.current); swipeRafRef.current = null; }
-              cancelLongPress();
-              const wasSwiping = swipeStartRef.current?.isSwiping;
-              const currentOffset = swipeOffsetRef.current;
-              const maxDeltaX = swipeStartRef.current?.maxDeltaX || 0;
-              const el = activeSwipeElRef.current;
-              const indicator = activeSwipeIndicatorRef.current;
-              const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-              const triggerOffset = isMobile ? 12 : 16;
-              const triggerDelta = isMobile ? 20 : 26;
-
-              if (el) {
-                el.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
-                el.style.transform = 'translate3d(0, 0, 0)';
-                el.style.willChange = 'auto';
-                setTimeout(() => { if (el) el.style.willChange = 'auto'; }, 320);
-              }
-              if (indicator) {
-                indicator.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
-                indicator.style.opacity = '0';
-                indicator.style.transform = 'translateY(-50%) scale(0)';
-                indicator.style.willChange = 'auto';
-              }
-
-              if (wasSwiping && (currentOffset >= triggerOffset || maxDeltaX >= triggerDelta)) {
-                setIsClosingReply(false);
-                isClosingReplyRef.current = false;
-                const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
-                setReplyingTo({
-                  id: targetMsg.id,
-                  sender: targetMsg.sender,
-                  text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
-                  mediaType: targetMsg.mediaType || null,
-                  fileMetadata: targetMsg.fileMetadata || null
-                });
-                if (window.navigator && window.navigator.vibrate) {
-                  try { window.navigator.vibrate(15); } catch (err) {}
+              }}
+              onMouseLeave={() => {
+                cancelLongPress();
+              }}
+              onClick={() => {
+                if (longPressTriggeredRef.current) {
+                  longPressTriggeredRef.current = false;
+                  return;
                 }
-                // Mobile: focus must happen synchronously inside the touchend gesture tick
-                // to satisfy iOS user-activation + survive React re-render via rAF fallback
-                const inputEl = textareaRef.current;
-                if (inputEl) {
-                  try { inputEl.focus(); } catch (e) {}
-                  try {
-                    const len = inputEl.value.length;
-                    inputEl.setSelectionRange(len, len);
-                  } catch (e) {}
-                  if (isMobile) {
-                    // rAF + timeout fallback ensures keyboard stays open after reply bar mounts
-                    requestAnimationFrame(() => {
-                      if (inputEl && document.activeElement !== inputEl) {
-                        try { inputEl.focus(); } catch (e) {}
-                      }
-                    });
-                    setTimeout(() => {
-                      if (inputEl && document.activeElement !== inputEl) {
-                        try { inputEl.focus(); } catch (e) {}
-                      }
-                    }, 60);
-                  }
-                }
-              }
-              swipeStartRef.current = null;
-              activeSwipeElRef.current = null;
-              activeSwipeIndicatorRef.current = null;
-              swipeOffsetRef.current = 0;
-            }}
-            onTouchCancel={() => {
-              if (swipeRafRef.current) { cancelAnimationFrame(swipeRafRef.current); swipeRafRef.current = null; }
-              cancelLongPress();
-              if (activeSwipeElRef.current) {
-                activeSwipeElRef.current.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
-                activeSwipeElRef.current.style.transform = 'translate3d(0, 0, 0)';
-                activeSwipeElRef.current.style.willChange = 'auto';
-              }
-              if (activeSwipeIndicatorRef.current) {
-                activeSwipeIndicatorRef.current.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
-                activeSwipeIndicatorRef.current.style.opacity = '0';
-                activeSwipeIndicatorRef.current.style.transform = 'translateY(-50%) scale(0)';
-                activeSwipeIndicatorRef.current.style.willChange = 'auto';
-              }
-              swipeStartRef.current = null;
-              activeSwipeElRef.current = null;
-              activeSwipeIndicatorRef.current = null;
-              swipeOffsetRef.current = 0;
-            }}
-            onMouseDown={(e) => {
-              if (window.__isMediaModalOpen || selectionMode || e.button !== 0) return;
-              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container')) {
-                return;
-              }
-              startLongPress(msg);
-            }}
-            onMouseUp={() => {
-              cancelLongPress();
-            }}
-            onMouseLeave={() => {
-              cancelLongPress();
-            }}
-            onClick={() => {
-              if (longPressTriggeredRef.current) {
-                longPressTriggeredRef.current = false;
-                return;
-              }
-              if (selectionMode) toggleSelected(msg);
-            }}
-          >
-            {(() => {
-              const isSelectedMsg = (msg.isAlbum || msg.isMultiFile) 
-                ? msg.allIds.some(id => selectedIds.includes(id)) 
-                : selectedIds.includes(msg.id);
+                if (selectionMode) toggleSelected(msg);
+              }}
+            >
+              {(() => {
+                const isSelectedMsg = (msg.isAlbum || msg.isMultiFile) 
+                  ? msg.allIds.some(id => selectedIds.includes(id)) 
+                  : selectedIds.includes(msg.id);
 
-              return (
-                <div 
-                  id={`msg-${msg.id}`} 
-                  ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
-                  data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
-                  className={`message-wrapper ${isSent ? 'sent' : 'received'} ${isOnlyEmojiMsg ? 'emoji-only-wrapper' : ''} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${isSelectedMsg ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
-                >
-                  {/* Swipe-to-reply spring indicator icon */}
+                return (
                   <div 
-                    className="swipe-reply-indicator"
-                    style={{
-                      opacity: 0,
-                      transform: 'translateY(-50%) scale(0)',
-                      pointerEvents: 'none'
-                    }}
+                    id={`msg-${msg.id}`} 
+                    ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
+                    data-unread-id={(!isSent && msg.status < 2) ? msg.id : undefined}
+                    className={`message-wrapper ${isSent ? 'sent' : 'received'} ${isOnlyEmojiMsg ? 'emoji-only-wrapper' : ''} ${msg.isNew ? 'new-message' : ''} ${(!isSent && msg.isNew) ? 'fused-morph' : ''} ${isSelectedMsg ? 'is-selected' : ''} ${msg.isDeleting ? 'is-deleting' : ''} ${selectionMode ? 'selection-mode-message' : ''}`}
                   >
-                    <CornerUpLeft size={16} color="var(--accent-color)" />
-                  </div>
-                    <div className={`message-bubble ${isSelectedMsg ? 'is-selected' : ''} ${msg.isAlbum ? 'album-bubble' : ''} ${msg.isMultiFile ? 'multifile-bubble' : ''} ${isOnlyEmojiMsg ? `emoji-only-bubble count-${emojiCount}` : ''} ${msg.mediaType === 'file' && msg.fileMetadata?.mimeType?.startsWith('image/') ? 'single-image-bubble' : ''}`}>
-                      {isSelectedMsg && (
-                        <div className="selection-indicator-badge" aria-hidden="true">
-                          <Check size={12} strokeWidth={2.8} />
-                        </div>
-                      )}
-                      {!selectionMode && (
-                        <div className="message-actions-container">
-                          <button 
-                            className="msg-action-btn" 
-                            title="Reply"
-                            aria-label="Reply to message"
-                            onClick={() => {
-                              const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
-                              setReplyingTo({
-                                id: targetMsg.id,
-                                sender: targetMsg.sender,
-                                text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
-                                mediaType: targetMsg.mediaType || null,
-                                fileMetadata: targetMsg.fileMetadata || null
-                              });
-                              if (textareaRef.current) {
-                                const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-                                textareaRef.current.focus();
-                                try {
-                                  const len = textareaRef.current.value.length;
-                                  textareaRef.current.setSelectionRange(len, len);
-                                } catch (e) {}
-                                requestAnimationFrame(() => {
-                                  if (textareaRef.current) {
-                                    if (isMobile) {
-                                      try { textareaRef.current.focus(); } catch (e) {}
-                                    } else {
-                                      textareaRef.current.focus({ preventScroll: true });
-                                    }
-                                  }
+                    {/* Swipe-to-reply spring indicator icon */}
+                    <div 
+                      className="swipe-reply-indicator"
+                      style={{
+                        opacity: 0,
+                        transform: 'translateY(-50%) scale(0)',
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      <CornerUpLeft size={16} color="var(--accent-color)" />
+                    </div>
+                      <div className={`message-bubble ${isSelectedMsg ? 'is-selected' : ''} ${msg.isAlbum ? 'album-bubble' : ''} ${msg.isMultiFile ? 'multifile-bubble' : ''} ${isOnlyEmojiMsg ? `emoji-only-bubble count-${emojiCount}` : ''} ${msg.mediaType === 'file' && msg.fileMetadata?.mimeType?.startsWith('image/') ? 'single-image-bubble' : ''}`}>
+                        {isSelectedMsg && (
+                          <div className="selection-indicator-badge" aria-hidden="true">
+                            <Check size={12} strokeWidth={2.8} />
+                          </div>
+                        )}
+                        {!selectionMode && (
+                          <div className="message-actions-container">
+                            <button 
+                              className="msg-action-btn" 
+                              title="Reply"
+                              aria-label="Reply to message"
+                              onClick={() => {
+                                const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
+                                setIsClosingReply?.(false);
+                                setReplyingTo({
+                                  id: targetMsg.id,
+                                  sender: targetMsg.sender,
+                                  text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                                  mediaType: targetMsg.mediaType || null,
+                                  fileMetadata: targetMsg.fileMetadata || null
                                 });
-                              }
-                            }}
-                          >
-                            <CornerUpLeft size={12} />
-                          </button>
-                        </div>
+                                if (textareaRef.current) {
+                                  textareaRef.current.focus();
+                                  try {
+                                    const len = textareaRef.current.value.length;
+                                    textareaRef.current.setSelectionRange(len, len);
+                                  } catch (e) {}
+                                }
+                              }}
+                            >
+                              <CornerUpLeft size={12} />
+                            </button>
+                          </div>
                       )}
                       {msg.replyTo && (
                         <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
@@ -1764,13 +1771,6 @@ const ChatArea = React.memo(function ChatArea({
     if (textareaRef.current) {
       textareaRef.current.blur();
     }
-    if (!isFromPopState && window.history.state === 'reply') {
-      window.__isProgrammaticPop = true;
-      window.history.back();
-      setTimeout(() => {
-        window.__isProgrammaticPop = false;
-      }, 100);
-    }
     setTimeout(() => {
       setReplyingTo(null);
       setIsClosingReply(false);
@@ -1778,18 +1778,8 @@ const ChatArea = React.memo(function ChatArea({
     }, 300);
   }, [setReplyingTo]);
 
-  const clearReplyContext = useCallback((skipHistoryPop = false) => {
-    if (textareaRef.current) {
-      textareaRef.current.blur();
-    }
+  const clearReplyContext = useCallback(() => {
     setReplyingTo(null);
-    if (!skipHistoryPop && window.history.state === 'reply') {
-      window.__isProgrammaticPop = true;
-      window.history.back();
-      setTimeout(() => {
-        window.__isProgrammaticPop = false;
-      }, 100);
-    }
   }, [setReplyingTo]);
 
   const handleClearAllFilesWithAnimation = useCallback(() => {
@@ -1955,18 +1945,39 @@ const ChatArea = React.memo(function ChatArea({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isLastMessageVisible, setIsLastMessageVisible] = useState(true);
   const lastMessageRef = useRef(null);
-  // Pagination: only render last 70 for big-chat perf (keeps DOM light)
+  // Pagination: only render last 70 for big-chat perf (keeps DOM light) + professional gated history loader
   const [visibleCount, setVisibleCount] = useState(70);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const loadMoreRef = useRef(null);
   const prevScrollHeightForPaginationRef = useRef(0);
-  const paginationThrottleRef = useRef(false);
+  const isLoadingOlderRef = useRef(false);
+  useEffect(() => { isLoadingOlderRef.current = isLoadingOlder; }, [isLoadingOlder]);
   const visibleMessages = useMemo(() => {
     const msgs = activeContact?.messages || [];
     if (msgs.length <= visibleCount) return msgs;
     return msgs.slice(-visibleCount);
   }, [activeContact?.messages, visibleCount]);
 
-  // Load more sentinel — when top enters viewport, expand visible window
+  const hasMoreHistory = useMemo(() => {
+    return (activeContact?.messages?.length || 0) > visibleCount;
+  }, [activeContact?.messages?.length, visibleCount]);
+
+  const loadOlderMessages = useCallback(() => {
+    if (isLoadingOlderRef.current) return;
+    const total = activeContact?.messages?.length || 0;
+    if (total <= visibleCount) return;
+    const container = messagesContainerRef.current;
+    if (container) prevScrollHeightForPaginationRef.current = container.scrollHeight;
+    setIsLoadingOlder(true);
+    isLoadingOlderRef.current = true;
+    // Professional minimum spinner visibility (WhatsApp/Telegram style) — prevents flash & gives time for heavy decrypt/layout
+    const minDelay = total > 350 ? 520 : 380;
+    setTimeout(() => {
+      setVisibleCount(prev => Math.min(total, prev + 40));
+    }, minDelay);
+  }, [activeContact?.messages?.length, visibleCount]);
+
+  // Load more sentinel — when top enters viewport, expand via gated loading UX (blocks fast-scroll white flash)
   useEffect(() => {
     const container = messagesContainerRef.current;
     const sentinel = loadMoreRef.current;
@@ -1974,31 +1985,83 @@ const ChatArea = React.memo(function ChatArea({
     if ((activeContact?.messages?.length || 0) <= visibleCount) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !paginationThrottleRef.current) {
-          paginationThrottleRef.current = true;
-          const c = messagesContainerRef.current;
-          if (c) prevScrollHeightForPaginationRef.current = c.scrollHeight;
-          setVisibleCount(prev => Math.min(activeContact.messages.length, prev + 35));
-          setTimeout(() => { paginationThrottleRef.current = false; }, 650);
+        if (entry.isIntersecting && !isLoadingOlderRef.current) {
+          loadOlderMessages();
         }
       },
-      { root: container, threshold: 0.1, rootMargin: '400px 0px 0px 0px' }
+      { root: container, threshold: 0.05, rootMargin: '320px 0px 0px 0px' }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [visibleMessages.length, visibleCount, activeContact?.messages?.length]);
+  }, [visibleMessages.length, visibleCount, activeContact?.messages?.length, loadOlderMessages]);
 
-  // Preserve scroll position when pagination expands (avoid jump)
+  // Preserve scroll position when pagination expands (avoid jump) + release loading lock
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
-    if (!container || !prevScrollHeightForPaginationRef.current) return;
+    if (!container) {
+      if (isLoadingOlder) setIsLoadingOlder(false);
+      return;
+    }
+    if (!prevScrollHeightForPaginationRef.current) {
+      if (isLoadingOlder) {
+        const t = setTimeout(() => setIsLoadingOlder(false), 80);
+        return () => clearTimeout(t);
+      }
+      return;
+    }
     const oldHeight = prevScrollHeightForPaginationRef.current;
     const newHeight = container.scrollHeight;
     if (newHeight > oldHeight) {
       container.scrollTop = newHeight - oldHeight + container.scrollTop;
     }
     prevScrollHeightForPaginationRef.current = 0;
+    const t = setTimeout(() => setIsLoadingOlder(false), 160);
+    return () => clearTimeout(t);
   }, [visibleCount]);
+
+  // While history is loading, keep user pinned at spinner (professional "stopper" — like big apps)
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    if (!isLoadingOlder) return;
+    const loaderGuard = 56;
+    if (container.scrollTop < loaderGuard) {
+      requestAnimationFrame(() => {
+        if (isLoadingOlderRef.current && container.scrollTop < loaderGuard) {
+          container.scrollTop = loaderGuard;
+        }
+      });
+    }
+    let rafId = null;
+    const pinTopDuringLoad = () => {
+      if (!isLoadingOlderRef.current) return;
+      if (container.scrollTop < 4) {
+        container.scrollTop = Math.min(loaderGuard, 8);
+      }
+      rafId = requestAnimationFrame(pinTopDuringLoad);
+    };
+    rafId = requestAnimationFrame(pinTopDuringLoad);
+    const onWheel = (e) => {
+      if (!isLoadingOlderRef.current) return;
+      if (container.scrollTop <= loaderGuard && e.deltaY < 0) {
+        e.preventDefault();
+        container.scrollTop = loaderGuard;
+      }
+    };
+    const onTouchMove = () => {
+      if (!isLoadingOlderRef.current) return;
+      if (container.scrollTop <= 2) {
+        container.scrollTop = 2;
+      }
+    };
+    container.addEventListener('wheel', onWheel, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: true });
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('touchmove', onTouchMove);
+    };
+  }, [isLoadingOlder]);
 
   const unreadMessagesCount = useMemo(() => {
     if (!activeContact?.messages) return 0;
@@ -2012,48 +2075,13 @@ const ChatArea = React.memo(function ChatArea({
     if (replyingTo) {
       setActiveReplyInfo(replyingTo);
       if (textareaRef.current && !selectionModeRef.current) {
-        const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-        if (isMobile) {
-          // Mobile: avoid blur() which kills iOS keyboard — gesture tick already focused,
-          // but React re-render can steal focus, so restore via rAF without preventScroll
-          // (preventScroll:true is ignored outside user gesture on iOS and prevents keyboard)
-          const el = textareaRef.current;
-          try {
-            const len = el.value.length;
-            el.setSelectionRange(len, len);
-          } catch (e) {}
-          if (document.activeElement !== el) {
-            try { el.focus(); } catch (e) {}
-          }
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              if (el && document.activeElement !== el) {
-                try { el.focus(); } catch (e) {}
-                try {
-                  const len2 = el.value.length;
-                  el.setSelectionRange(len2, len2);
-                } catch (e) {}
-              }
-              if (messagesContainerRef.current && !isScrolledUpRef.current) {
-                try { messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight; } catch (e) {}
-              }
-            });
-          });
-          // Fallback timer for slower Android WebView where rAF may fire before layout commit
-          setTimeout(() => {
-            if (el && document.activeElement !== el) {
-              try { el.focus(); } catch (e) {}
-            }
-          }, 80);
-        } else {
-          if (document.activeElement === textareaRef.current) {
-            textareaRef.current.blur();
-          }
-          textareaRef.current.focus({ preventScroll: true });
-          try {
-            const len = textareaRef.current.value.length;
-            textareaRef.current.setSelectionRange(len, len);
-          } catch (e) {}
+        const el = textareaRef.current;
+        try {
+          const len = el.value.length;
+          el.setSelectionRange(len, len);
+        } catch (e) {}
+        if (document.activeElement !== el) {
+          try { el.focus({ preventScroll: true }); } catch (e) {}
         }
       }
     }
@@ -2089,6 +2117,8 @@ const ChatArea = React.memo(function ChatArea({
     setIsScrolledUp(false);
     isScrolledUpRef.current = false;
     setVisibleCount(70);
+    setIsLoadingOlder(false);
+    isLoadingOlderRef.current = false;
     prevScrollHeightForPaginationRef.current = 0;
 
     // Unmount cleanup: stop active recording, revoke audio object URLs, and notify offline typing
@@ -3619,6 +3649,16 @@ const ChatArea = React.memo(function ChatArea({
               <span className="selection-count-label" aria-label={`${selectionCount} selected`}>
                 <span key={selectionCount} className="selection-count-number">{selectionCount}</span>
               </span>
+              {selectionCount === 1 && (
+                <button
+                  className="header-action-btn selection-reply-header-btn"
+                  onClick={() => selectionCancelRef.current?.reply?.()}
+                  title="Reply"
+                  aria-label="Reply to selected message"
+                >
+                  <CornerUpLeft size={19} />
+                </button>
+              )}
               {selectionCount === 1 && selectionCanCopy && (
                 <button 
                   className="header-action-btn selection-copy-header-btn" 
@@ -3681,25 +3721,33 @@ const ChatArea = React.memo(function ChatArea({
       )}
 
       <div 
-        className="messages-container" 
+        className={`messages-container ${isLoadingOlder ? 'is-loading-history' : ''}`} 
         key={activeContact.username} 
         ref={messagesContainerRef} 
         onScroll={handleScroll}
       >
         <div className="messages-bounce-wrapper" ref={messagesBounceWrapperRef}>
           <div ref={loadMoreRef} style={{ height: '1px', width: '100%', pointerEvents: 'none' }} aria-hidden="true" />
-          {activeContact.messages.length > visibleCount && (
+          {isLoadingOlder && (
+            <div className="history-loading-bar glass" role="status" aria-live="polite" aria-label="Loading older messages">
+              <Loader2 size={14} className="spinner-rotating" />
+              <span>Loading older messages…</span>
+            </div>
+          )}
+          {!isLoadingOlder && hasMoreHistory && (
             <div className="load-more-pill-wrapper">
               <button 
                 className="load-more-pill glass"
-                onClick={() => {
-                  const c = messagesContainerRef.current;
-                  if (c) prevScrollHeightForPaginationRef.current = c.scrollHeight;
-                  setVisibleCount(prev => Math.min(activeContact.messages.length, prev + 40));
-                }}
+                onClick={loadOlderMessages}
+                disabled={isLoadingOlder}
               >
                 <span>Showing {visibleMessages.length} of {activeContact.messages.length} • Tap to load older</span>
               </button>
+            </div>
+          )}
+          {!isLoadingOlder && !hasMoreHistory && activeContact.messages.length > 18 && (
+            <div className="history-start-pill-wrapper" aria-hidden="true">
+              <span className="history-start-pill">Beginning of conversation</span>
             </div>
           )}
           <div className="e2ee-banner">
@@ -3718,6 +3766,7 @@ const ChatArea = React.memo(function ChatArea({
             onDeleteMessages={onDeleteMessages}
             selectionCancelRef={selectionCancelRef}
             onSelectionModeChange={handleSelectionModeChange}
+            setIsClosingReply={setIsClosingReply}
           />
           <TypingIndicator 
             isVisible={Boolean(activeContact.isTyping && !(justReceivedId !== null && activeContact.messages?.length && activeContact.messages[activeContact.messages.length - 1]?.id === justReceivedId))} 

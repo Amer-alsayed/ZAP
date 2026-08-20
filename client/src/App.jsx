@@ -667,15 +667,6 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Manage history state 'reply' when message reply mode is active
-  useEffect(() => {
-    if (replyingTo) {
-      if (window.history.state !== 'reply') {
-        window.history.pushState('reply', '');
-      }
-    }
-  }, [replyingTo]);
-
   // Push history state 'call-maximized' when active call window is maximized
   useEffect(() => {
     const isMaximizedCallActive = callState === 'connected' && !isCallMinimized;
