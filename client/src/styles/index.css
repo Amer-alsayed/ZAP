@@ -5350,7 +5350,7 @@ textarea {
     height: 72px !important; /* Exact same height as sidebar-header on mobile for perfect top-bottom symmetry */
   }
 
-  /* 1. Mobile Chat Input & Floating Controls */
+  /* 1. Mobile Chat Input & Floating Controls — smooth keyboard */
   .chat-input-wrapper {
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)) 8px !important;
     min-height: calc(60px + env(safe-area-inset-bottom, 0px)) !important;
@@ -5358,6 +5358,16 @@ textarea {
     max-width: 100vw !important;
     box-sizing: border-box !important;
     overflow: visible !important;
+    will-change: transform;
+    transform: translateZ(0);
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    backface-visibility: hidden;
+    contain: layout paint;
+  }
+
+  .messages-container {
+    transition: padding-bottom 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    will-change: padding-bottom;
   }
 
   .chat-input-row {

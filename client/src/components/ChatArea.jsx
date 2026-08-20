@@ -961,6 +961,8 @@ const MessageList = React.memo(({
   const activeSwipeElRef = useRef(null);
   const activeSwipeIndicatorRef = useRef(null);
   const swipeOffsetRef = useRef(0);
+  const swipeRafRef = useRef(null);
+  const pendingSwipeRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -1192,26 +1194,36 @@ const MessageList = React.memo(({
 
               if (swipeStartRef.current?.isSwiping) {
                 cancelLongPress();
-                // Direction multiplier: positive moves right, negative moves left
                 const directionSign = deltaX < 0 ? -1 : 1;
                 const rawMagnitude = Math.max(0, absX - 4);
                 const clampedMagnitude = Math.min(rawMagnitude * 0.75, 75);
                 const appliedOffset = clampedMagnitude * directionSign;
 
                 swipeOffsetRef.current = appliedOffset;
-                if (activeSwipeElRef.current) {
-                  activeSwipeElRef.current.style.transition = 'none';
-                  activeSwipeElRef.current.style.transform = `translate3d(${appliedOffset}px, 0, 0)`;
-                }
-                if (activeSwipeIndicatorRef.current) {
-                  const progress = Math.min(clampedMagnitude / 18, 1);
-                  activeSwipeIndicatorRef.current.style.transition = 'none';
-                  activeSwipeIndicatorRef.current.style.opacity = progress;
-                  activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
-                }
+                pendingSwipeRef.current = { appliedOffset, clampedMagnitude };
+                if (swipeRafRef.current) cancelAnimationFrame(swipeRafRef.current);
+                swipeRafRef.current = requestAnimationFrame(() => {
+                  const pending = pendingSwipeRef.current;
+                  if (!pending) return;
+                  const { appliedOffset: off, clampedMagnitude: mag } = pending;
+                  if (activeSwipeElRef.current) {
+                    activeSwipeElRef.current.style.transition = 'none';
+                    activeSwipeElRef.current.style.transform = `translate3d(${off}px, 0, 0)`;
+                    activeSwipeElRef.current.style.willChange = 'transform';
+                  }
+                  if (activeSwipeIndicatorRef.current) {
+                    const progress = Math.min(mag / 18, 1);
+                    activeSwipeIndicatorRef.current.style.transition = 'none';
+                    activeSwipeIndicatorRef.current.style.opacity = progress;
+                    activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
+                    activeSwipeIndicatorRef.current.style.willChange = 'transform, opacity';
+                  }
+                  swipeRafRef.current = null;
+                });
               }
             }}
             onTouchEnd={() => {
+              if (swipeRafRef.current) { cancelAnimationFrame(swipeRafRef.current); swipeRafRef.current = null; }
               cancelLongPress();
               const wasSwiping = swipeStartRef.current?.isSwiping;
               const currentOffset = swipeOffsetRef.current;
@@ -1219,13 +1231,16 @@ const MessageList = React.memo(({
               const indicator = activeSwipeIndicatorRef.current;
 
               if (el) {
-                el.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                el.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
                 el.style.transform = 'translate3d(0, 0, 0)';
+                el.style.willChange = 'auto';
+                setTimeout(() => { if (el) el.style.willChange = 'auto'; }, 320);
               }
               if (indicator) {
-                indicator.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                indicator.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
                 indicator.style.opacity = '0';
                 indicator.style.transform = 'translateY(-50%) scale(0)';
+                indicator.style.willChange = 'auto';
               }
 
               if (wasSwiping && Math.abs(currentOffset) >= 15) {
@@ -1242,7 +1257,7 @@ const MessageList = React.memo(({
                 }
                 setTimeout(() => {
                   if (textareaRef.current) {
-                    textareaRef.current.focus();
+                    textareaRef.current.focus({ preventScroll: true });
                     textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                   }
                 }, 50);
@@ -1253,15 +1268,18 @@ const MessageList = React.memo(({
               swipeOffsetRef.current = 0;
             }}
             onTouchCancel={() => {
+              if (swipeRafRef.current) { cancelAnimationFrame(swipeRafRef.current); swipeRafRef.current = null; }
               cancelLongPress();
               if (activeSwipeElRef.current) {
-                activeSwipeElRef.current.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                activeSwipeElRef.current.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
                 activeSwipeElRef.current.style.transform = 'translate3d(0, 0, 0)';
+                activeSwipeElRef.current.style.willChange = 'auto';
               }
               if (activeSwipeIndicatorRef.current) {
-                activeSwipeIndicatorRef.current.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                activeSwipeIndicatorRef.current.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
                 activeSwipeIndicatorRef.current.style.opacity = '0';
                 activeSwipeIndicatorRef.current.style.transform = 'translateY(-50%) scale(0)';
+                activeSwipeIndicatorRef.current.style.willChange = 'auto';
               }
               swipeStartRef.current = null;
               activeSwipeElRef.current = null;
@@ -1304,19 +1322,30 @@ const MessageList = React.memo(({
                 const appliedOffset = clampedMagnitude * directionSign;
 
                 swipeOffsetRef.current = appliedOffset;
-                if (activeSwipeElRef.current) {
-                  activeSwipeElRef.current.style.transition = 'none';
-                  activeSwipeElRef.current.style.transform = `translate3d(${appliedOffset}px, 0, 0)`;
-                }
-                if (activeSwipeIndicatorRef.current) {
-                  const progress = Math.min(clampedMagnitude / 18, 1);
-                  activeSwipeIndicatorRef.current.style.transition = 'none';
-                  activeSwipeIndicatorRef.current.style.opacity = progress;
-                  activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
-                }
+                pendingSwipeRef.current = { appliedOffset, clampedMagnitude };
+                if (swipeRafRef.current) cancelAnimationFrame(swipeRafRef.current);
+                swipeRafRef.current = requestAnimationFrame(() => {
+                  const pending = pendingSwipeRef.current;
+                  if (!pending) return;
+                  const { appliedOffset: off, clampedMagnitude: mag } = pending;
+                  if (activeSwipeElRef.current) {
+                    activeSwipeElRef.current.style.transition = 'none';
+                    activeSwipeElRef.current.style.transform = `translate3d(${off}px, 0, 0)`;
+                    activeSwipeElRef.current.style.willChange = 'transform';
+                  }
+                  if (activeSwipeIndicatorRef.current) {
+                    const progress = Math.min(mag / 18, 1);
+                    activeSwipeIndicatorRef.current.style.transition = 'none';
+                    activeSwipeIndicatorRef.current.style.opacity = progress;
+                    activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
+                    activeSwipeIndicatorRef.current.style.willChange = 'transform, opacity';
+                  }
+                  swipeRafRef.current = null;
+                });
               }
             }}
             onMouseUp={() => {
+              if (swipeRafRef.current) { cancelAnimationFrame(swipeRafRef.current); swipeRafRef.current = null; }
               if (swipeStartRef.current?.isMouse) {
                 cancelLongPress();
                 const wasSwiping = swipeStartRef.current?.isSwiping;
@@ -1325,13 +1354,15 @@ const MessageList = React.memo(({
                 const indicator = activeSwipeIndicatorRef.current;
 
                 if (el) {
-                  el.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                  el.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
                   el.style.transform = 'translate3d(0, 0, 0)';
+                  el.style.willChange = 'auto';
                 }
                 if (indicator) {
-                  indicator.style.transition = 'opacity 0.22s ease, transform 0.22s ease';
+                  indicator.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
                   indicator.style.opacity = '0';
                   indicator.style.transform = 'translateY(-50%) scale(0)';
+                  indicator.style.willChange = 'auto';
                 }
 
                 if (wasSwiping && Math.abs(currentOffset) >= 15) {
@@ -1345,7 +1376,7 @@ const MessageList = React.memo(({
                   });
                   setTimeout(() => {
                     if (textareaRef.current) {
-                      textareaRef.current.focus();
+                      textareaRef.current.focus({ preventScroll: true });
                       textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                     }
                   }, 50);
@@ -1359,15 +1390,18 @@ const MessageList = React.memo(({
               }
             }}
             onMouseLeave={() => {
+              if (swipeRafRef.current) { cancelAnimationFrame(swipeRafRef.current); swipeRafRef.current = null; }
               if (swipeStartRef.current?.isMouse) {
                 if (activeSwipeElRef.current) {
-                  activeSwipeElRef.current.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                  activeSwipeElRef.current.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
                   activeSwipeElRef.current.style.transform = 'translate3d(0, 0, 0)';
+                  activeSwipeElRef.current.style.willChange = 'auto';
                 }
                 if (activeSwipeIndicatorRef.current) {
-                  activeSwipeIndicatorRef.current.style.transition = 'opacity 0.22s ease, transform 0.22s ease';
+                  activeSwipeIndicatorRef.current.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
                   activeSwipeIndicatorRef.current.style.opacity = '0';
                   activeSwipeIndicatorRef.current.style.transform = 'translateY(-50%) scale(0)';
+                  activeSwipeIndicatorRef.current.style.willChange = 'auto';
                 }
                 swipeStartRef.current = null;
                 activeSwipeElRef.current = null;
@@ -1431,7 +1465,7 @@ const MessageList = React.memo(({
                               setTimeout(() => {
                                 if (textareaRef.current) {
                                   textareaRef.current.blur();
-                                  textareaRef.current.focus();
+                                  textareaRef.current.focus({ preventScroll: true });
                                   textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                                 }
                               }, 50);
@@ -2409,6 +2443,47 @@ const ChatArea = React.memo(function ChatArea({
         }
       });
     }
+  }, []);
+
+  // Smooth mobile keyboard — resizes-visual + visualViewport, no layout jank on open/close
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    let rafId = null;
+    const handleViewportChange = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const inputWrapper = document.querySelector('.chat-input-wrapper');
+        const container = messagesContainerRef.current;
+        if (!inputWrapper || !container) return;
+        // Only apply mobile keyboard handling
+        if (window.innerWidth > 768) {
+          inputWrapper.style.transform = 'translateY(0)';
+          container.style.paddingBottom = '';
+          return;
+        }
+        const keyboardHeight = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+        if (keyboardHeight > 40) {
+          inputWrapper.style.transform = `translateY(-${keyboardHeight}px)`;
+          container.style.paddingBottom = `${keyboardHeight + 12}px`;
+          if (!isScrolledUpRef.current) {
+            container.scrollTop = container.scrollHeight;
+          }
+        } else {
+          inputWrapper.style.transform = 'translateY(0)';
+          container.style.paddingBottom = '';
+        }
+      });
+    };
+    viewport.addEventListener('resize', handleViewportChange);
+    viewport.addEventListener('scroll', handleViewportChange);
+    window.addEventListener('orientationchange', handleViewportChange);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      viewport.removeEventListener('resize', handleViewportChange);
+      viewport.removeEventListener('scroll', handleViewportChange);
+      window.removeEventListener('orientationchange', handleViewportChange);
+    };
   }, []);
 
   // Observe unread messages and mark them as read when they enter the viewport
