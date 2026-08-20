@@ -5368,7 +5368,7 @@ textarea {
     transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
     transform: translate3d(0, 0, 0);
     will-change: transform;
-    touch-action: pan-y;
+    touch-action: pan-y pan-x;
   }
 
   .sidebar-container,
@@ -5386,7 +5386,7 @@ textarea {
     transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
     transform: translate3d(0, 0, 0);
     will-change: transform;
-    touch-action: pan-y;
+    touch-action: pan-y pan-x;
   }
 
   .chat-area,

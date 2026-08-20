@@ -1151,11 +1151,6 @@ const MessageList = React.memo(({
               if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container')) {
                 return;
               }
-              // If touching an image or video in chat, allow selection on long-press but NEVER drag/move the image
-              if (e.target.closest('.media-container, .image-message-wrapper, .media-album-container, .media-album-grid, .image-loader-container, .message-image')) {
-                startLongPress(msg);
-                return;
-              }
               startLongPress(msg);
               const touch = e.touches[0];
               const wrapper = e.currentTarget.querySelector('.message-wrapper');
