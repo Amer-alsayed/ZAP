@@ -169,25 +169,6 @@ if (config.isProd) {
   });
 }
 
-// Emergency Beacon Termination Endpoint for instant call teardown on page close
-app.post('/api/call/terminate', express.text({ type: '*/*' }), async (req, res) => {
-  try {
-    let payload = {};
-    if (typeof req.body === 'string') {
-      try { payload = JSON.parse(req.body); } catch (e) {}
-    } else if (req.body) {
-      payload = req.body;
-    }
-    const { to, username } = payload;
-    if (to) {
-      io.to(to.toLowerCase()).emit('call-ended', { from: username || 'User', reason: 'unloaded' });
-    }
-    res.status(200).json({ success: true });
-  } catch (err) {
-    res.status(200).json({ success: false });
-  }
-});
-
 // Centralized Global Error Handling Middleware
 app.use((err, req, res, next) => {
   logger.error('Unhandled server error:', err);
@@ -198,11 +179,9 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: message });
 });
 
-// Initialize Socket.io with ultra-fast heartbeat detection (5s)
+// Initialize Socket.io
 const io = new Server(httpServer, {
-  cors: corsOptions,
-  pingTimeout: 5000,
-  pingInterval: 5000
+  cors: corsOptions
 });
 
 // Attach socket handlers

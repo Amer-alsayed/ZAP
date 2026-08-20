@@ -744,53 +744,13 @@ export default function App() {
     }
   }, [callState]);
 
-  // Active Call Mutual Heartbeat & Desync Protection: guarantees instant teardown if either side loses connection
-  const lastCallHeartbeatReceivedRef = useRef(Date.now());
-  useEffect(() => {
-    if (callState === 'idle') return;
-    lastCallHeartbeatReceivedRef.current = Date.now();
-
-    const heartbeatInterval = setInterval(() => {
-      const target = callPartyRef.current;
-      const socket = getSocket();
-      if (socket && target) {
-        socket.emit('call-heartbeat', { to: target, state: callStateRef.current });
-      }
-
-      // If call is calling, incoming, or connected and partner hasn't acknowledged in 7s, terminate call cleanly
-      if (callStateRef.current !== 'idle') {
-        if (Date.now() - lastCallHeartbeatReceivedRef.current > 7000) {
-          console.warn('Call heartbeat timeout - partner desynced or disconnected');
-          showToast('Call ended — partner disconnected.', 'warning', 'Call Disconnected');
-          cleanupCall(true, 'Connection lost');
-        }
-      }
-    }, 2000);
-
-    return () => clearInterval(heartbeatInterval);
-  }, [callState]);
-
-  // Cleanly terminate active or outgoing calls immediately on tab close / page unload using Beacon API
+  // Cleanly terminate active or outgoing calls when navigating away or closing window
   useEffect(() => {
     const handleUnloadCleanup = () => {
       if (callStateRef.current !== 'idle' && callPartyRef.current) {
-        const target = callPartyRef.current;
-        const currentUserUname = currentUser?.username || '';
-
-        // 1. Send synchronous emergency Beacon for 0ms server teardown
-        if (navigator.sendBeacon) {
-          try {
-            const blob = new Blob([JSON.stringify({ to: target, username: currentUserUname })], { type: 'application/json' });
-            navigator.sendBeacon('/api/call/terminate', blob);
-          } catch (e) {}
-        }
-
-        // 2. Emit socket hangup
         const socket = getSocket();
         if (socket) {
-          try {
-            socket.emit('hang-up', { to: target, reason: 'unloaded' });
-          } catch (e) {}
+          socket.emit('hang-up', { to: callPartyRef.current, reason: 'unloaded' });
         }
       }
     };
@@ -800,7 +760,7 @@ export default function App() {
       window.removeEventListener('beforeunload', handleUnloadCleanup);
       window.removeEventListener('pagehide', handleUnloadCleanup);
     };
-  }, [currentUser?.username]);
+  }, []);
 
 
   // ==========================================
@@ -1183,15 +1143,6 @@ export default function App() {
       }
     });
 
-    socket.on('call-heartbeat', ({ from, state }) => {
-      // If we receive a heartbeat from a user, but we are NOT in an active call with them, tell them to end their ghost call immediately!
-      if (callStateRef.current === 'idle' || callPartyRef.current?.toLowerCase() !== from?.toLowerCase()) {
-        socket.emit('hang-up', { to: from, reason: 'desynced' });
-        return;
-      }
-      lastCallHeartbeatReceivedRef.current = Date.now();
-    });
-
     socket.on('call-ended', ({ from, reason }) => {
       console.log(`Call hung up by ${from}, reason: ${reason}`);
       if (reason === 'offline') {
@@ -1231,7 +1182,6 @@ export default function App() {
       socket.off('messages-deleted');
       socket.off('call-made');
       socket.off('call-ringing');
-      socket.off('call-heartbeat');
       socket.off('answer-made');
       socket.off('ice-candidate-relay');
       socket.off('call-ended');
@@ -1937,19 +1887,11 @@ export default function App() {
       }
     };
 
-    // Monitor WebRTC ICE and PeerConnection State
+    // Monitor WebRTC ICE Connection State
     pc.oniceconnectionstatechange = () => {
       console.log(`ICE Connection State: ${pc.iceConnectionState}`);
       if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
         console.warn('WebRTC ICE Connection state failed or closed. Cleaning up call.');
-        cleanupCall(true, 'Connection lost');
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log(`PeerConnection State: ${pc.connectionState}`);
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        console.warn('WebRTC PeerConnection state failed or closed. Cleaning up call.');
         cleanupCall(true, 'Connection lost');
       }
     };
