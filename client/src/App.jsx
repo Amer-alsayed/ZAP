@@ -638,7 +638,7 @@ export default function App() {
       }
 
       // 6. Selection fallback if chatBackHandlerRef wasn't hooked
-      if (selectionBackRef.current?.()) {
+      if (selectionBackRef.current?.(true)) {
         return;
       }
 

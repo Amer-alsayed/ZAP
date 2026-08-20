@@ -966,8 +966,20 @@ const MessageList = React.memo(({
   useEffect(() => {
     onSelectionModeChange?.({ active: selectionMode, count: selectedIds.length, canCopy: canCopySelected });
     if (selectionCancelRef) {
-      selectionCancelRef.current = () => setSelectedIds([]);
+      selectionCancelRef.current = (isFromPopState = false) => {
+        if (!isFromPopState && (window.history.state === 'selection' || window.history.state?.view === 'selection')) {
+          window.__isProgrammaticPop = true;
+          window.history.back();
+          setTimeout(() => { window.__isProgrammaticPop = false; }, 100);
+        }
+        setSelectedIds([]);
+      };
       selectionCancelRef.current.delete = () => {
+        if (window.history.state === 'selection' || window.history.state?.view === 'selection') {
+          window.__isProgrammaticPop = true;
+          window.history.back();
+          setTimeout(() => { window.__isProgrammaticPop = false; }, 100);
+        }
         const ids = [...selectedIds];
         setSelectedIds([]);
         onDeleteMessages(ids);
@@ -989,6 +1001,11 @@ const MessageList = React.memo(({
             try { window.navigator.vibrate(15); } catch (err) {}
           }
           soundEngine?.playClick?.();
+          if (window.history.state === 'selection' || window.history.state?.view === 'selection') {
+            window.__isProgrammaticPop = true;
+            window.history.back();
+            setTimeout(() => { window.__isProgrammaticPop = false; }, 100);
+          }
           setSelectedIds([]);
         }
       };
@@ -1001,7 +1018,9 @@ const MessageList = React.memo(({
           if (baseMsg || target) {
             const replyTarget = baseMsg || target;
             setIsClosingReply?.(false);
-            if (window.history.state !== 'reply') {
+            if (window.history.state === 'selection' || window.history.state?.view === 'selection') {
+              window.history.replaceState('reply', '');
+            } else if (window.history.state !== 'reply') {
               window.history.pushState('reply', '');
             }
             setReplyingTo({
@@ -1027,6 +1046,12 @@ const MessageList = React.memo(({
     }
     return () => { if (selectionCancelRef) selectionCancelRef.current = null; };
   }, [selectionMode, selectedIds, selectedMsgForCopy, canCopySelected, onDeleteMessages, onSelectionModeChange, selectionCancelRef, messages, groupedMessages, setReplyingTo, textareaRef, setIsClosingReply]);
+
+  useEffect(() => {
+    if (selectionMode && window.history.state !== 'selection') {
+      window.history.pushState('selection', '');
+    }
+  }, [selectionMode]);
 
   const toggleSelected = (msg) => {
     const ids = msg.isAlbum ? msg.allIds : [msg.id];
@@ -1602,36 +1627,32 @@ const ChatArea = React.memo(function ChatArea({
     if (!showAttachMenuRef.current || isClosingAttachMenuRef.current) return;
     setIsClosingAttachMenu(true);
     isClosingAttachMenuRef.current = true;
-    if (!isFromPopState && (window.history.state === 'attach' || window.history.state?.attachMenu)) {
+    if (!isFromPopState && (window.history.state === 'attach' || window.history.state?.view === 'attach')) {
       window.__isProgrammaticPop = true;
       window.history.back();
       setTimeout(() => {
         window.__isProgrammaticPop = false;
       }, 100);
     }
-    setTimeout(() => {
-      setShowAttachMenu(false);
-      setIsClosingAttachMenu(false);
-      isClosingAttachMenuRef.current = false;
-    }, 300);
+    setShowAttachMenu(false);
+    setIsClosingAttachMenu(false);
+    isClosingAttachMenuRef.current = false;
   }, []);
 
   const closeEmojiPicker = useCallback((isFromPopState = false) => {
     if (!showEmojiPickerRef.current || isClosingEmojiPickerRef.current) return;
     setIsClosingEmojiPicker(true);
     isClosingEmojiPickerRef.current = true;
-    if (!isFromPopState && (window.history.state === 'emoji' || window.history.state?.emojiPicker)) {
+    if (!isFromPopState && (window.history.state === 'emoji' || window.history.state?.view === 'emoji')) {
       window.__isProgrammaticPop = true;
       window.history.back();
       setTimeout(() => {
         window.__isProgrammaticPop = false;
       }, 100);
     }
-    setTimeout(() => {
-      setShowEmojiPicker(false);
-      setIsClosingEmojiPicker(false);
-      isClosingEmojiPickerRef.current = false;
-    }, 300);
+    setShowEmojiPicker(false);
+    setIsClosingEmojiPicker(false);
+    isClosingEmojiPickerRef.current = false;
   }, []);
 
   const toggleAttachMenu = useCallback(() => {
@@ -1640,7 +1661,9 @@ const ChatArea = React.memo(function ChatArea({
     } else {
       if (showEmojiPicker) closeEmojiPicker(false);
       setShowAttachMenu(true);
-      if (window.history.state !== 'attach') {
+      if (window.history.state === 'emoji') {
+        window.history.replaceState('attach', '');
+      } else if (window.history.state !== 'attach') {
         window.history.pushState('attach', '');
       }
     }
@@ -1653,7 +1676,9 @@ const ChatArea = React.memo(function ChatArea({
       setHasMountedEmojiPicker(true);
       if (showAttachMenu) closeAttachMenu(false);
       setShowEmojiPicker(true);
-      if (window.history.state !== 'emoji') {
+      if (window.history.state === 'attach') {
+        window.history.replaceState('emoji', '');
+      } else if (window.history.state !== 'emoji') {
         window.history.pushState('emoji', '');
       }
     }
@@ -1865,7 +1890,7 @@ const ChatArea = React.memo(function ChatArea({
 
     // 5. Cancel message selection if active
     if (selectionModeRef.current) {
-      selectionCancelRef.current?.();
+      selectionCancelRef.current?.(true);
       return true;
     }
 
