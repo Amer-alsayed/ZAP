@@ -1198,11 +1198,14 @@ const MessageList = React.memo(({
               // Direction: Allow rightward swipe (deltaX > 0) or leftward swipe for sent messages (deltaX < 0)
               const isValidDirection = isSent ? (deltaX < 0 || deltaX > 0) : (deltaX > 0);
 
+              // Cancel hold-to-select on any scroll/drag — prevents text selection while scrolling
+              if (absX > 4 || absY > 4) cancelLongPress();
               if (!swipeStartRef.current.isSwiping) {
                 if (absX > 6 && absX > absY * 0.5 && isValidDirection) {
                   swipeStartRef.current.isSwiping = true;
                   cancelLongPress();
-                } else if (absY > 20 && absY > absX * 1.5) {
+                } else if (absY > 12 && absY > absX * 0.8) {
+                  cancelLongPress();
                   swipeStartRef.current = null;
                   return;
                 }
@@ -1323,10 +1326,15 @@ const MessageList = React.memo(({
               const absY = Math.abs(deltaY);
               const isValidDirection = isSent ? (deltaX < 0 || deltaX > 0) : (deltaX > 0);
 
+              if (absX > 4 || absY > 4) cancelLongPress();
               if (!swipeStartRef.current.isSwiping) {
                 if (absX > 6 && absX > absY * 0.5 && isValidDirection) {
                   swipeStartRef.current.isSwiping = true;
                   cancelLongPress();
+                } else if (absY > 12 && absY > absX * 0.8) {
+                  cancelLongPress();
+                  swipeStartRef.current = null;
+                  return;
                 }
               }
 
@@ -2036,7 +2044,7 @@ const ChatArea = React.memo(function ChatArea({
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
       if (isSmoothScrollingRef.current) {
-        if (distanceFromBottom <= 8) {
+        if (distanceFromBottom <= 4) {
           isSmoothScrollingRef.current = false;
           isScrolledUpRef.current = false;
           setIsScrolledUp(false);
@@ -2044,7 +2052,7 @@ const ChatArea = React.memo(function ChatArea({
         return;
       }
 
-      if (distanceFromBottom > 20) {
+      if (distanceFromBottom > 12) {
         if (!isScrolledUpRef.current) {
           isScrolledUpRef.current = true;
           setIsScrolledUp(true);

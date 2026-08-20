@@ -1932,10 +1932,6 @@ button {
   padding-bottom: 0 !important;
   transform: translateY(8px) scale(0.97) !important;
   border-color: transparent !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  backdrop-filter: blur(0px) !important;
-  -webkit-backdrop-filter: blur(0px) !important;
   pointer-events: none !important;
   animation: none !important;
 }
@@ -6316,10 +6312,6 @@ textarea {
   padding-bottom: 0 !important;
   transform: translateY(8px) scale(0.97) !important;
   border-color: transparent !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  backdrop-filter: blur(0px) !important;
-  -webkit-backdrop-filter: blur(0px) !important;
   pointer-events: none !important;
   animation: none !important;
 }
