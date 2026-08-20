@@ -1283,131 +1283,15 @@ const MessageList = React.memo(({
             }}
             onMouseDown={(e) => {
               if (window.__isMediaModalOpen || selectionMode || e.button !== 0) return;
-              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn')) {
+              if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container')) {
                 return;
               }
               startLongPress(msg);
-              const wrapper = e.currentTarget.querySelector('.message-wrapper');
-              const indicator = wrapper?.querySelector('.swipe-reply-indicator');
-              activeSwipeElRef.current = wrapper;
-              activeSwipeIndicatorRef.current = indicator;
-              swipeOffsetRef.current = 0;
-              swipeStartRef.current = { x: e.clientX, y: e.clientY, msgId: msg.id, isSwiping: false, isMouse: true, isSent };
-            }}
-            onMouseMove={(e) => {
-              if (!swipeStartRef.current || !swipeStartRef.current.isMouse || swipeStartRef.current.msgId !== msg.id) return;
-              const deltaX = e.clientX - swipeStartRef.current.x;
-              const deltaY = e.clientY - swipeStartRef.current.y;
-              const absX = Math.abs(deltaX);
-              const absY = Math.abs(deltaY);
-              const isValidDirection = isSent ? (deltaX < 0) : (deltaX > 0);
-
-              if (absX > 8 || absY > 8) cancelLongPress();
-              if (!swipeStartRef.current.isSwiping) {
-                if (absX >= 18 && absX > absY * 1.5 && isValidDirection) {
-                  swipeStartRef.current.isSwiping = true;
-                  cancelLongPress();
-                } else if (absY > 8 && absY >= absX) {
-                  cancelLongPress();
-                  swipeStartRef.current = null;
-                  return;
-                }
-              }
-
-              if (swipeStartRef.current.isSwiping) {
-                cancelLongPress();
-                const directionSign = deltaX < 0 ? -1 : 1;
-                const rawMagnitude = Math.max(0, absX - 16);
-                const clampedMagnitude = Math.min(rawMagnitude * 0.6, 68);
-                const appliedOffset = clampedMagnitude * directionSign;
-
-                swipeOffsetRef.current = appliedOffset;
-                pendingSwipeRef.current = { appliedOffset, clampedMagnitude };
-                if (swipeRafRef.current) cancelAnimationFrame(swipeRafRef.current);
-                swipeRafRef.current = requestAnimationFrame(() => {
-                  const pending = pendingSwipeRef.current;
-                  if (!pending) return;
-                  const { appliedOffset: off, clampedMagnitude: mag } = pending;
-                  if (activeSwipeElRef.current) {
-                    activeSwipeElRef.current.style.transition = 'none';
-                    activeSwipeElRef.current.style.transform = `translate3d(${off}px, 0, 0)`;
-                    activeSwipeElRef.current.style.willChange = 'transform';
-                  }
-                  if (activeSwipeIndicatorRef.current) {
-                    const progress = Math.min(mag / 40, 1);
-                    activeSwipeIndicatorRef.current.style.transition = 'none';
-                    activeSwipeIndicatorRef.current.style.opacity = progress;
-                    activeSwipeIndicatorRef.current.style.transform = `translateY(-50%) scale(${progress})`;
-                    activeSwipeIndicatorRef.current.style.willChange = 'transform, opacity';
-                  }
-                  swipeRafRef.current = null;
-                });
-              }
             }}
             onMouseUp={() => {
-              if (swipeRafRef.current) { cancelAnimationFrame(swipeRafRef.current); swipeRafRef.current = null; }
-              if (swipeStartRef.current?.isMouse) {
-                cancelLongPress();
-                const wasSwiping = swipeStartRef.current?.isSwiping;
-                const currentOffset = swipeOffsetRef.current;
-                const el = activeSwipeElRef.current;
-                const indicator = activeSwipeIndicatorRef.current;
-
-                if (el) {
-                  el.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
-                  el.style.transform = 'translate3d(0, 0, 0)';
-                  el.style.willChange = 'auto';
-                }
-                if (indicator) {
-                  indicator.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
-                  indicator.style.opacity = '0';
-                  indicator.style.transform = 'translateY(-50%) scale(0)';
-                  indicator.style.willChange = 'auto';
-                }
-
-                if (wasSwiping && Math.abs(currentOffset) >= 40) {
-                  const targetMsg = (msg.isAlbum || msg.isMultiFile) ? (msg.albumItems || msg.fileItems)[0] : msg;
-                  setReplyingTo({
-                    id: targetMsg.id,
-                    sender: targetMsg.sender,
-                    text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
-                    mediaType: targetMsg.mediaType || null,
-                    fileMetadata: targetMsg.fileMetadata || null
-                  });
-                  setTimeout(() => {
-                    if (textareaRef.current) {
-                      textareaRef.current.focus({ preventScroll: true });
-                      textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    }
-                  }, 50);
-                }
-                swipeStartRef.current = null;
-                activeSwipeElRef.current = null;
-                activeSwipeIndicatorRef.current = null;
-                swipeOffsetRef.current = 0;
-              } else {
-                cancelLongPress();
-              }
+              cancelLongPress();
             }}
             onMouseLeave={() => {
-              if (swipeRafRef.current) { cancelAnimationFrame(swipeRafRef.current); swipeRafRef.current = null; }
-              if (swipeStartRef.current?.isMouse) {
-                if (activeSwipeElRef.current) {
-                  activeSwipeElRef.current.style.transition = 'transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
-                  activeSwipeElRef.current.style.transform = 'translate3d(0, 0, 0)';
-                  activeSwipeElRef.current.style.willChange = 'auto';
-                }
-                if (activeSwipeIndicatorRef.current) {
-                  activeSwipeIndicatorRef.current.style.transition = 'opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)';
-                  activeSwipeIndicatorRef.current.style.opacity = '0';
-                  activeSwipeIndicatorRef.current.style.transform = 'translateY(-50%) scale(0)';
-                  activeSwipeIndicatorRef.current.style.willChange = 'auto';
-                }
-                swipeStartRef.current = null;
-                activeSwipeElRef.current = null;
-                activeSwipeIndicatorRef.current = null;
-                swipeOffsetRef.current = 0;
-              }
               cancelLongPress();
             }}
             onClick={() => {
