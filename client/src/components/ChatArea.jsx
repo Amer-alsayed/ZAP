@@ -3763,7 +3763,7 @@ const ChatArea = React.memo(function ChatArea({
       {/* Unsaved contact warning banner with smooth pill animation */}
       {activeContact?.isSaved === false && dismissedBannerUser !== activeContact.username && (
         <div className={`unsaved-contact-banner glass ${isBannerDismissing ? 'dismissing' : ''}`}>
-          <div className="banner-info">
+          <div className="banner-content">
             <AlertTriangle size={15} className="warning-icon" />
             <span>
               <strong>@{activeContact.username}</strong> is not in your contacts.
