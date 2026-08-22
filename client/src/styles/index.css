@@ -593,6 +593,19 @@ button {
   }
 }
 
+/* Shared page-transition entry for main-pane views (chat & settings):
+   slides in from the sidebar side while fading — inverse of chatAreaSlideFadeOut */
+@keyframes viewSlideFadeIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(-24px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 .main-content-pane {
   flex: 1;
   height: 100%;
@@ -609,6 +622,7 @@ button {
   right: 0;
   bottom: 0;
   z-index: 5;
+  animation: viewSlideFadeIn 0.26s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .main-content-pane .settings-view {
@@ -7279,7 +7293,7 @@ textarea {
 }
 
 .settings-view.navigating-back {
-  animation: chatAreaFadeOut 0.18s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  animation: chatAreaSlideFadeOut 0.22s cubic-bezier(0.4, 0, 1, 1) forwards !important;
   pointer-events: none;
 }
 

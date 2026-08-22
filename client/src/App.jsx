@@ -1754,7 +1754,29 @@ export default function App() {
     }
 
     // Context-aware back navigation: Return directly to active chat if Settings/Recents was opened from a chat
-    if (previousActiveContactRef.current && (showSettingsRef.current || showRecentsRef.current)) {
+    if (previousActiveContactRef.current && showSettingsRef.current) {
+      const prevContact = previousActiveContactRef.current;
+      previousActiveContactRef.current = null;
+      // Play the shared slide-fade exit on settings before landing back in the chat
+      if (!isFromPopState && window.history.state === 'settings') {
+        window.__isProgrammaticPop = true;
+        window.history.back();
+        setTimeout(() => {
+          window.__isProgrammaticPop = false;
+        }, 100);
+      }
+      setNavigatingBackFrom('settings');
+      setIsNavigatingBack(true);
+      setTimeout(() => {
+        setIsNavigatingBack(false);
+        setNavigatingBackFrom(null);
+        isNavigatingBackRef.current = false;
+        handleSelectContact(prevContact);
+      }, 220);
+      return;
+    }
+
+    if (previousActiveContactRef.current && showRecentsRef.current) {
       const prevContact = previousActiveContactRef.current;
       previousActiveContactRef.current = null;
       isNavigatingBackRef.current = false;
