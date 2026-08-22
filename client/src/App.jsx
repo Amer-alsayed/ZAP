@@ -29,6 +29,7 @@ import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import CallWindow from './components/CallWindow';
 import SettingsView from './components/SettingsView';
+import ForwardModal from './components/ForwardModal';
 import { soundEngine } from './services/soundEffects';
 import Dashboard from './components/Dashboard';
 import { applyThemeTokens } from './utils/themeTokens';
@@ -339,6 +340,7 @@ export default function App() {
 
   const [isCallMinimized, setIsCallMinimized] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [forwardingMessage, setForwardingMessage] = useState(null);
 
   // Handle call sound effects for calling, incoming, connected, and idle states
   useEffect(() => {
@@ -1246,6 +1248,73 @@ export default function App() {
   };
 
   // ==========================================
+  // Message Forwarding Flow
+  // ==========================================
+  const handleForwardRequest = (message) => {
+    if (!message) return;
+    setForwardingMessage(message);
+  };
+
+  const handleConfirmForward = async (targetUsername) => {
+    const message = forwardingMessage;
+    if (!message || !currentUser || !targetUsername) return;
+
+    const contact = contactsRef.current.find(c => c.username.toLowerCase() === String(targetUsername).toLowerCase());
+    if (!contact) {
+      showToast('Contact not found.', 'error', 'Forward Failed');
+      return;
+    }
+
+    if (blockedUsersRef.current.includes(contact.username.toLowerCase())) {
+      showToast(`You have blocked @${contact.username}. Unblock them to forward messages.`, 'warning', 'Contact Blocked');
+      return;
+    }
+
+    try {
+      // Media files carry their own AES session key inside fileMetadata, so the
+      // stored ciphertext can be safely re-shared by forwarding its metadata.
+      const hasMedia = Boolean(message.fileMetadata && message.mediaType && message.mediaType !== 'call');
+
+      const msgContent = {
+        type: hasMedia ? 'file' : 'text',
+        text: message.text || '',
+        forwarded: true
+      };
+      if (hasMedia) {
+        msgContent.fileMetadata = message.fileMetadata;
+      }
+
+      const sharedSecret = await getSharedSecret(contact);
+      const payloadString = JSON.stringify(msgContent);
+      const { ciphertext, iv } = await encryptMessage(payloadString, sharedSecret);
+      const signature = await signData(ciphertext, currentUser.keys.privateSigningKey);
+      const ack = await emitSendMessage(contact.username, ciphertext, iv, signature);
+
+      const localMsg = {
+        id: ack.messageId,
+        sender: currentUser.username,
+        recipient: contact.username,
+        timestamp: ack.timestamp,
+        text: msgContent.text,
+        mediaType: hasMedia ? 'file' : null,
+        fileMetadata: hasMedia ? message.fileMetadata : null,
+        status: ack.status,
+        replyTo: null,
+        forwarded: true,
+        isNew: true
+      };
+
+      appendMessageToContact(contact.username, localMsg);
+      showToast(`Message forwarded to @${contact.username}`, 'success');
+    } catch (err) {
+      console.error('E2EE forwarding failed:', err);
+      showToast(`Failed to forward message: ${err.message || 'Unknown error'}`, 'error');
+    } finally {
+      setForwardingMessage(null);
+    }
+  };
+
+  // ==========================================
   // E2EE Receiving & Decryption Messaging Flow
   // ==========================================
   const processAndAppendMessage = async (msg, isHistorical = false) => {
@@ -1328,6 +1397,7 @@ export default function App() {
         fileMetadata: decryptedPayload.fileMetadata || null,
         status: msg.delivered,
         replyTo: decryptedPayload.replyTo || null,
+        forwarded: decryptedPayload.forwarded || null,
         isNew: !isHistorical
       };
 
@@ -2992,6 +3062,7 @@ export default function App() {
                     onOpenSafetyModal={handleOpenSafetyModal}
                     replyingTo={replyingTo}
                     setReplyingTo={setReplyingTo}
+                    onForwardMessage={handleForwardRequest}
                     showToast={showToast}
                   />
                 )}
@@ -3046,6 +3117,15 @@ export default function App() {
               />
             )}
           </div>
+
+          {/* Forward Message Contact Picker */}
+          <ForwardModal
+            message={forwardingMessage}
+            contacts={contacts}
+            blockedUsers={blockedUsers}
+            onClose={() => setForwardingMessage(null)}
+            onConfirm={handleConfirmForward}
+          />
 
           {/* E2EE Safety Number verification modal (Root level to overlap Sidebar) */}
           {(showSafetyModal || isSafetyModalClosing) && activeContact && (

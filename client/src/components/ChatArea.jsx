@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { 
   Send, Shield, Phone, Video, Paperclip, Mic, X, Play, Pause, 
   FileText, Image, Video as VideoIcon, Download, AlertTriangle,
-  ArrowLeft, CornerUpLeft, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck, Trash2, Camera, Music, Check, Copy, Ban, Unlock, Loader2,
+  ArrowLeft, CornerUpLeft, CornerUpRight, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck, Trash2, Camera, Music, Check, Copy, Ban, Unlock, Loader2,
   ChevronLeft, ChevronRight, Smile
 } from 'lucide-react';
 import AppleEmojiPicker from './AppleEmojiPicker';
@@ -944,7 +944,8 @@ const MessageList = React.memo(({
   onDeleteMessages,
   selectionCancelRef,
   onSelectionModeChange,
-  setIsClosingReply
+  setIsClosingReply,
+  onForwardMessage
 }) => {
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
@@ -1043,9 +1044,25 @@ const MessageList = React.memo(({
           setSelectedIds([]);
         }
       };
+      selectionCancelRef.current.forward = () => {
+        if (selectedIds.length !== 1 || typeof onForwardMessage !== 'function') return;
+        const selId = selectedIds[0];
+        const target = messages.find(m => m.id === selId) || groupedMessages.find(m => m.id === selId || (m.allIds && m.allIds.includes(selId)));
+        const baseMsg = target ? (target.isAlbum ? target.albumItems[0] : target.isMultiFile ? target.fileItems[0] : target) : null;
+        const forwardTarget = baseMsg || target;
+        if (!forwardTarget || forwardTarget.mediaType === 'call') return;
+        if (window.navigator && window.navigator.vibrate) try { window.navigator.vibrate(15); } catch (e) {}
+        if (window.history.state === 'selection' || window.history.state?.view === 'selection') {
+          window.__isProgrammaticPop = true;
+          window.history.back();
+          setTimeout(() => { window.__isProgrammaticPop = false; }, 100);
+        }
+        setSelectedIds([]);
+        onForwardMessage(forwardTarget);
+      };
     }
     return () => { if (selectionCancelRef) selectionCancelRef.current = null; };
-  }, [selectionMode, selectedIds, selectedMsgForCopy, canCopySelected, onDeleteMessages, onSelectionModeChange, selectionCancelRef, messages, groupedMessages, setReplyingTo, textareaRef, setIsClosingReply]);
+  }, [selectionMode, selectedIds, selectedMsgForCopy, canCopySelected, onDeleteMessages, onSelectionModeChange, selectionCancelRef, messages, groupedMessages, setReplyingTo, textareaRef, setIsClosingReply, onForwardMessage]);
 
   useEffect(() => {
     if (selectionMode && window.history.state !== 'selection') {
@@ -1412,6 +1429,11 @@ const MessageList = React.memo(({
                             <Check size={12} strokeWidth={2.8} />
                           </div>
                         )}
+                        {msg.forwarded && (
+                          <span className="forwarded-tag" title="This message was forwarded">
+                            <CornerUpRight size={10} /> Forwarded
+                          </span>
+                        )}
                         {!selectionMode && (
                           <div className="message-actions-container">
                             <button 
@@ -1514,6 +1536,7 @@ const ChatArea = React.memo(function ChatArea({
   onOpenSafetyModal,
   replyingTo,
   setReplyingTo,
+  onForwardMessage,
   showToast
 }) {
   const notify = showToast || window.showAppToast || ((msg) => window.alert(msg));
@@ -3759,12 +3782,12 @@ const ChatArea = React.memo(function ChatArea({
               </span>
               {selectionCount === 1 && (
                 <button
-                  className="header-action-btn selection-reply-header-btn"
-                  onClick={() => selectionCancelRef.current?.reply?.()}
-                  title="Reply"
-                  aria-label="Reply to selected message"
+                  className="header-action-btn selection-forward-header-btn"
+                  onClick={() => selectionCancelRef.current?.forward?.()}
+                  title="Forward"
+                  aria-label="Forward selected message"
                 >
-                  <CornerUpLeft size={19} />
+                  <CornerUpRight size={19} />
                 </button>
               )}
               {selectionCount === 1 && selectionCanCopy && (
@@ -3875,6 +3898,7 @@ const ChatArea = React.memo(function ChatArea({
             selectionCancelRef={selectionCancelRef}
             onSelectionModeChange={handleSelectionModeChange}
             setIsClosingReply={setIsClosingReply}
+            onForwardMessage={onForwardMessage}
           />
           <TypingIndicator 
             isVisible={Boolean(activeContact.isTyping && !(justReceivedId !== null && activeContact.messages?.length && activeContact.messages[activeContact.messages.length - 1]?.id === justReceivedId))} 
