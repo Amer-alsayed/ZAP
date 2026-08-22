@@ -224,7 +224,10 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
 
   const [activeCategory, setActiveCategory] = useState('recents');
   const [searchQuery, setSearchQuery] = useState('');
-  const [renderedCategoryCount, setRenderedCategoryCount] = useState(2);
+  // Start with only Frequently Used (14 cells) so the first commit after the button
+  // click is tiny and the popover appears instantly; remaining categories ramp in
+  // over the next few frames while the pop-in animation runs.
+  const [renderedCategoryCount, setRenderedCategoryCount] = useState(1);
   const scrollContainerRef = useRef(null);
   const searchInputRef = useRef(null);
   const isScrollingRef = useRef(false);

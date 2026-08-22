@@ -2692,8 +2692,8 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 22px !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 48px rgba(0, 0, 0, 0.7) !important;
-  backdrop-filter: blur(36px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(36px) saturate(190%) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
   overflow: hidden;
   box-sizing: border-box;
 }
