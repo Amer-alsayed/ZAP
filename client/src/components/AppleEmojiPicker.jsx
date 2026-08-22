@@ -155,7 +155,7 @@ export const EMOJI_CATEGORIES = [
 // Memoized Category Section Component with delegated event handling
 const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSelectEmoji }) {
   const handleGridClick = useCallback((e) => {
-    const btn = e.target.closest('button[data-emoji]');
+    const btn = e.target.closest('[data-emoji]');
     if (btn) {
       e.preventDefault();
       const emoji = btn.getAttribute('data-emoji');
@@ -173,16 +173,16 @@ const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSe
       </div>
       <div className="apple-emoji-grid" onClick={handleGridClick}>
         {category.emojis.map((emoji, idx) => (
-          <button
+          <div
             key={`${category.id}-${idx}-${emoji}`}
-            type="button"
             className="apple-emoji-btn"
+            role="button"
             data-emoji={emoji}
             title={emoji}
             aria-label={`Insert ${emoji}`}
           >
             {emoji}
-          </button>
+          </div>
         ))}
       </div>
     </div>
@@ -208,7 +208,7 @@ const AppleEmojiDock = memo(function AppleEmojiDock({ categories, activeCategory
   );
 });
 
-export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
+const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
   const [recentEmojis, setRecentEmojis] = useState(() => {
     try {
       const saved = localStorage.getItem(RECENT_EMOJIS_KEY);
@@ -244,13 +244,15 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
     return [...list, ...EMOJI_CATEGORIES];
   }, [recentEmojis]);
 
-  // Progressively mount remaining categories right after initial paint for instant 0ms open
+  // Ramp remaining categories in across frames (small chunks keep the open animation
+  // smooth while making the full grid scrollable within a few frames)
   useEffect(() => {
+    if (renderedCategoryCount >= allCategoriesWithRecents.length) return;
     const frame = requestAnimationFrame(() => {
-      setRenderedCategoryCount(allCategoriesWithRecents.length);
+      setRenderedCategoryCount(prev => Math.min(prev + 2, allCategoriesWithRecents.length));
     });
     return () => cancelAnimationFrame(frame);
-  }, [allCategoriesWithRecents.length]);
+  }, [renderedCategoryCount, allCategoriesWithRecents.length]);
 
   // Dock items
   const dockCategories = useMemo(() => {
@@ -315,9 +317,6 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
   // High-performance RAF scroll watcher
   const handleScroll = useCallback(() => {
     if (isScrollingRef.current || searchQuery) return;
-    if (renderedCategoryCount < allCategoriesWithRecents.length) {
-      setRenderedCategoryCount(allCategoriesWithRecents.length);
-    }
     if (rafIdRef.current) return;
 
     rafIdRef.current = requestAnimationFrame(() => {
@@ -434,4 +433,6 @@ export default function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
       />
     </div>
   );
-}
+});
+
+export default AppleEmojiPicker;

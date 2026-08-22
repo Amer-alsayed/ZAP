@@ -2665,12 +2665,10 @@ button {
   0% {
     opacity: 0;
     transform: translateY(14px) scale(0.95);
-    filter: blur(4px);
   }
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
-    filter: blur(0px);
   }
 }
 
@@ -2678,12 +2676,10 @@ button {
   0% {
     opacity: 1;
     transform: translateY(0) scale(1);
-    filter: blur(0px);
   }
   100% {
     opacity: 0;
     transform: translateY(12px) scale(0.95);
-    filter: blur(4px);
   }
 }
 
@@ -2816,8 +2812,6 @@ button {
   background: transparent !important;
   border: none !important;
   padding: 0 !important;
-  content-visibility: auto;
-  contain-intrinsic-size: 180px;
 }
 
 .apple-emoji-section-title {
@@ -2830,7 +2824,6 @@ button {
   position: sticky;
   top: -10px;
   background: rgba(20, 20, 24, 0.96);
-  backdrop-filter: blur(16px);
   padding: 5px 2px;
   z-index: 5;
 }

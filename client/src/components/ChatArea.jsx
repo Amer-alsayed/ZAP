@@ -1638,7 +1638,7 @@ const ChatArea = React.memo(function ChatArea({
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isClosingEmojiPicker, setIsClosingEmojiPicker] = useState(false);
-  const [hasMountedEmojiPicker, setHasMountedEmojiPicker] = useState(true);
+  const [hasMountedEmojiPicker, setHasMountedEmojiPicker] = useState(false);
   const showEmojiPickerRef = useRef(false);
   useEffect(() => {
     showEmojiPickerRef.current = showEmojiPicker;
@@ -1694,6 +1694,7 @@ const ChatArea = React.memo(function ChatArea({
     emojiPickerCloseTimerRef.current = setTimeout(() => {
       setShowEmojiPicker(false);
       setIsClosingEmojiPicker(false);
+      setHasMountedEmojiPicker(false);
       isClosingEmojiPickerRef.current = false;
       emojiPickerCloseTimerRef.current = null;
     }, 200);
@@ -1750,15 +1751,14 @@ const ChatArea = React.memo(function ChatArea({
   }, []);
 
   const handleInsertEmoji = useCallback((emoji) => {
-    if (!textareaRef.current) {
+    const textarea = textareaRef.current;
+    if (!textarea) {
       setInputText(prev => prev + emoji);
       return;
     }
-    const textarea = textareaRef.current;
-    const start = textarea.selectionStart ?? inputText.length;
-    const end = textarea.selectionEnd ?? inputText.length;
-    const newText = inputText.substring(0, start) + emoji + inputText.substring(end);
-    setInputText(newText);
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? textarea.value.length;
+    setInputText(prev => prev.substring(0, start) + emoji + prev.substring(end));
     soundEngine.playKeyboardTick?.();
 
     requestAnimationFrame(() => {
@@ -1767,19 +1767,18 @@ const ChatArea = React.memo(function ChatArea({
       textarea.setSelectionRange(newPos, newPos);
       adjustTextareaHeight(textarea);
     });
-  }, [inputText, adjustTextareaHeight]);
+  }, [adjustTextareaHeight]);
 
   const handleDeleteChar = useCallback(() => {
-    if (!textareaRef.current || !inputText) {
+    const textarea = textareaRef.current;
+    if (!textarea || !textarea.value) {
       setInputText(prev => prev.slice(0, -1));
       return;
     }
-    const textarea = textareaRef.current;
-    const start = textarea.selectionStart ?? inputText.length;
-    const end = textarea.selectionEnd ?? inputText.length;
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? textarea.value.length;
     if (start !== end) {
-      const newText = inputText.substring(0, start) + inputText.substring(end);
-      setInputText(newText);
+      setInputText(prev => prev.substring(0, start) + prev.substring(end));
       requestAnimationFrame(() => {
         textarea.focus();
         textarea.setSelectionRange(start, start);
@@ -1789,21 +1788,20 @@ const ChatArea = React.memo(function ChatArea({
       const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
       let newPos = start - 1;
       if (segmenter) {
-        const segments = Array.from(segmenter.segment(inputText.substring(0, start)));
+        const segments = Array.from(segmenter.segment(textarea.value.substring(0, start)));
         const lastSegment = segments[segments.length - 1];
         if (lastSegment) {
           newPos = lastSegment.index;
         }
       }
-      const newText = inputText.substring(0, newPos) + inputText.substring(start);
-      setInputText(newText);
+      setInputText(prev => prev.substring(0, newPos) + prev.substring(start));
       requestAnimationFrame(() => {
         textarea.focus();
         textarea.setSelectionRange(newPos, newPos);
         adjustTextareaHeight(textarea);
       });
     }
-  }, [inputText, adjustTextareaHeight]);
+  }, [adjustTextareaHeight]);
 
   // Close attach menu and emoji picker on outside click or Escape key
   useEffect(() => {
