@@ -11195,10 +11195,8 @@ textarea {
   padding-left: 40px;
 }
 
-/* Keep clustered messages aligned under the first bubble's text edge */
-.chat-area.group-chat-active .message-row.received.is-subsequent .message-wrapper {
-  margin-left: 38px;
-}
+/* Subsequent clustered messages already sit in the shared 40px gutter padding,
+   and the gutter avatar is absolutely positioned, so no extra indent is needed */
 .chat-area.group-chat-active .message-row.received .group-sender-label {
   margin-bottom: 2px;
 }
@@ -11207,9 +11205,6 @@ textarea {
   /* WhatsApp-mobile style: names stay, gutter avatars collapse on small screens */
   .chat-area.group-chat-active .messages-bounce-wrapper {
     padding-left: 0;
-  }
-  .chat-area.group-chat-active .message-row.received.is-subsequent .message-wrapper {
-    margin-left: 0;
   }
   .chat-area.group-chat-active .message-row.received .group-msg-avatar {
     display: none;
