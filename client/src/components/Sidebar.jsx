@@ -551,9 +551,18 @@ const Sidebar = React.memo(function Sidebar({
   };
 
   // Long press / Holding handlers
+  const pressStartPosRef = useRef(null);
+
+  const getPressPosition = (e) => {
+    const touch = e.touches?.[0] || e.changedTouches?.[0];
+    if (touch) return { x: touch.clientX, y: touch.clientY };
+    return { x: e.clientX ?? 0, y: e.clientY ?? 0 };
+  };
+
   const handleContactPressStart = useCallback((contact, e) => {
     if (e.button === 2) return; // Right click is handled by onContextMenu
     isLongPressTriggeredRef.current = false;
+    pressStartPosRef.current = getPressPosition(e);
     window.clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = window.setTimeout(() => {
       isLongPressTriggeredRef.current = true;
@@ -565,6 +574,7 @@ const Sidebar = React.memo(function Sidebar({
   const handleGroupPressStart = useCallback((group, e) => {
     if (e.button === 2) return;
     isLongPressTriggeredRef.current = false;
+    pressStartPosRef.current = getPressPosition(e);
     window.clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = window.setTimeout(() => {
       isLongPressTriggeredRef.current = true;
@@ -573,8 +583,20 @@ const Sidebar = React.memo(function Sidebar({
     }, 450);
   }, []);
 
+  const handleContactPressMove = useCallback((e) => {
+    const startPos = pressStartPosRef.current;
+    if (!startPos || !longPressTimerRef.current) return;
+    const pos = getPressPosition(e);
+    if (Math.abs(pos.x - startPos.x) > 8 || Math.abs(pos.y - startPos.y) > 8) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
   const handleContactPressEnd = useCallback(() => {
     window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+    pressStartPosRef.current = null;
   }, []);
 
   const handleContextMenu = useCallback((contact, e) => {
@@ -804,7 +826,9 @@ const Sidebar = React.memo(function Sidebar({
                     onMouseDown={(e) => handleGroupPressStart(group, e)}
                     onMouseUp={handleContactPressEnd}
                     onMouseLeave={handleContactPressEnd}
+                    onMouseMove={handleContactPressMove}
                     onTouchStart={(e) => handleGroupPressStart(group, e)}
+                    onTouchMove={handleContactPressMove}
                     onTouchEnd={handleContactPressEnd}
                     onTouchCancel={handleContactPressEnd}
                     onContextMenu={(e) => handleGroupContextMenu(group, e)}
@@ -882,7 +906,9 @@ const Sidebar = React.memo(function Sidebar({
                   onMouseDown={(e) => handleContactPressStart(contact, e)}
                   onMouseUp={handleContactPressEnd}
                   onMouseLeave={handleContactPressEnd}
+                  onMouseMove={handleContactPressMove}
                   onTouchStart={(e) => handleContactPressStart(contact, e)}
+                  onTouchMove={handleContactPressMove}
                   onTouchEnd={handleContactPressEnd}
                   onTouchCancel={handleContactPressEnd}
                   onContextMenu={(e) => handleContextMenu(contact, e)}
