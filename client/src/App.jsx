@@ -666,6 +666,31 @@ export default function App() {
           console.warn('Failed to parse cached contacts:', e);
         }
       }
+
+      // Restore groups list synchronously so the sidebar renders instantly (like DMs);
+      // the authoritative server snapshot from loadGroups() reconciles over this shortly after.
+      const storedGroups = localStorage.getItem(`groups_${currentUser.username}`);
+      if (storedGroups) {
+        try {
+          const parsed = JSON.parse(storedGroups);
+          if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.groups)) {
+            throw new Error('Unrecognized cache shape');
+          }
+          const sanitizedGroups = parsed.groups
+            .filter(g => g && typeof g.id === 'number' && typeof g.name === 'string')
+            .map(g => ({
+              ...g,
+              members: Array.isArray(g.members) ? g.members : [],
+              messages: Array.isArray(g.messages) ? g.messages : [],
+              typingUsers: []
+            }));
+          setGroups(sanitizedGroups);
+        } catch (e) {
+          // Corrupt or outdated cache — drop it and fall back to the cold server fetch
+          console.warn('Failed to parse cached groups:', e);
+          localStorage.removeItem(`groups_${currentUser.username}`);
+        }
+      }
     }
   }, [currentUser]);
 
@@ -690,6 +715,58 @@ export default function App() {
       }
     }
   }, [contacts, currentUser]);
+
+  // Persist groups when they change (debounced — typing indicators churn state rapidly)
+  const groupsPersistTimerRef = useRef(null);
+  const pendingGroupsPayloadRef = useRef(null);
+  const flushGroupsCache = useCallback(() => {
+    if (!pendingGroupsPayloadRef.current) return;
+    const { key, value } = pendingGroupsPayloadRef.current;
+    pendingGroupsPayloadRef.current = null;
+    if (groupsPersistTimerRef.current) {
+      window.clearTimeout(groupsPersistTimerRef.current);
+      groupsPersistTimerRef.current = null;
+    }
+    try {
+      localStorage.setItem(key, value);
+    } catch (err) {
+      console.warn('LocalStorage quota exceeded while persisting groups:', err.message);
+    }
+  }, []);
+  useEffect(() => {
+    if (!currentUser) return;
+    // Slim volatile/oversized fields: no typingUsers, cap cached history at 50 messages
+    const slimGroups = groups.map(g => ({
+      id: g.id,
+      name: g.name,
+      avatarIcon: g.avatarIcon,
+      myRole: g.myRole,
+      kv: g.kv,
+      joinedKv: g.joinedKv,
+      createdBy: g.createdBy,
+      members: Array.isArray(g.members) ? g.members : [],
+      lastReadId: g.lastReadId || 0,
+      unreadCount: g.unreadCount || 0,
+      lastMessage: g.lastMessage || null,
+      messages: (g.messages || []).slice(-50)
+    }));
+    pendingGroupsPayloadRef.current = {
+      key: `groups_${currentUser.username}`,
+      value: JSON.stringify({ v: 1, groups: slimGroups })
+    };
+    if (groupsPersistTimerRef.current) window.clearTimeout(groupsPersistTimerRef.current);
+    groupsPersistTimerRef.current = window.setTimeout(flushGroupsCache, 500);
+  }, [groups, currentUser, flushGroupsCache]);
+
+  // Flush any pending group cache write before the page unloads/closes
+  useEffect(() => {
+    const onBeforeUnload = () => flushGroupsCache();
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      flushGroupsCache();
+    };
+  }, [flushGroupsCache]);
 
   // Sync active contact messages
   const activeContactRef = useRef(null);
@@ -1002,17 +1079,20 @@ export default function App() {
       // Sync full message history for all non-blocked contacts (populates sidebar previews)
       const existingUsernames = new Set(contactsRef.current.map(c => c.username.toLowerCase()));
       const newContacts = freshServerContacts.filter(sc => !existingUsernames.has(sc.username.toLowerCase()));
+
+      // Kick off group loading concurrently — it must not wait behind the full
+      // DM history re-sync, which can take seconds on a remote server.
+      const groupsPromise = loadGroups().catch(e => {
+        console.warn('Failed to load groups on connect:', e);
+      });
+
       // Sync new contacts immediately with their fetched profile data
       await syncMessagesForContacts(newContacts);
       // Sync existing contacts
       await syncOfflineMessages();
 
-      // Load all E2EE groups + their encrypted history (cross-device sync)
-      try {
-        await loadGroups();
-      } catch (e) {
-        console.warn('Failed to load groups on connect:', e);
-      }
+      // Keep handleConnect's completion signal honest — groups may still be finishing
+      await groupsPromise;
     };
 
     const handleDisconnect = () => {
@@ -1890,15 +1970,13 @@ export default function App() {
     };
   };
 
-  // Load all groups + their recent history from the server
+  // Load all groups + their recent history from the server.
+  // The server list is authoritative: cached groups absent from it (kicked/left/
+  // deleted elsewhere) are dropped once this reconciles.
   const loadGroups = async () => {
     try {
       const serverGroups = await emitGetGroups();
-      const locals = [];
-      for (const payload of serverGroups) {
-        const local = await buildLocalGroup(payload);
-        locals.push(local);
-      }
+      const locals = await Promise.all(serverGroups.map(payload => buildLocalGroup(payload)));
       setGroups(prev => {
         const byId = new Map(prev.map(g => [g.id, g]));
         const merged = locals.map(local => {
