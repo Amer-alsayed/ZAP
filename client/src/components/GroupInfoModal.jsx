@@ -70,6 +70,38 @@ const GroupInfoModal = ({
   const [editAvatarImage, setEditAvatarImage] = useState(() => parseGroupAvatarImage(group.avatarIcon));
   const editFileInputRef = useRef(null);
 
+  const [viewLeaving, setViewLeaving] = useState(false);
+  const [navDir, setNavDir] = useState('forward');
+  const [confirmClosing, setConfirmClosing] = useState(false);
+  const viewTimerRef = useRef(null);
+  const confirmTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    clearTimeout(viewTimerRef.current);
+    clearTimeout(confirmTimerRef.current);
+  }, []);
+
+  const changeView = (next, dir = 'forward') => {
+    if (next === view || viewLeaving) return;
+    setNavDir(dir);
+    setViewLeaving(true);
+    clearTimeout(viewTimerRef.current);
+    viewTimerRef.current = setTimeout(() => {
+      setView(next);
+      setViewLeaving(false);
+    }, 150);
+  };
+
+  const closeConfirm = () => {
+    if (confirmClosing) return;
+    setConfirmClosing(true);
+    clearTimeout(confirmTimerRef.current);
+    confirmTimerRef.current = setTimeout(() => {
+      setConfirmAction(null);
+      setConfirmClosing(false);
+    }, 160);
+  };
+
   const requestClose = () => {
     if (isClosing || busy) return;
     setIsClosing(true);
@@ -94,9 +126,9 @@ const GroupInfoModal = ({
       if (e.key === 'Escape') {
         if (!busy && !isClosing) {
           if (confirmAction) {
-            setConfirmAction(null);
+            closeConfirm();
           } else if (view !== 'main') {
-            setView('main');
+            changeView('main', 'back');
           } else {
             requestClose();
           }
@@ -105,7 +137,7 @@ const GroupInfoModal = ({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [view, confirmAction, busy, isClosing, requestClose]);
+  }, [view, confirmAction, busy, isClosing, requestClose, changeView, closeConfirm]);
 
   const isOwner = group.myRole === 'owner';
   const isAdmin = isOwner || group.myRole === 'admin';
@@ -161,7 +193,7 @@ const GroupInfoModal = ({
     try {
       await onAddMembers(group.id, pendingAdd);
       setPendingAdd([]);
-      setView('main');
+      changeView('main', 'back');
     } catch (err) {
       setError(err.message || 'Failed to add members');
     } finally {
@@ -200,7 +232,7 @@ const GroupInfoModal = ({
         name,
         avatarIcon: editAvatarImage ? JSON.stringify({ image: editAvatarImage }) : null
       });
-      setView('main');
+      changeView('main', 'back');
     } catch (err) {
       setError(err.message || 'Failed to update group');
     } finally {
@@ -222,7 +254,7 @@ const GroupInfoModal = ({
         await onDeleteGroup(group);
         return;
       }
-      setConfirmAction(null);
+      closeConfirm();
     } catch (err) {
       setError(err.message || 'Action failed');
       setConfirmAction(null);
@@ -303,7 +335,7 @@ const GroupInfoModal = ({
       <div className="group-info-modal glass" onClick={(e) => e.stopPropagation()}>
         <div className="group-info-header">
           {view !== 'main' ? (
-            <button className="group-info-back" onClick={() => { setView('main'); setError(''); }} aria-label="Back">
+            <button className="group-info-back" onClick={() => { changeView('main', 'back'); setError(''); }} aria-label="Back">
               <ChevronLeft size={19} />
             </button>
           ) : (
@@ -317,7 +349,7 @@ const GroupInfoModal = ({
           {!busy && (
             <button
               className="create-group-close"
-              onClick={() => { if (confirmAction) { setConfirmAction(null); } else { requestClose(); } }}
+              onClick={() => { if (confirmAction) { closeConfirm(); } else { requestClose(); } }}
               aria-label="Close"
             >
               <X size={17} />
@@ -328,6 +360,7 @@ const GroupInfoModal = ({
         <div className="group-info-body">
           {error && <div className="create-group-error">{error}</div>}
 
+          <div key={view} className={`group-info-view ${navDir} ${viewLeaving ? 'leaving' : ''}`}>
           {view === 'main' && (
             <>
               <div className="group-info-hero">
