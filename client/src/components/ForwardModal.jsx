@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Forward, X, Search, MessageSquare } from 'lucide-react';
+import { Forward, X, Search, MessageSquare, Users } from 'lucide-react';
 
 const buildForwardPreview = (message) => {
   if (!message) return '';
@@ -15,7 +15,7 @@ const buildForwardPreview = (message) => {
   return message.text || '';
 };
 
-const ForwardModal = ({ message, contacts, blockedUsers = [], onClose, onConfirm }) => {
+const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], onClose, onConfirm }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [forwardingTo, setForwardingTo] = useState(null);
 
@@ -33,26 +33,53 @@ const ForwardModal = ({ message, contacts, blockedUsers = [], onClose, onConfirm
     return () => window.removeEventListener('keydown', onKey);
   }, [message, onClose]);
 
-  const filteredContacts = useMemo(() => {
-    const blocked = new Set(blockedUsers.map(b => String(b).toLowerCase()));
+  const blocked = useMemo(() => new Set(blockedUsers.map(b => String(b).toLowerCase())), [blockedUsers]);
+
+  const targets = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return contacts.filter(c => {
-      if (blocked.has(c.username.toLowerCase())) return false;
-      if (!query) return true;
-      const name = (c.customName || c.displayName || c.username || '').toLowerCase();
-      return name.includes(query) || (c.username || '').toLowerCase().includes(query);
-    });
-  }, [contacts, blockedUsers, searchQuery]);
+    const matches = (name, username) =>
+      !query || name.toLowerCase().includes(query) || String(username).toLowerCase().includes(query);
+
+    const contactTargets = contacts
+      .filter(c => {
+        if (blocked.has(c.username.toLowerCase())) return false;
+        const name = c.customName || c.displayName || c.username || '';
+        return matches(name, c.username);
+      })
+      .map(c => ({
+        type: 'contact',
+        key: `c_${c.username}`,
+        id: c.username,
+        name: c.customName || c.displayName || c.username,
+        sub: `@${c.username}`,
+        avatarIcon: c.avatarIcon,
+        fallbackLetter: (c.customName || c.displayName || c.username || '?').charAt(0).toUpperCase()
+      }));
+
+    const groupTargets = groups
+      .filter(g => matches(g.name || '', g.id))
+      .map(g => ({
+        type: 'group',
+        key: `g_${g.id}`,
+        id: g.id,
+        name: g.name || `Group ${g.id}`,
+        sub: `${(g.members || []).length} members`,
+        avatarIcon: g.avatarIcon,
+        fallbackLetter: (g.name || 'G').charAt(0).toUpperCase()
+      }));
+
+    return [...contactTargets, ...groupTargets];
+  }, [contacts, groups, blocked, searchQuery]);
 
   if (!message) return null;
 
   const previewText = buildForwardPreview(message);
 
-  const handleSelect = async (contact) => {
+  const handleSelect = async (target) => {
     if (forwardingTo) return;
-    setForwardingTo(contact.username);
+    setForwardingTo(target.key);
     try {
-      await onConfirm(contact.username);
+      await onConfirm(target);
     } finally {
       setForwardingTo(null);
     }
@@ -78,7 +105,7 @@ const ForwardModal = ({ message, contacts, blockedUsers = [], onClose, onConfirm
           <input
             type="text"
             className="forward-search-input"
-            placeholder="Search contacts..."
+            placeholder="Search chats & groups..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             autoFocus
@@ -86,31 +113,29 @@ const ForwardModal = ({ message, contacts, blockedUsers = [], onClose, onConfirm
         </div>
 
         <div className="forward-contact-list">
-          {filteredContacts.length === 0 ? (
+          {targets.length === 0 ? (
             <div className="forward-empty-state">
               <MessageSquare size={22} />
-              <span>No contacts found</span>
+              <span>No chats or groups found</span>
             </div>
           ) : (
-            filteredContacts.map((contact) => (
+            targets.map((target) => (
               <button
-                key={contact.username}
+                key={target.key}
                 type="button"
-                className={`forward-contact-item ${forwardingTo === contact.username ? 'is-sending' : ''}`}
-                onClick={() => handleSelect(contact)}
+                className={`forward-contact-item ${forwardingTo === target.key ? 'is-sending' : ''}`}
+                onClick={() => handleSelect(target)}
                 disabled={Boolean(forwardingTo)}
               >
-                <span className="forward-contact-avatar">
-                  {contact.avatarIcon || (contact.customName || contact.displayName || contact.username || '?').charAt(0).toUpperCase()}
+                <span className={`forward-contact-avatar ${target.type === 'group' ? 'is-group' : ''}`}>
+                  {target.type === 'group' ? <Users size={14} /> : (target.avatarIcon || target.fallbackLetter)}
                 </span>
                 <span className="forward-contact-details">
-                  <span className="forward-contact-name">
-                    {contact.customName || contact.displayName || contact.username}
-                  </span>
-                  <span className="forward-contact-username">@{contact.username}</span>
+                  <span className="forward-contact-name">{target.name}</span>
+                  <span className="forward-contact-username">{target.sub}</span>
                 </span>
                 <span className="forward-contact-action">
-                  {forwardingTo === contact.username ? 'Sending...' : 'Send'}
+                  {forwardingTo === target.key ? 'Sending...' : 'Send'}
                 </span>
               </button>
             ))

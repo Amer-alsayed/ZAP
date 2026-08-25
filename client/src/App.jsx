@@ -25,11 +25,14 @@ const getSafetyNumber = (keyA, keyB) => {
 import Login from './components/Login';
 import ZapLogo from './components/ZapLogo';
 import { clearMediaCache } from './services/mediaCache';
-import Sidebar from './components/Sidebar';
+import Sidebar, { renderAvatar } from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import CallWindow from './components/CallWindow';
 import SettingsView from './components/SettingsView';
 import ForwardModal from './components/ForwardModal';
+import CreateGroupModal from './components/CreateGroupModal';
+import GroupInfoModal from './components/GroupInfoModal';
+import GroupCallWindow from './components/GroupCallWindow';
 import { soundEngine } from './services/soundEffects';
 import Dashboard from './components/Dashboard';
 import { applyThemeTokens } from './utils/themeTokens';
@@ -45,6 +48,14 @@ import {
   decryptRestoredPrivateKeys,
   base64ToBuffer
 } from './services/crypto';
+import {
+  generateGroupKeyMaterial,
+  importGroupKey,
+  sealGroupKeyEnvelope,
+  openGroupKeyEnvelope,
+  encryptGroupPayload,
+  decryptGroupPayload
+} from './services/groupCrypto';
 import { 
   connectSocket, 
   disconnectSocket, 
@@ -58,6 +69,24 @@ import {
   emitGetContacts,
   emitMarkAsRead,
   emitGetUserStatus,
+  emitCreateGroup,
+  emitGetGroups,
+  emitGetGroupMessages,
+  emitSendGroupMessage,
+  emitAddGroupMembers,
+  emitRemoveGroupMember,
+  emitLeaveGroup,
+  emitDeleteGroup,
+  emitUpdateGroupInfo,
+  emitSetMemberRole,
+  emitGetGroupKey,
+  emitMarkGroupRead,
+  emitStartGroupCall,
+  emitJoinGroupCall,
+  emitLeaveGroupCall,
+  emitGroupCallSignal,
+  emitGroupCallState,
+  emitDeleteGroupMessages,
   subscribeToMessages, 
   unsubscribeFromMessages,
   subscribeToUserStatus,
@@ -165,6 +194,7 @@ export default function App() {
             token,
             displayName,
             avatarIcon,
+            themeColor: localStorage.getItem('chatra_theme_rgb') || null,
             encryptedPrivateKeys,
             keys: {
               publicIdentityKey: JSON.parse(pubIdentityKeyStr),
@@ -257,6 +287,36 @@ export default function App() {
     contactsRef.current = contacts;
   }, [contacts]);
 
+  // ==========================================
+  // E2EE Group Chat State
+  // ==========================================
+  const [groups, setGroups] = useState([]);
+  const groupsRef = useRef([]);
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
+
+  const [activeGroup, setActiveGroup] = useState(null);
+  const activeGroupRef = useRef(null);
+  useEffect(() => {
+    activeGroupRef.current = activeGroup;
+  }, [activeGroup]);
+
+  // Remembers the last open chat kind so the exit animation renders the right view
+  const lastActiveGroupVmRef = useRef(null);
+  const lastChatKindRef = useRef(null);
+  const previousActiveGroupRef = useRef(null);
+
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [groupInfoGroupId, setGroupInfoGroupId] = useState(null);
+
+  // Group key material cache: `${groupId}:${kv}` -> CryptoKey (AES-GCM)
+  const groupKeysRef = useRef({});
+  // In-flight envelope fetches to prevent duplicate requests across tabs of history loading
+  const pendingGroupKeysRef = useRef({});
+  // Cached member profiles: lowerUsername -> { username, publicIdentityKey, publicSigningKey, displayName, avatarIcon }
+  const userProfilesRef = useRef({});
+
   const [blockedUsers, setBlockedUsers] = useState([]);
   const blockedUsersRef = useRef([]);
   useEffect(() => {
@@ -339,6 +399,41 @@ export default function App() {
   const mainRearCameraDeviceIdRef = useRef(null);
 
   const [isCallMinimized, setIsCallMinimized] = useState(false);
+
+  // ==========================================
+  // Group Call States & Refs (mesh WebRTC)
+  // ==========================================
+  const [gcState, setGcStateInternal] = useState('idle'); // idle | calling | ringing | connected
+  const gcStateRef = useRef('idle');
+  const setGcState = useCallback((val) => {
+    setGcStateInternal(val);
+    gcStateRef.current = val;
+  }, []);
+
+  const [gcGroupId, setGcGroupIdInternal] = useState(null);
+  const gcGroupIdRef = useRef(null);
+  const setGcGroupId = (gid) => {
+    setGcGroupIdInternal(gid);
+    gcGroupIdRef.current = gid;
+  };
+
+  const [gcMediaType, setGcMediaTypeInternal] = useState('voice');
+  const gcMediaTypeRef = useRef('voice');
+  const setGcMediaType = (mt) => {
+    setGcMediaTypeInternal(mt);
+    gcMediaTypeRef.current = mt;
+  };
+  const gcIsInitiatorRef = useRef(false);
+
+  const [gcRemoteStreams, setGcRemoteStreams] = useState({});
+  const gcRemoteStreamsRef = useRef({});
+  const [gcPeers, setGcPeers] = useState({});
+  const gcPeersRef = useRef({});
+  const [gcElapsed, setGcElapsed] = useState(0);
+  const [gcMinimized, setGcMinimized] = useState(false);
+
+  const gcPcs = useRef({});
+  const gcIceQueues = useRef({});
   const [replyingTo, setReplyingTo] = useState(null);
   const [forwardingMessage, setForwardingMessage] = useState(null);
 
@@ -359,6 +454,31 @@ export default function App() {
       soundEngine.stopIncomingRingtone();
     }
   }, [callState]);
+
+  // Group call ring/connected sound effects
+  useEffect(() => {
+    if (gcState === 'calling') {
+      soundEngine.stopIncomingRingtone();
+      soundEngine.startOutgoingRingTone();
+    } else if (gcState === 'ringing') {
+      soundEngine.stopOutgoingRingTone();
+      soundEngine.startIncomingRingtone();
+    } else if (gcState === 'connected') {
+      soundEngine.stopOutgoingRingTone();
+      soundEngine.stopIncomingRingtone();
+      soundEngine.playCallConnected();
+    } else if (gcState === 'idle') {
+      soundEngine.stopOutgoingRingTone();
+      soundEngine.stopIncomingRingtone();
+    }
+  }, [gcState]);
+
+  // Group call duration timer
+  useEffect(() => {
+    if (gcState !== 'connected') return;
+    const interval = setInterval(() => setGcElapsed((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [gcState]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const isFullscreenRef = useRef(false);
 
@@ -671,7 +791,7 @@ export default function App() {
       }
 
       // 7. Return to sidebar / contacts list if we are inside a chat, settings, or recents view
-      if (activeContactRef.current || showSettingsRef.current || showRecentsRef.current) {
+      if (activeContactRef.current || activeGroupRef.current || showSettingsRef.current || showRecentsRef.current) {
         handleBackToMenu(true);
       }
     };
@@ -744,6 +864,13 @@ export default function App() {
         setContacts([]);
         setActiveContact(null);
         setShowSettings(false);
+        setGroups([]);
+        setActiveGroup(null);
+        activeGroupRef.current = null;
+        setShowCreateGroup(false);
+        setGroupInfoGroupId(null);
+        groupKeysRef.current = {};
+        userProfilesRef.current = {};
         sharedSecrets.current = {};
         showToast(reason, 'error', 'Session Ended');
       }
@@ -879,6 +1006,13 @@ export default function App() {
       await syncMessagesForContacts(newContacts);
       // Sync existing contacts
       await syncOfflineMessages();
+
+      // Load all E2EE groups + their encrypted history (cross-device sync)
+      try {
+        await loadGroups();
+      } catch (e) {
+        console.warn('Failed to load groups on connect:', e);
+      }
     };
 
     const handleDisconnect = () => {
@@ -1033,12 +1167,299 @@ export default function App() {
     });
 
     // ==========================================
+    // E2EE Group Chat Socket Listeners
+    // ==========================================
+
+    const handleIncomingGroupMessage = async (encMsg) => {
+      try {
+        if (!encMsg || !encMsg.groupId) return;
+        const gid = encMsg.groupId;
+        let group = groupsRef.current.find(g => g.id === gid);
+
+        if (!group) {
+          // Unknown group (e.g. added while offline): pull fresh roster then retry once
+          await loadGroups();
+          group = groupsRef.current.find(g => g.id === gid);
+          if (!group) return;
+        }
+
+        const isOwnOtherDevice = String(encMsg.sender).toLowerCase() === currentUser.username.toLowerCase();
+        if (!isOwnOtherDevice && !group.messages.some(m => String(m.id) === String(encMsg.id))) {
+          const processed = await processGroupPayload(encMsg).catch(err => {
+            console.error('Failed to process group message:', err);
+            return {
+              id: encMsg.id,
+              groupId: gid,
+              sender: encMsg.sender,
+              timestamp: encMsg.timestamp,
+              text: '🔒 Encrypted message could not be decrypted on this device.',
+              mediaType: 'system',
+              status: 0
+            };
+          });
+          appendGroupMessage(gid, processed);
+          soundEngine.playMessageReceived();
+        } else if (isOwnOtherDevice) {
+          // Echo of our own message from another device/tab — sync it silently
+          const processed = await processGroupPayload(encMsg).catch(() => null);
+          if (processed) appendGroupMessage(gid, processed);
+        }
+
+        // If the group chat is open, acknowledge read immediately
+        if (activeGroupRef.current?.id === gid && !isOwnOtherDevice) {
+          emitMarkGroupRead(gid, encMsg.id);
+          patchGroup(gid, g => ({ ...g, lastReadId: Math.max(g.lastReadId || 0, encMsg.id), unreadCount: 0 }));
+        }
+      } catch (err) {
+        console.error('Error handling incoming group message:', err);
+      }
+    };
+    socket.on('receive-group-message', handleIncomingGroupMessage);
+
+    const handleGroupAdded = async (payload) => {
+      try {
+        const local = await buildLocalGroup(payload);
+        setGroups(prev => prev.some(g => g.id === local.id) ? prev : [...prev, local]);
+        await loadGroupHistory(local);
+        showToast(`You were added to "${local.name}".`, 'info', 'New Group');
+      } catch (err) {
+        console.error('Failed processing group-added:', err);
+      }
+    };
+    socket.on('group-added', handleGroupAdded);
+
+    // Authoritative snapshot after any membership/metadata change
+    const handleGroupSync = async (payload) => {
+      try {
+        if (!payload || !payload.id) return;
+        const existing = groupsRef.current.find(g => g.id === payload.id);
+
+        let name = existing?.name ?? 'Encrypted Group';
+        let avatarIcon = existing?.avatarIcon ?? null;
+        try {
+          if (!existing || payload.nameKv !== existing.kv || payload.nameCiphertext !== undefined) {
+            name = await decryptGroupName(payload);
+            avatarIcon = await decryptGroupAvatar(payload);
+          }
+        } catch (e) {
+          console.warn('Group meta re-decrypt failed; keeping cached identity:', e);
+        }
+
+        const members = await hydrateGroupMembers(payload.members || []);
+
+        setGroups(prev => prev.map(g => {
+          if (g.id !== payload.id) return g;
+          return {
+            ...g,
+            name,
+            avatarIcon,
+            myRole: payload.myRole,
+            kv: payload.kv,
+            members
+          };
+        }));
+        setActiveGroup(prev => {
+          if (prev && prev.id === payload.id) {
+            return { ...prev, name, avatarIcon, myRole: payload.myRole, kv: payload.kv, members };
+          }
+          return prev;
+        });
+      } catch (err) {
+        console.error('Failed processing group-sync:', err);
+      }
+    };
+    socket.on('group-sync', handleGroupSync);
+
+    const handleGroupUpdated = () => {
+      // Detailed snapshots arrive via 'group-sync'; nothing incremental needed here.
+    };
+    socket.on('group-updated', handleGroupUpdated);
+
+    const handleGroupDeleted = ({ groupId }) => {
+      const group = groupsRef.current.find(g => g.id === groupId);
+      Object.keys(groupKeysRef.current).forEach(k => {
+        if (k.startsWith(`${groupId}:`)) delete groupKeysRef.current[k];
+      });
+      setGroups(prev => prev.filter(g => g.id !== groupId));
+      if (activeGroupRef.current?.id === groupId) {
+        handleBackToMenu();
+      }
+      setGroupInfoGroupId(null);
+      if (group) {
+        showToast(`"${group.name}" was deleted by its owner.`, 'info', 'Group Deleted');
+      }
+    };
+    socket.on('group-deleted', handleGroupDeleted);
+
+    // Per-group typing indicator state with auto-expiry timers
+    const groupTypingTimersRef = { current: {} };
+
+    const handleGroupTyping = ({ groupId, username, isTyping }) => {
+      const lower = String(username).toLowerCase();
+      if (lower === currentUser.username.toLowerCase()) return;
+
+      const timerKey = `${groupId}:${lower}`;
+      const apply = (fn) => {
+        setGroups(prev => prev.map(g => {
+          if (g.id !== groupId) return g;
+          const current = new Set(g.typingUsers || []);
+          fn(current, lower);
+          return { ...g, typingUsers: [...current] };
+        }));
+        setActiveGroup(prev => {
+          if (prev && prev.id === groupId) {
+            const current = new Set(prev.typingUsers || []);
+            fn(current, lower);
+            return { ...prev, typingUsers: [...current] };
+          }
+          return prev;
+        });
+      };
+
+      if (isTyping) {
+        apply((set, u) => set.add(u));
+        window.clearTimeout(groupTypingTimersRef.current[timerKey]);
+        groupTypingTimersRef.current[timerKey] = window.setTimeout(() => {
+          apply((set, u) => set.delete(u));
+          delete groupTypingTimersRef.current[timerKey];
+        }, 4500);
+      } else {
+        apply((set, u) => set.delete(u));
+        window.clearTimeout(groupTypingTimersRef.current[timerKey]);
+        delete groupTypingTimersRef.current[timerKey];
+      }
+    };
+    socket.on('group-user-typing', handleGroupTyping);
+
+    // ==========================================
+    // Group Call Socket Listeners
+    // ==========================================
+
+    const handleGcStarted = ({ groupId, from, mediaType }) => {
+      if (String(from).toLowerCase() === currentUser.username.toLowerCase()) return;
+      if (callStateRef.current !== 'idle') {
+        showToast(`${from} started a group call in "${groupsRef.current.find(g => g.id === groupId)?.name || 'a group'}".`, 'info', 'Missed Group Call');
+        return;
+      }
+      if (gcStateRef.current !== 'idle') return;
+
+      setGcGroupId(groupId);
+      setGcMediaType(mediaType);
+      gcIsInitiatorRef.current = false;
+      setGcPeers({});
+      gcPeersRef.current = {};
+      setGcElapsed(0);
+      setGcMinimized(false);
+      setGcState('ringing');
+    };
+
+    const handleGcMember = ({ groupId, username: member }) => {
+      if (!groupId || gcGroupIdRef.current !== groupId) return;
+      const lower = String(member).toLowerCase();
+      if (lower === currentUser.username.toLowerCase()) return;
+
+      if (!gcPeersRef.current[lower]) {
+        gcPeersRef.current = { ...gcPeersRef.current, [lower]: { muted: false, cameraOff: false, screenSharing: false } };
+        setGcPeers(gcPeersRef.current);
+      }
+      if (gcIsInitiatorRef.current && gcStateRef.current === 'calling') {
+        setGcState('connected');
+      }
+    };
+
+    const handleGcSignal = async ({ groupId, from, kind, data: signalData }) => {
+      try {
+        if (!groupId || gcGroupIdRef.current !== groupId) return;
+        const peerLower = String(from).toLowerCase();
+
+        if (kind === 'offer') {
+          let pc = gcPcs.current[peerLower] || gcCreatePC(peerLower);
+          await pc.setRemoteDescription({ type: 'offer', sdp: optimizeSDP(signalData.sdp) });
+          const answer = await pc.createAnswer();
+          answer.sdp = optimizeSDP(answer.sdp);
+          await pc.setLocalDescription(answer);
+          emitGroupCallSignal({ to: peerLower, groupId, kind: 'answer', data: { sdp: answer.sdp } });
+          await gcFlushIce(peerLower);
+        } else if (kind === 'answer') {
+          const pc = gcPcs.current[peerLower];
+          if (!pc) return;
+          if (pc.signalingState === 'have-local-offer') {
+            await pc.setRemoteDescription({ type: 'answer', sdp: signalData.sdp });
+            await gcFlushIce(peerLower);
+          }
+        } else if (kind === 'ice') {
+          const pc = gcPcs.current[peerLower];
+          if (pc && pc.remoteDescription) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(signalData)); } catch (e) {}
+          } else {
+            (gcIceQueues.current[peerLower] = gcIceQueues.current[peerLower] || []).push(signalData);
+          }
+        }
+      } catch (err) {
+        console.error('Group call signal error:', err);
+      }
+    };
+
+    const handleGcPeerState = ({ groupId, from, muted, cameraOff, screenSharing }) => {
+      if (!groupId || gcGroupIdRef.current !== groupId) return;
+      const lower = String(from).toLowerCase();
+      // The room broadcast echoes back to the sender — never tile yourself
+      if (lower === currentUser.username.toLowerCase()) return;
+      gcPeersRef.current = {
+        ...gcPeersRef.current,
+        [lower]: { ...(gcPeersRef.current[lower] || {}), muted, cameraOff, screenSharing }
+      };
+      setGcPeers(gcPeersRef.current);
+    };
+
+    const handleGcLeft = ({ groupId, username: member }) => {
+      if (!groupId || gcGroupIdRef.current !== groupId) return;
+      gcRemovePeer(String(member).toLowerCase());
+      if (gcStateRef.current === 'connected' && Object.keys(gcRemoteStreamsRef.current).length === 0 && gcIsInitiatorRef.current) {
+        setGcState('calling');
+      }
+    };
+
+    const handleGcEnded = () => {
+      if (gcStateRef.current !== 'idle') {
+        gcCleanupAll(false);
+      }
+    };
+
+    // Remote deletions inside a group (someone deleted their own message)
+    const handleGroupMessagesDeleted = ({ groupId, messageIds = [] }) => {
+      if (!groupId) return;
+      const ids = new Set(messageIds.map(id => String(id)));
+      const phase = (mutator) => {
+        setGroups(prev => prev.map(g => (g.id === groupId ? { ...g, messages: mutator(g.messages) } : g)));
+        setActiveGroup(prev => (prev && prev.id === groupId ? { ...prev, messages: mutator(prev.messages) } : prev));
+      };
+
+      phase((msgs) => msgs.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true, isCollapsing: false } : m));
+      window.setTimeout(() => phase((msgs) => msgs.map(m => ids.has(String(m.id)) ? { ...m, isCollapsing: true } : m)), 500);
+      window.setTimeout(() => phase((msgs) => msgs.filter(m => !ids.has(String(m.id)))), 1150);
+    };
+    socket.on('group-messages-deleted', handleGroupMessagesDeleted);
+
+    socket.on('group-call-started', handleGcStarted);
+    socket.on('group-call-member', handleGcMember);
+    socket.on('group-call-signal', handleGcSignal);
+    socket.on('group-call-peer-state', handleGcPeerState);
+    socket.on('group-call-left', handleGcLeft);
+    socket.on('group-call-ended', handleGcEnded);
+
+    // ==========================================
     // WebRTC Socket Signaling listeners
     // ==========================================
     socket.on('call-made', async ({ from, offer, mediaType }) => {
       console.log(`Received call offer from ${from} (${mediaType})`);
       if (callStateRef.current !== 'idle') {
         console.log(`Busy: Auto-declining incoming call from ${from} since active callState is ${callStateRef.current}`);
+        socket.emit('hang-up', { to: from });
+        return;
+      }
+      if (gcStateRef.current !== 'idle') {
+        console.log(`Busy in group call: Auto-declining incoming DM call from ${from}`);
         socket.emit('hang-up', { to: from });
         return;
       }
@@ -1128,6 +1549,20 @@ export default function App() {
       socket.off('messages-delivered');
       socket.off('messages-read');
       socket.off('messages-deleted');
+      socket.off('receive-group-message', handleIncomingGroupMessage);
+      socket.off('group-added', handleGroupAdded);
+      socket.off('group-sync', handleGroupSync);
+      socket.off('group-updated', handleGroupUpdated);
+      socket.off('group-deleted', handleGroupDeleted);
+      socket.off('group-user-typing', handleGroupTyping);
+      socket.off('group-call-started', handleGcStarted);
+      socket.off('group-call-member', handleGcMember);
+      socket.off('group-call-signal', handleGcSignal);
+      socket.off('group-call-peer-state', handleGcPeerState);
+      socket.off('group-call-left', handleGcLeft);
+      socket.off('group-call-ended', handleGcEnded);
+      socket.off('group-messages-deleted', handleGroupMessagesDeleted);
+      Object.values(groupTypingTimersRef.current || {}).forEach(t => window.clearTimeout(t));
       socket.off('call-made');
       socket.off('call-ringing');
       socket.off('answer-made');
@@ -1201,6 +1636,670 @@ export default function App() {
   }, [activeContact, currentUser]);
 
   // ==========================================
+  // E2EE Group Chat Engine (Sender-Key model)
+  // ==========================================
+
+  // Resolve a user's public profile (keys + display info) with caching
+  const getProfileCached = async (username) => {
+    const lower = String(username || '').toLowerCase();
+    if (!lower) throw new Error('Invalid username');
+    if (userProfilesRef.current[lower]) return userProfilesRef.current[lower];
+
+    const fromContacts = contactsRef.current.find(c => c.username.toLowerCase() === lower);
+    if (fromContacts && fromContacts.publicIdentityKey && fromContacts.publicSigningKey) {
+      const profile = {
+        username: fromContacts.username,
+        publicIdentityKey: fromContacts.publicIdentityKey,
+        publicSigningKey: fromContacts.publicSigningKey,
+        displayName: fromContacts.displayName || null,
+        avatarIcon: fromContacts.avatarIcon || null
+      };
+      userProfilesRef.current[lower] = profile;
+      return profile;
+    }
+
+    const data = await searchUser(lower, currentUser.token);
+    const profile = {
+      username: data.username || username,
+      publicIdentityKey: data.publicIdentityKey,
+      publicSigningKey: data.publicSigningKey,
+      displayName: data.displayName || null,
+      avatarIcon: data.avatarIcon || null
+    };
+    userProfilesRef.current[lower] = profile;
+    return profile;
+  };
+
+  // Derive (and cache) the pairwise ECDH secret shared with another member
+  const getPairwiseSecretFor = async (username) => {
+    const lower = String(username).toLowerCase();
+    if (sharedSecrets.current[lower]) return sharedSecrets.current[lower];
+    const profile = await getProfileCached(username);
+    const secret = await deriveSharedSecret(currentUser.keys.privateIdentityKey, profile.publicIdentityKey);
+    sharedSecrets.current[profile.username.toLowerCase()] = secret;
+    return secret;
+  };
+
+  // Fetch, unseal and cache the group key for a specific key version
+  const fetchGroupKey = async (groupId, kv) => {
+    const cacheKey = `${groupId}:${kv}`;
+    if (groupKeysRef.current[cacheKey]) return groupKeysRef.current[cacheKey];
+    if (pendingGroupKeysRef.current[cacheKey]) return pendingGroupKeysRef.current[cacheKey];
+
+    const promise = (async () => {
+      const envelope = await emitGetGroupKey(groupId, kv);
+      if (!envelope) throw new Error('Group key envelope unavailable');
+      const pairwiseSecret = await getPairwiseSecretFor(envelope.fromUser);
+      const rawMaterial = await openGroupKeyEnvelope(envelope, pairwiseSecret);
+      const cryptoKey = await importGroupKey(rawMaterial);
+      groupKeysRef.current[cacheKey] = cryptoKey;
+      return cryptoKey;
+    })();
+
+    pendingGroupKeysRef.current[cacheKey] = promise;
+    try {
+      return await promise;
+    } finally {
+      delete pendingGroupKeysRef.current[cacheKey];
+    }
+  };
+
+  const rememberGroupKey = async (groupId, kv, rawMaterial) => {
+    const cryptoKey = await importGroupKey(rawMaterial);
+    groupKeysRef.current[`${groupId}:${kv}`] = cryptoKey;
+    return cryptoKey;
+  };
+
+  // Encrypt current group identity metadata under a given key
+  const encryptGroupMeta = async (name, avatarIcon, groupKey) => {
+    const nameEnc = await encryptGroupPayload({ n: name }, groupKey);
+    let avatarEnc = null;
+    if (avatarIcon) {
+      avatarEnc = await encryptGroupPayload({ a: avatarIcon }, groupKey);
+    }
+    return { nameEnc, avatarEnc };
+  };
+
+  // Decrypt group meta payloads coming from the server
+  const decryptGroupName = async (metaPayload) => {
+    const key = await fetchGroupKey(metaPayload.id, metaPayload.nameKv);
+    const payload = await decryptGroupPayload(metaPayload.nameCiphertext, key, metaPayload.nameIv);
+    return payload.n || '';
+  };
+
+  const decryptGroupAvatar = async (metaPayload) => {
+    if (!metaPayload.avatarCiphertext || !metaPayload.avatarIv) return null;
+    const key = await fetchGroupKey(metaPayload.id, metaPayload.avatarKv || metaPayload.nameKv);
+    const payload = await decryptGroupPayload(metaPayload.avatarCiphertext, key, metaPayload.avatarIv);
+    return payload.a || null;
+  };
+
+  // Hydrate member profiles for display names/avatars (cached across groups)
+  const hydrateGroupMembers = async (members) => {
+    const hydrated = [];
+    for (const m of members) {
+      try {
+        const lower = m.username.toLowerCase();
+        let profile = userProfilesRef.current[lower];
+        if (!profile) {
+          profile = await getProfileCached(m.username).catch(() => null);
+        }
+        hydrated.push({ ...m, profile: profile ? { displayName: profile.displayName, avatarIcon: profile.avatarIcon } : null });
+      } catch (e) {
+        hydrated.push({ ...m, profile: null });
+      }
+    }
+    return hydrated;
+  };
+
+  // Build a server group payload into local state shape (decrypts name & avatar)
+  const buildLocalGroup = async (payload) => {
+    let name = '';
+    let avatarIcon = null;
+    try {
+      name = await decryptGroupName(payload);
+    } catch (e) {
+      console.error('Failed to decrypt group name:', e);
+      name = 'Encrypted Group';
+    }
+    try {
+      avatarIcon = await decryptGroupAvatar(payload);
+    } catch (e) {
+      console.error('Failed to decrypt group avatar:', e);
+    }
+    const members = await hydrateGroupMembers(payload.members || []);
+    return {
+      id: payload.id,
+      name,
+      avatarIcon,
+      myRole: payload.myRole,
+      kv: payload.kv,
+      joinedKv: payload.joinedKv,
+      createdBy: payload.createdBy,
+      members,
+      messages: [],
+      unreadCount: 0,
+      lastReadId: payload.lastReadId || 0,
+      typingUsers: [],
+      lastMessage: null
+    };
+  };
+
+  // Patch one group in state; keeps the open chat view in sync
+  const patchGroup = (groupId, updater) => {
+    setGroups(prev => prev.map(g => (g.id === groupId ? updater(g) : g)));
+    setActiveGroup(prev => {
+      if (prev && prev.id === groupId) {
+        return updater(prev);
+      }
+      return prev;
+    });
+  };
+
+  const appendGroupMessage = (groupId, msg) => {
+    patchGroup(groupId, g => {
+      if (g.messages.some(m => String(m.id) === String(msg.id))) return { ...g, lastMessage: msg };
+      const isActiveOpen = activeGroupRef.current?.id === groupId;
+      const isMine = String(msg.sender).toLowerCase() === currentUser.username.toLowerCase();
+      const nextUnread = (!isActiveOpen && !isMine && msg.mediaType !== 'system' && msg.id > (g.lastReadId || 0))
+        ? (g.unreadCount || 0) + 1
+        : g.unreadCount;
+      return { ...g, messages: [...g.messages, msg], unreadCount: nextUnread, lastMessage: msg };
+    });
+  };
+
+  const computeGroupUnread = (group) => {
+    const meLower = currentUser.username.toLowerCase();
+    return (group.messages || []).filter(m =>
+      String(m.sender).toLowerCase() !== meLower &&
+      m.mediaType !== 'system' &&
+      m.id > (group.lastReadId || 0)
+    ).length;
+  };
+
+  const loadGroupHistory = async (groupState) => {
+    try {
+      const res = await emitGetGroupMessages(groupState.id);
+      const decrypted = [];
+      for (const enc of res.messages) {
+        const processed = await processGroupPayload(enc).catch(() => null);
+        if (processed) decrypted.push(processed);
+      }
+      patchGroup(groupState.id, g => ({
+        ...g,
+        messages: decrypted,
+        unreadCount: (() => {
+          const meLower = currentUser.username.toLowerCase();
+          return decrypted.filter(m =>
+            String(m.sender).toLowerCase() !== meLower &&
+            m.mediaType !== 'system' &&
+            m.id > (g.lastReadId || 0)
+          ).length;
+        })()
+      }));
+      warmupMediaCache(decrypted);
+      return decrypted;
+    } catch (err) {
+      console.error('Failed to load group history:', groupState.id, err);
+      return [];
+    }
+  };
+
+  // Verify + decrypt a server-side group message payload into a local message
+  const processGroupPayload = async (encMsg) => {
+    const senderProfile = await getProfileCached(encMsg.sender);
+    const signatureValid = await verifyDataSignature(encMsg.ciphertext, encMsg.signature, senderProfile.publicSigningKey);
+    if (!signatureValid) {
+      return {
+        id: encMsg.id,
+        groupId: encMsg.groupId,
+        sender: encMsg.sender,
+        timestamp: encMsg.timestamp,
+        text: '⚠️ ERROR: Message failed cryptographic integrity verification.',
+        mediaType: 'text',
+        status: 0
+      };
+    }
+
+    const key = await fetchGroupKey(encMsg.groupId, encMsg.kv);
+    const payload = await decryptGroupPayload(encMsg.ciphertext, key, encMsg.iv);
+
+    if (payload.type === 'system') {
+      return {
+        id: encMsg.id,
+        groupId: encMsg.groupId,
+        sender: encMsg.sender,
+        timestamp: encMsg.timestamp,
+        text: payload.text || '',
+        mediaType: 'system',
+        status: 0
+      };
+    }
+
+    return {
+      id: encMsg.id,
+      groupId: encMsg.groupId,
+      sender: encMsg.sender,
+      timestamp: encMsg.timestamp,
+      text: payload.text || '',
+      mediaType: payload.type !== 'text' ? payload.type : null,
+      fileMetadata: payload.fileMetadata || null,
+      status: 0,
+      replyTo: payload.replyTo || null,
+      forwarded: payload.forwarded || null
+    };
+  };
+
+  // Load all groups + their recent history from the server
+  const loadGroups = async () => {
+    try {
+      const serverGroups = await emitGetGroups();
+      const locals = [];
+      for (const payload of serverGroups) {
+        const local = await buildLocalGroup(payload);
+        locals.push(local);
+      }
+      setGroups(prev => {
+        const byId = new Map(prev.map(g => [g.id, g]));
+        const merged = locals.map(local => {
+          const existing = byId.get(local.id);
+          if (existing) {
+            return { ...local, messages: existing.messages, unreadCount: existing.unreadCount, lastReadId: Math.max(existing.lastReadId || 0, local.lastReadId || 0), typingUsers: existing.typingUsers };
+          }
+          return local;
+        });
+        return merged;
+      });
+
+      // Fetch recent history per group (parallel-safe sequential to keep CPU calm)
+      for (const local of locals) {
+        await loadGroupHistory(local);
+      }
+      return locals;
+    } catch (err) {
+      console.error('Failed to load groups:', err);
+      return [];
+    }
+  };
+
+  // Send an encrypted message into the active group (text, media, voice notes)
+  const handleSendGroupMessage = async (msgContent) => {
+    const group = activeGroupRef.current;
+    if (!group || !currentUser) return;
+
+    try {
+      const groupKey = await fetchGroupKey(group.id, group.kv);
+      const payload = { ...msgContent };
+      delete payload.isNew;
+      const { ciphertext, iv } = await encryptGroupPayload(payload, groupKey);
+      const signature = await signData(ciphertext, currentUser.keys.privateSigningKey);
+      const ack = await emitSendGroupMessage(group.id, ciphertext, iv, signature);
+
+      const localMsg = {
+        id: ack.messageId,
+        groupId: group.id,
+        sender: currentUser.username,
+        timestamp: ack.timestamp,
+        text: msgContent.text || '',
+        mediaType: msgContent.type !== 'text' ? msgContent.type : null,
+        fileMetadata: msgContent.fileMetadata || null,
+        status: 0,
+        replyTo: msgContent.replyTo || null,
+        forwarded: msgContent.forwarded || null,
+        isNew: true
+      };
+
+      appendGroupMessage(group.id, localMsg);
+    } catch (err) {
+      console.error('Group E2EE send failed:', err);
+      showToast(`Failed to send message: ${err.message || 'Unknown error'}`, 'error');
+    }
+  };
+
+  // Post an encrypted system event into the group using an EXACT key version
+  // (avoids races where the local group state has not refreshed after a rotation)
+  const sendSystemMessageWith = async (groupId, kvVersion, cryptoKey, text) => {
+    try {
+      const { ciphertext, iv } = await encryptGroupPayload({ type: 'system', text }, cryptoKey);
+      const signature = await signData(ciphertext, currentUser.keys.privateSigningKey);
+      await emitSendGroupMessage(groupId, ciphertext, iv, signature);
+    } catch (err) {
+      console.warn('Failed to post system message:', err);
+    }
+  };
+
+  const sendGroupSystemMessage = async (groupId, text) => {
+    try {
+      const group = groupsRef.current.find(g => g.id === groupId);
+      if (!group) return;
+      const groupKey = await fetchGroupKey(groupId, group.kv);
+      await sendSystemMessageWith(groupId, group.kv, groupKey, text);
+    } catch (err) {
+      console.warn('Failed to post system message:', err);
+    }
+  };
+
+  // Rotate the group key and seal fresh envelopes for a given roster
+  const rotateGroupKeysFor = async (memberUsernames, { name, avatarIcon } = {}) => {
+    const rawMaterial = generateGroupKeyMaterial();
+    const newGroupKey = await importGroupKey(rawMaterial);
+
+    const envelopes = {};
+    for (const username of memberUsernames) {
+      const pairwiseSecret = await getPairwiseSecretFor(username);
+      envelopes[String(username).toLowerCase()] = await sealGroupKeyEnvelope(rawMaterial, pairwiseSecret);
+    }
+
+    let nameEnc = null;
+    let avatarEnc = null;
+    if (name !== undefined) {
+      const enc = await encryptGroupMeta(name, avatarIcon, newGroupKey);
+      nameEnc = enc.nameEnc;
+      avatarEnc = enc.avatarEnc;
+    }
+
+    return { rawMaterial, newGroupKey, envelopes, nameEnc, avatarEnc };
+  };
+
+  // Create a brand-new secure group end-to-end
+  const handleCreateGroup = async ({ name, avatarIcon, members }) => {
+    try {
+      if (!Array.isArray(members) || members.length === 0) {
+        throw new Error('Select at least one member');
+      }
+
+      // Ensure every invited member's public key material is available before sealing envelopes
+      const profiles = [];
+      for (const member of members) {
+        const known = contactsRef.current.find(c => c.username.toLowerCase() === String(member.username).toLowerCase());
+        if (known && known.publicIdentityKey && known.publicSigningKey) {
+          const prof = {
+            username: known.username,
+            publicIdentityKey: known.publicIdentityKey,
+            publicSigningKey: known.publicSigningKey,
+            displayName: known.displayName || null,
+            avatarIcon: known.avatarIcon || null
+          };
+          userProfilesRef.current[known.username.toLowerCase()] = prof;
+          profiles.push(prof);
+        } else {
+          profiles.push(await getProfileCached(member.username));
+        }
+      }
+
+      const rawMaterial = generateGroupKeyMaterial();
+
+      // Seal individual envelopes for every initial member including myself
+      const envelopes = {};
+      const myLower = currentUser.username.toLowerCase();
+      const selfSecret = await deriveSharedSecret(currentUser.keys.privateIdentityKey, currentUser.keys.publicIdentityKey);
+      sharedSecrets.current[myLower] = selfSecret;
+      envelopes[myLower] = await sealGroupKeyEnvelope(rawMaterial, selfSecret);
+
+      for (const profile of profiles) {
+        const secret = await deriveSharedSecret(currentUser.keys.privateIdentityKey, profile.publicIdentityKey);
+        sharedSecrets.current[profile.username.toLowerCase()] = secret;
+        envelopes[profile.username.toLowerCase()] = await sealGroupKeyEnvelope(rawMaterial, secret);
+      }
+
+      const groupKeyV1 = await importGroupKey(rawMaterial);
+      const { nameEnc, avatarEnc } = await encryptGroupMeta(name, avatarIcon, groupKeyV1);
+
+      const ack = await emitCreateGroup({
+        nameCiphertext: nameEnc.ciphertext,
+        nameIv: nameEnc.iv,
+        avatarCiphertext: avatarEnc ? avatarEnc.ciphertext : null,
+        avatarIv: avatarEnc ? avatarEnc.iv : null,
+        members: profiles.map(p => ({ username: p.username })),
+        envelopes
+      });
+
+      if (!ack || !ack.success) throw new Error(ack?.error || 'Server rejected group creation');
+
+      const gid = ack.groupId;
+      groupKeysRef.current[`${gid}:1`] = groupKeyV1;
+
+      const local = await buildLocalGroup(ack.group);
+      setGroups(prev => [...prev, local]);
+      setShowCreateGroup(false);
+      soundEngine.playMessageSent();
+      showToast(`"${local.name}" created with ${local.members.length} members.`, 'success', 'Group Created');
+
+      await sendSystemMessageWith(gid, 1, groupKeyV1, `${currentUser.displayName || currentUser.username} created the group`);
+      handleSelectGroup(groupsRef.current.find(g => g.id === gid) || local);
+    } catch (err) {
+      console.error('Group creation failed:', err);
+      throw err;
+    }
+  };
+
+  // Open a group conversation view
+  const handleSelectGroup = async (groupOrVm) => {
+    if (!groupOrVm) return;
+    const gid = groupOrVm.id ?? groupOrVm.groupId;
+
+    if (window.history.state !== 'chat') {
+      window.history.pushState('chat', '');
+    }
+    setShowSettings(false);
+    setShowRecents(false);
+    lastChatKindRef.current = 'group';
+
+    // Close any open DM chat — only one conversation view can be active
+    if (activeContactRef.current) {
+      setActiveContact(null);
+      activeContactRef.current = null;
+    }
+    setGroupInfoGroupId(null);
+
+    const source = groupsRef.current.find(g => g.id === gid) || groupOrVm;
+    const vm = {
+      ...source,
+      isGroup: true,
+      groupId: source.id,
+      username: `group-${source.id}`,
+      customName: null,
+      displayName: source.name,
+      status: 'online',
+      isSaved: true,
+      isVerified: false,
+      unreadCount: 0,
+      groupTypingNames: (source.typingUsers || [])
+        .filter(u => u.toLowerCase() !== currentUser.username.toLowerCase())
+        .map(u => {
+          const m = (source.members || []).find(mm => mm.username.toLowerCase() === u.toLowerCase());
+          return m?.profile?.displayName || u;
+        })
+    };
+    lastActiveGroupVmRef.current = vm;
+    setActiveGroup(vm);
+
+    // Mark everything read locally + remotely
+    const lastId = source.messages.length > 0 ? source.messages[source.messages.length - 1].id : 0;
+    patchGroup(gid, g => ({ ...g, unreadCount: 0, lastReadId: Math.max(g.lastReadId || 0, lastId) }));
+    emitMarkGroupRead(gid, Math.max(source.lastReadId || 0, lastId));
+  };
+
+  // Leave a group (with full key rotation for remaining members)
+  const handleLeaveGroupById = async (groupId) => {
+    const group = groupsRef.current.find(g => g.id === groupId);
+    if (!group) return;
+
+    try {
+      const meLower = currentUser.username.toLowerCase();
+      const remaining = (group.members || [])
+        .filter(m => m.username.toLowerCase() !== meLower)
+        .map(m => m.username);
+
+      let payloadEnvelopes = {};
+      let meta = {};
+      if (remaining.length > 0) {
+        const rotation = await rotateGroupKeysFor(remaining, { name: group.name, avatarIcon: group.avatarIcon });
+        payloadEnvelopes = rotation.envelopes;
+        meta = {
+          nameCiphertext: rotation.nameEnc.ciphertext,
+          nameIv: rotation.nameEnc.iv,
+          avatarCiphertext: rotation.avatarEnc ? rotation.avatarEnc.ciphertext : null,
+          avatarIv: rotation.avatarEnc ? rotation.avatarEnc.iv : null
+        };
+      }
+
+      await sendGroupSystemMessage(groupId, `${currentUser.displayName || currentUser.username} left`);
+      const ack = await emitLeaveGroup({
+        groupId,
+        envelopes: payloadEnvelopes,
+        ...meta
+      });
+      if (!ack || !ack.success) throw new Error(ack?.error || 'Failed to leave group');
+
+      Object.keys(groupKeysRef.current).forEach(k => {
+        if (k.startsWith(`${groupId}:`)) delete groupKeysRef.current[k];
+      });
+      setGroups(prev => prev.filter(g => g.id !== groupId));
+      if (activeGroupRef.current?.id === groupId) {
+        handleBackToMenu();
+      }
+      showToast(`You left "${group.name}".`, 'success', 'Left Group');
+    } catch (err) {
+      console.error('Failed to leave group:', err);
+      showToast(err.message || 'Failed to leave group', 'error');
+    }
+  };
+
+  // Delete an owned group permanently
+  const handleDeleteGroupById = async (groupId) => {
+    const group = groupsRef.current.find(g => g.id === groupId);
+    if (!group) return;
+    try {
+      const ack = await emitDeleteGroup(groupId);
+      if (!ack || !ack.success) throw new Error(ack?.error || 'Failed to delete group');
+      Object.keys(groupKeysRef.current).forEach(k => {
+        if (k.startsWith(`${groupId}:`)) delete groupKeysRef.current[k];
+      });
+      setGroups(prev => prev.filter(g => g.id !== groupId));
+      setGroupInfoGroupId(null);
+      if (activeGroupRef.current?.id === groupId) {
+        handleBackToMenu();
+      }
+      showToast(`"${group.name}" was deleted permanently.`, 'success', 'Group Deleted');
+    } catch (err) {
+      console.error('Failed to delete group:', err);
+      showToast(err.message || 'Failed to delete group', 'error');
+    }
+  };
+
+  // Add members to a group (rotates the encryption key so history stays sealed)
+  const handleAddMembersToGroup = async (groupId, users) => {
+    const group = groupsRef.current.find(g => g.id === groupId);
+    if (!group) throw new Error('Group not found');
+
+    const existing = new Set((group.members || []).map(m => m.username.toLowerCase()));
+    const additions = users.filter(u => !existing.has(String(u.username).toLowerCase()));
+    if (additions.length === 0) throw new Error('Selected users are already members');
+
+    const futureRoster = [
+      ...(group.members || []).map(m => m.username),
+      ...additions.map(u => u.username)
+    ];
+
+    // Ensure newcomer profiles (incl. public keys) are cached before sealing
+    for (const user of additions) {
+      if (!(contactsRef.current.find(c => c.username.toLowerCase() === user.username.toLowerCase()))) {
+        await getProfileCached(user.username).catch(() => null);
+      }
+    }
+
+    const rotation = await rotateGroupKeysFor(futureRoster, { name: group.name, avatarIcon: group.avatarIcon });
+
+    const ack = await emitAddGroupMembers({
+      groupId,
+      members: additions.map(u => ({ username: u.username })),
+      envelopes: rotation.envelopes,
+      nameCiphertext: rotation.nameEnc.ciphertext,
+      nameIv: rotation.nameEnc.iv,
+      avatarCiphertext: rotation.avatarEnc ? rotation.avatarEnc.ciphertext : null,
+      avatarIv: rotation.avatarEnc ? rotation.avatarEnc.iv : null
+    });
+    if (!ack || !ack.success) throw new Error(ack?.error || 'Failed to add members');
+
+    const newKey = await rememberGroupKey(groupId, ack.kv, rotation.rawMaterial);
+    patchGroup(groupId, g => ({
+      ...g,
+      kv: ack.kv,
+      members: [
+        ...(g.members || []),
+        ...additions.map(u => ({ username: u.username, role: 'member', profile: { displayName: u.displayName, avatarIcon: u.avatarIcon } }))
+      ]
+    }));
+
+    const names = additions.map(u => u.displayName || u.username).join(', ');
+    await sendSystemMessageWith(groupId, ack.kv, newKey, `${currentUser.displayName || currentUser.username} added ${names}`);
+  };
+
+  // Remove a member from a group (owner/admin) with key rotation
+  const handleRemoveMemberFromGroup = async (groupId, targetUsername) => {
+    const group = groupsRef.current.find(g => g.id === groupId);
+    if (!group) throw new Error('Group not found');
+
+    const remaining = (group.members || [])
+      .filter(m => m.username.toLowerCase() !== targetUsername.toLowerCase())
+      .map(m => m.username);
+
+    const rotation = await rotateGroupKeysFor(remaining, { name: group.name, avatarIcon: group.avatarIcon });
+    const ack = await emitRemoveGroupMember({
+      groupId,
+      targetUsername,
+      envelopes: rotation.envelopes,
+      nameCiphertext: rotation.nameEnc.ciphertext,
+      nameIv: rotation.nameEnc.iv,
+      avatarCiphertext: rotation.avatarEnc ? rotation.avatarEnc.ciphertext : null,
+      avatarIv: rotation.avatarEnc ? rotation.avatarEnc.iv : null
+    });
+    if (!ack || !ack.success) throw new Error(ack?.error || 'Failed to remove member');
+
+    const newKey = await rememberGroupKey(groupId, ack.kv, rotation.rawMaterial);
+    patchGroup(groupId, g => ({
+      ...g,
+      kv: ack.kv,
+      members: (g.members || []).filter(m => m.username.toLowerCase() !== targetUsername.toLowerCase())
+    }));
+
+    await sendSystemMessageWith(groupId, ack.kv, newKey, `${targetUsername} was removed by ${currentUser.displayName || currentUser.username}`);
+  };
+
+  // Rename / restyle a group (encrypted under the current group key)
+  const handleUpdateGroupInfo = async (groupId, { name, avatarIcon }) => {
+    const group = groupsRef.current.find(g => g.id === groupId);
+    if (!group) throw new Error('Group not found');
+
+    const groupKey = await fetchGroupKey(groupId, group.kv);
+    const { nameEnc, avatarEnc } = await encryptGroupMeta(name, avatarIcon, groupKey);
+
+    const ack = await emitUpdateGroupInfo({
+      groupId,
+      nameCiphertext: nameEnc.ciphertext,
+      nameIv: nameEnc.iv,
+      avatarCiphertext: avatarEnc ? avatarEnc.ciphertext : null,
+      avatarIv: avatarEnc ? avatarEnc.iv : null
+    });
+    if (!ack || !ack.success) throw new Error(ack?.error || 'Failed to update group');
+
+    patchGroup(groupId, g => ({ ...g, name, avatarIcon }));
+    await sendGroupSystemMessage(groupId, `${currentUser.displayName || currentUser.username} renamed the group to "${name}"`);
+  };
+
+  const handleSetMemberRole = async (groupId, targetUsername, role) => {
+    const ack = await emitSetMemberRole(groupId, targetUsername, role);
+    if (!ack || !ack.success) throw new Error(ack?.error || 'Failed to change role');
+    patchGroup(groupId, g => ({
+      ...g,
+      members: (g.members || []).map(m => (
+        m.username.toLowerCase() === targetUsername.toLowerCase() ? { ...m, role } : m
+      ))
+    }));
+  };
+
+  // ==========================================
   // E2EE Sending Messaging Flow
   // ==========================================
   const handleSendMessage = async (msgContent) => {
@@ -1255,10 +2354,45 @@ export default function App() {
     setForwardingMessage(message);
   };
 
-  const handleConfirmForward = async (targetUsername) => {
+  const handleConfirmForward = async (target) => {
     const message = forwardingMessage;
-    if (!message || !currentUser || !targetUsername) return;
+    if (!message || !currentUser || !target) return;
 
+    // Forward into an E2EE group chat
+    if (target.type === 'group') {
+      const groupId = Number(target.id);
+      const group = groupsRef.current.find(g => g.id === groupId);
+      if (!group) {
+        showToast('Group not found.', 'error', 'Forward Failed');
+        return;
+      }
+      try {
+        const groupKey = await fetchGroupKey(groupId, group.kv);
+        const hasMedia = Boolean(message.fileMetadata && message.mediaType && message.mediaType !== 'call');
+        const msgContent = {
+          type: hasMedia ? 'file' : 'text',
+          text: message.text || '',
+          forwarded: true
+        };
+        if (hasMedia) {
+          msgContent.fileMetadata = message.fileMetadata;
+        }
+
+        const { ciphertext, iv } = await encryptGroupPayload(msgContent, groupKey);
+        const signature = await signData(ciphertext, currentUser.keys.privateSigningKey);
+        await emitSendGroupMessage(groupId, ciphertext, iv, signature);
+
+        showToast(`Message forwarded to "${group.name}".`, 'success');
+      } catch (err) {
+        console.error('Group forwarding failed:', err);
+        showToast(`Failed to forward message: ${err.message || 'Unknown error'}`, 'error');
+      } finally {
+        setForwardingMessage(null);
+      }
+      return;
+    }
+
+    const targetUsername = typeof target === 'string' ? target : target.id;
     const contact = contactsRef.current.find(c => c.username.toLowerCase() === String(targetUsername).toLowerCase());
     if (!contact) {
       showToast('Contact not found.', 'error', 'Forward Failed');
@@ -1575,6 +2709,14 @@ export default function App() {
     }
     setShowSettings(false);
     setShowRecents(false);
+    lastChatKindRef.current = 'contact';
+
+    // Close any open group chat — only one conversation view can be active
+    if (activeGroupRef.current) {
+      setActiveGroup(null);
+      activeGroupRef.current = null;
+      lastActiveGroupVmRef.current = null;
+    }
 
     // 1. Instantly display active contact screen with cached messages to avoid blank page delays
     const cachedContact = contacts.find(c => c.username.toLowerCase() === contact.username.toLowerCase());
@@ -1648,6 +2790,21 @@ export default function App() {
   const deleteMessagesLocal = useCallback((messageIds) => {
     if (!messageIds || messageIds.length === 0) return;
     const ids = new Set(messageIds.map(id => String(id)));
+
+    // Group chats delete through their own pipeline (own = for everyone, received = for me)
+    const activeGid = activeGroupRef.current?.id;
+    if (activeGid != null) {
+      const phase = (mutator) => {
+        patchGroup(activeGid, (g) => ({ ...g, messages: mutator(g.messages) }));
+      };
+
+      phase((msgs) => msgs.map(m => ids.has(String(m.id)) ? { ...m, isDeleting: true, isCollapsing: false } : m));
+      emitDeleteGroupMessages(activeGid, messageIds).catch(err => console.warn('Failed to delete group messages remotely:', err));
+
+      window.setTimeout(() => phase((msgs) => msgs.map(m => ids.has(String(m.id)) ? { ...m, isCollapsing: true } : m)), 500);
+      window.setTimeout(() => phase((msgs) => msgs.filter(m => !ids.has(String(m.id)))), 1150);
+      return;
+    }
 
     // Phase 1: Mark all selected messages as deleting locally (disappears for current user)
     setContacts(prev => prev.map(c => ({
@@ -1741,6 +2898,53 @@ export default function App() {
 
   const isNavigatingBackRef = useRef(false);
 
+  // Shared navigation: Settings & Recents preserve the open chat (DM or group) for context-aware back
+  const openSettingsView = useCallback(() => {
+    if (window.history.state !== 'settings') {
+      window.history.pushState('settings', '');
+    }
+    if (activeContactRef.current) {
+      previousActiveContactRef.current = activeContactRef.current;
+    }
+    if (activeGroupRef.current) {
+      previousActiveGroupRef.current = activeGroupRef.current;
+    }
+    setShowRecents(false);
+    setShowSettings(true);
+    if (activeContactRef.current) {
+      setTimeout(() => setActiveContact(null), 300);
+    }
+    if (activeGroupRef.current) {
+      setTimeout(() => {
+        setActiveGroup(null);
+        activeGroupRef.current = null;
+      }, 300);
+    }
+  }, []);
+
+  const openRecentsView = useCallback(() => {
+    if (window.history.state !== 'recents') {
+      window.history.pushState('recents', '');
+    }
+    if (activeContactRef.current) {
+      previousActiveContactRef.current = activeContactRef.current;
+    }
+    if (activeGroupRef.current) {
+      previousActiveGroupRef.current = activeGroupRef.current;
+    }
+    setShowSettings(false);
+    setShowRecents(true);
+    if (activeContactRef.current) {
+      setTimeout(() => setActiveContact(null), 300);
+    }
+    if (activeGroupRef.current) {
+      setTimeout(() => {
+        setActiveGroup(null);
+        activeGroupRef.current = null;
+      }, 300);
+    }
+  }, []);
+
   const handleBackToMenu = (isFromPopState = false) => {
     if (isNavigatingBackRef.current) return;
     isNavigatingBackRef.current = true;
@@ -1776,6 +2980,28 @@ export default function App() {
       return;
     }
 
+    // Same context-aware return for group chats opened before Settings
+    if (previousActiveGroupRef.current && showSettingsRef.current) {
+      const prevGroup = previousActiveGroupRef.current;
+      previousActiveGroupRef.current = null;
+      if (!isFromPopState && window.history.state === 'settings') {
+        window.__isProgrammaticPop = true;
+        window.history.back();
+        setTimeout(() => {
+          window.__isProgrammaticPop = false;
+        }, 100);
+      }
+      setNavigatingBackFrom('settings');
+      setIsNavigatingBack(true);
+      setTimeout(() => {
+        setIsNavigatingBack(false);
+        setNavigatingBackFrom(null);
+        isNavigatingBackRef.current = false;
+        handleSelectGroup(prevGroup);
+      }, 220);
+      return;
+    }
+
     if (previousActiveContactRef.current && showRecentsRef.current) {
       const prevContact = previousActiveContactRef.current;
       previousActiveContactRef.current = null;
@@ -1784,15 +3010,26 @@ export default function App() {
       return;
     }
 
-    const source = showSettings ? 'settings' : activeContact ? 'chat' : showRecents ? 'recents' : null;
+    if (previousActiveGroupRef.current && showRecentsRef.current) {
+      const prevGroup = previousActiveGroupRef.current;
+      previousActiveGroupRef.current = null;
+      isNavigatingBackRef.current = false;
+      handleSelectGroup(prevGroup);
+      return;
+    }
+
+    const source = showSettings ? 'settings' : activeContact || activeGroupRef.current ? 'chat' : showRecents ? 'recents' : null;
     if (activeContact) {
       lastActiveContactRef.current = activeContact;
     }
     setNavigatingBackFrom(source);
     setIsNavigatingBack(true);
     setActiveContact(null);
+    setActiveGroup(null);
+    activeGroupRef.current = null;
     setShowSettings(false);
     setShowRecents(false);
+    setGroupInfoGroupId(null);
     activeContactRef.current = null;
     showSettingsRef.current = false;
     showRecentsRef.current = false;
@@ -2134,6 +3371,11 @@ export default function App() {
 
     if (callStateRef.current !== 'idle') {
       showToast('You are already in a call. Please hang up or decline the active call first.', 'warning', 'Active Call');
+      return;
+    }
+
+    if (gcStateRef.current !== 'idle') {
+      showToast('You are already in a group call.', 'warning', 'Active Call');
       return;
     }
 
@@ -2895,6 +4137,432 @@ export default function App() {
     setCameraFacingMode('user');
   };
 
+  // ==========================================
+  // Group Call Orchestration (mesh, joiner-offers protocol)
+  // ==========================================
+
+  // Broadcast my media state to everyone in the call
+  const gcEmitMyState = () => {
+    if (!gcGroupIdRef.current) return;
+    emitGroupCallState(gcGroupIdRef.current, {
+      muted: isMuted,
+      cameraOff: isCameraOff,
+      screenSharing: isScreenSharing
+    });
+  };
+
+  const gcFlushIce = async (peerLower) => {
+    const pc = gcPcs.current[peerLower];
+    const queue = gcIceQueues.current[peerLower] || [];
+    if (pc && pc.remoteDescription) {
+      while (queue.length > 0) {
+        const cand = queue.shift();
+        try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
+      }
+    }
+  };
+
+  const gcCreatePC = (peerLower) => {
+    if (gcPcs.current[peerLower]) return gcPcs.current[peerLower];
+
+    const pc = new RTCPeerConnection(pcConfig);
+    gcPcs.current[peerLower] = pc;
+    gcIceQueues.current[peerLower] = [];
+
+    localStreamRef.current?.getTracks().forEach((track) => {
+      pc.addTrack(track, localStreamRef.current);
+    });
+
+    pc.ontrack = (event) => {
+      const stream = event.streams?.[0] || new MediaStream([event.track]);
+      gcRemoteStreamsRef.current = { ...gcRemoteStreamsRef.current, [peerLower]: stream };
+      setGcRemoteStreams(gcRemoteStreamsRef.current);
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        emitGroupCallSignal({ to: peerLower, groupId: gcGroupIdRef.current, kind: 'ice', data: event.candidate });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed'].includes(pc.connectionState)) {
+        gcRemovePeer(peerLower);
+      }
+    };
+
+    return pc;
+  };
+
+  const gcRemovePeer = (peerLower) => {
+    const pc = gcPcs.current[peerLower];
+    if (pc) {
+      try { pc.close(); } catch (e) {}
+      delete gcPcs.current[peerLower];
+    }
+    delete gcIceQueues.current[peerLower];
+    if (gcRemoteStreamsRef.current[peerLower]) {
+      const nextStreams = { ...gcRemoteStreamsRef.current };
+      delete nextStreams[peerLower];
+      gcRemoteStreamsRef.current = nextStreams;
+      setGcRemoteStreams(nextStreams);
+    }
+    if (gcPeersRef.current[peerLower]) {
+      const nextPeers = { ...gcPeersRef.current };
+      delete nextPeers[peerLower];
+      gcPeersRef.current = nextPeers;
+      setGcPeers(nextPeers);
+    }
+  };
+
+  // The newest joiner always offers to existing members (deterministic roles — no glare)
+  const gcOfferTo = async (peerLower) => {
+    try {
+      const pc = gcCreatePC(peerLower);
+      if (pc.signalingState !== 'stable') return;
+
+      const offer = await pc.createOffer();
+      offer.sdp = optimizeSDP(offer.sdp);
+      await pc.setLocalDescription(offer);
+
+      const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (videoSender && gcMediaTypeRef.current === 'video') {
+        optimizeSenderParameters(videoSender, false).catch(() => {});
+      }
+
+      emitGroupCallSignal({ to: peerLower, groupId: gcGroupIdRef.current, kind: 'offer', data: { sdp: offer.sdp } });
+    } catch (err) {
+      console.error('Failed to create group call offer:', err);
+    }
+  };
+
+  // Acquire mic/camera exactly like DM calls do (voice calls carry a dummy video track)
+  const gcAcquireMedia = async (mediaType) => {
+    let stream;
+    let effective = mediaType;
+    try {
+      if (mediaType === 'video') {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: getAudioConstraints(),
+            video: getVideoConstraints()
+          });
+          dummyTrackRef.current = null;
+        } catch (videoErr) {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: getAudioConstraints(), video: false });
+          const dummyTrack = createDummyVideoTrack();
+          if (dummyTrack) stream.addTrack(dummyTrack);
+          dummyTrackRef.current = dummyTrack;
+          effective = 'voice';
+          showToast('No camera found. Joined with voice only.', 'info', 'Voice Fallback');
+        }
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: getAudioConstraints(), video: false });
+        const dummyTrack = createDummyVideoTrack();
+        if (dummyTrack) stream.addTrack(dummyTrack);
+        dummyTrackRef.current = dummyTrack;
+      }
+    } catch (err) {
+      console.error('Group call media acquisition failed:', err);
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        showToast('Microphone permission denied.', 'error', 'Permission Required');
+      } else {
+        showToast('Could not access microphone for the group call.', 'error', 'Device Error');
+      }
+      throw err;
+    }
+    return { stream, effective };
+  };
+
+  const handleStartGroupCall = async (media) => {
+    const group = activeGroupRef.current;
+    if (!group || !currentUser) return;
+    if ((activeContactRef.current?.username || activeGroupRef.current) && callStateRef.current !== 'idle') {
+      showToast('You are already in a call.', 'warning', 'Active Call');
+      return;
+    }
+    if (gcStateRef.current !== 'idle') {
+      showToast('You are already in a group call.', 'warning', 'Active Call');
+      return;
+    }
+
+    let acquired;
+    try {
+      acquired = await gcAcquireMedia(media);
+    } catch (err) {
+      return;
+    }
+
+    setIsMuted(false);
+    setIsScreenSharing(false);
+    originalVideoTrackRef.current = null;
+    setLocalStream(acquired.stream);
+
+    const gid = group.id;
+    setGcGroupId(gid);
+    setGcMediaType(acquired.effective === 'voice' ? 'voice' : media);
+    gcIsInitiatorRef.current = true;
+    setGcPeers({});
+    gcPeersRef.current = {};
+    setGcElapsed(0);
+    setGcMinimized(false);
+    setGcState('calling');
+
+    try {
+      const res = await emitStartGroupCall(gid, gcMediaTypeRef.current);
+      if (res.error === 'call_ongoing') {
+        // A call already exists in this group — join it instead
+        gcIsInitiatorRef.current = false;
+        await gcJoinFlow(gid);
+      } else if (res.error) {
+        throw new Error(res.error);
+      }
+    } catch (err) {
+      console.error('Failed to start group call:', err);
+      gcCleanupAll(true);
+    }
+  };
+
+  const handleAcceptGroupCall = async () => {
+    const gid = gcGroupIdRef.current;
+    if (!gid) return;
+    try {
+      const acquired = await gcAcquireMedia(gcMediaTypeRef.current);
+      setLocalStream(acquired.stream);
+      setIsMuted(false);
+      setIsCameraOff(gcMediaTypeRef.current === 'voice' || acquired.effective === 'voice');
+      setIsScreenSharing(false);
+      originalVideoTrackRef.current = null;
+      setGcState('connected');
+      await gcJoinFlow(gid);
+    } catch (err) {
+      gcCleanupAll(false);
+    }
+  };
+
+  const gcJoinFlow = async (gid) => {
+    try {
+      const res = await emitJoinGroupCall(gid);
+      if (res.error) throw new Error(res.error);
+
+      setGcState('connected');
+
+      // Joiner offers to every pre-existing participant
+      const members = Array.isArray(res.members) ? res.members : [];
+      for (const m of members) {
+        await gcOfferTo(String(m).toLowerCase());
+      }
+    } catch (err) {
+      console.error('Failed to join group call:', err);
+      showToast(err.message || 'Failed to join the call.', 'error', 'Call Error');
+      gcCleanupAll(true);
+    }
+  };
+
+  const handleDeclineGroupCall = () => {
+    // Never joined server-side — just dismiss locally
+    gcCleanupAll(false);
+  };
+
+  const handleLeaveGroupCall = () => {
+    gcCleanupAll(true);
+  };
+
+  const gcCleanupAll = (notifyServer) => {
+    if (notifyServer && gcGroupIdRef.current !== null) {
+      emitLeaveGroupCall(gcGroupIdRef.current);
+    }
+    Object.values(gcPcs.current).forEach((pc) => {
+      try { pc.close(); } catch (e) {}
+    });
+    gcPcs.current = {};
+    gcIceQueues.current = {};
+    gcRemoteStreamsRef.current = {};
+    setGcRemoteStreams({});
+    gcPeersRef.current = {};
+    setGcPeers({});
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => { try { t.stop(); } catch (e) {} });
+      setLocalStream(null);
+    }
+    if (originalVideoTrackRef.current) {
+      try { originalVideoTrackRef.current.stop(); } catch (e) {}
+      originalVideoTrackRef.current = null;
+    }
+    if (dummyTrackRef.current) {
+      try { dummyTrackRef.current.stop(); } catch (e) {}
+      dummyTrackRef.current = null;
+    }
+    setGcGroupId(null);
+    gcIsInitiatorRef.current = false;
+    setGcMinimized(false);
+    setGcElapsed(0);
+    setGcState('idle');
+    soundEngine.stopOutgoingRingTone();
+    soundEngine.stopIncomingRingtone();
+  };
+
+  const handleGcToggleMute = () => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !next; });
+      emitGroupCallState(gcGroupIdRef.current, { muted: next, cameraOff: isCameraOff, screenSharing: isScreenSharing });
+      return next;
+    });
+  };
+
+  // Replace the outgoing video track on every peer connection
+  const gcReplaceVideoEverywhere = async (track) => {
+    for (const pc of Object.values(gcPcs.current)) {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) {
+        try { await sender.replaceTrack(track); } catch (e) {}
+      }
+    }
+  };
+
+  /**
+   * Stops screen sharing and restores the previous video source.
+   * Returns true when a live camera track was restored, false when the call
+   * fell back to the dummy (voice-only) video slot.
+   */
+  const gcStopScreenShare = async () => {
+    const stream = localStreamRef.current;
+
+    if (stream) {
+      stream.getVideoTracks().forEach((t) => {
+        try { t.stop(); } catch (e) {}
+        try { stream.removeTrack(t); } catch (e) {}
+      });
+    }
+
+    let restored = originalVideoTrackRef.current;
+    originalVideoTrackRef.current = null;
+
+    let cameraRestored = false;
+    if (restored && restored.readyState === 'live') {
+      cameraRestored = true;
+    } else {
+      if (restored) { try { restored.stop(); } catch (e) {} }
+      restored = createDummyVideoTrack();
+      dummyTrackRef.current = restored;
+    }
+
+    if (stream && restored) {
+      stream.addTrack(restored);
+    }
+    if (restored) {
+      await gcReplaceVideoEverywhere(restored);
+    }
+
+    setIsScreenSharing(false);
+    setIsCameraOff(!cameraRestored);
+    setGcMediaType(cameraRestored ? 'video' : 'voice');
+    if (stream) {
+      setLocalStream(new MediaStream(stream.getTracks()));
+    }
+    emitGroupCallState(gcGroupIdRef.current, { muted: isMuted, cameraOff: !cameraRestored, screenSharing: false });
+    return cameraRestored;
+  };
+
+  const handleGcToggleCamera = async () => {
+    if (isScreenSharing) {
+      // Freeing the single video slot: stopping the share restores the
+      // camera when one exists, otherwise falls back to voice-only view
+      await gcStopScreenShare();
+      return;
+    }
+
+    const stream = localStreamRef.current;
+    if (!stream) return;
+
+    if (!isCameraOff) {
+      // Camera OFF: release hardware, swap in the zero-cost dummy track
+      stream.getVideoTracks().forEach((t) => {
+        try { t.stop(); } catch (e) {}
+        try { stream.removeTrack(t); } catch (e) {}
+      });
+      const dummyTrack = createDummyVideoTrack();
+      if (dummyTrack) {
+        dummyTrackRef.current = dummyTrack;
+        stream.addTrack(dummyTrack);
+        await gcReplaceVideoEverywhere(dummyTrack);
+      } else {
+        await gcReplaceVideoEverywhere(null);
+      }
+      setIsCameraOff(true);
+      if (stream.getVideoTracks().length > 0) {
+        setLocalStream(new MediaStream(stream.getTracks()));
+      } else {
+        setLocalStream(new MediaStream(stream.getAudioTracks()));
+      }
+      emitGroupCallState(gcGroupIdRef.current, { muted: isMuted, cameraOff: true, screenSharing: false });
+      return;
+    }
+
+    // Camera ON: acquire hardware and hot-swap into every connection
+    try {
+      const camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: getVideoConstraints() });
+      const cameraTrack = camStream.getVideoTracks()[0];
+      if (!cameraTrack) throw new Error('No camera track');
+      if ('contentHint' in cameraTrack) cameraTrack.contentHint = 'motion';
+
+      if (dummyTrackRef.current) {
+        try { dummyTrackRef.current.stop(); } catch (e) {}
+        try { stream.removeTrack(dummyTrackRef.current); } catch (e) {}
+        dummyTrackRef.current = null;
+      }
+      stream.addTrack(cameraTrack);
+      await gcReplaceVideoEverywhere(cameraTrack);
+
+      setGcMediaType('video');
+      setIsCameraOff(false);
+      setLocalStream(new MediaStream(stream.getTracks()));
+      emitGroupCallState(gcGroupIdRef.current, { muted: isMuted, cameraOff: false, screenSharing: false });
+    } catch (err) {
+      showToast('Could not access camera device.', 'error', 'Camera Error');
+    }
+  };
+
+  const handleGcToggleScreenShare = async () => {
+    if (isScreenSharing) {
+      await gcStopScreenShare();
+      return;
+    }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      showToast('Screen sharing is not supported by this browser/device.', 'warning', 'Screen Share');
+      return;
+    }
+
+    try {
+      let screenStream;
+      try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: getScreenShareConstraints(), audio: false });
+      } catch (err) {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      }
+      const screenTrack = screenStream.getVideoTracks()[0];
+
+      const stream = localStreamRef.current;
+      const currentVideoTrack = stream?.getVideoTracks()[0];
+      if (currentVideoTrack) {
+        originalVideoTrackRef.current = currentVideoTrack;
+        try { stream.removeTrack(currentVideoTrack); } catch (e) {}
+      }
+      screenTrack.onended = () => { gcStopScreenShare(); };
+
+      stream?.addTrack(screenTrack);
+      await gcReplaceVideoEverywhere(screenTrack);
+
+      setIsScreenSharing(true);
+      setGcMediaType('video');
+      setLocalStream(stream ? new MediaStream(stream.getTracks()) : new MediaStream([screenTrack]));
+      emitGroupCallState(gcGroupIdRef.current, { muted: isMuted, cameraOff: false, screenSharing: true });
+    } catch (err) {
+      console.error('Screen sharing failed:', err);
+    }
+  };
+
   // Secure sign out with in-app confirmation modal
   const handleLogout = () => {
     showConfirm({
@@ -2905,6 +4573,7 @@ export default function App() {
       isDanger: true,
       onConfirm: () => {
         cleanupCall();
+        gcCleanupAll(true);
         disconnectSocket();
         localStorage.removeItem('session_enc_key');
         localStorage.removeItem('chatra_username');
@@ -2922,6 +4591,13 @@ export default function App() {
         setActiveContact(null);
         setShowSettings(false);
         setShowRecents(false);
+        setGroups([]);
+        setActiveGroup(null);
+        activeGroupRef.current = null;
+        setShowCreateGroup(false);
+        setGroupInfoGroupId(null);
+        groupKeysRef.current = {};
+        userProfilesRef.current = {};
         sharedSecrets.current = {};
       }
     });
@@ -2946,8 +4622,25 @@ export default function App() {
         (() => {
           const isMobileSize = windowWidth <= 768;
           const isAppMinimized = sidebarMinimized && !isMobileSize;
+          const activeGroupVm = activeGroup ? {
+            ...activeGroup,
+            groupTypingNames: (activeGroup.typingUsers || [])
+              .filter(u => u.toLowerCase() !== currentUser.username.toLowerCase())
+              .map(u => {
+                const m = (activeGroup.members || []).find(mm => mm.username.toLowerCase() === u.toLowerCase());
+                return m?.profile?.displayName || u;
+              })
+          } : null;
+          const getGroupMemberName = (username) => {
+            const g = groupsRef.current.find(gr => gr.id === activeGroupRef.current?.id);
+            if (!g) return username;
+            const m = (g.members || []).find(mm => mm.username.toLowerCase() === String(username).toLowerCase());
+            if (!m) return username;
+            if (m.username.toLowerCase() === currentUser.username.toLowerCase()) return 'You';
+            return m.profile?.displayName || m.username;
+          };
           return (
-            <div className={`app-container ${((activeContact || showSettings || showRecents) && !isNavigatingBack) ? 'chat-active' : ''} ${isAppMinimized ? 'sidebar-minimized' : ''} ${isSidebarAnimating ? 'is-sidebar-animating' : ''}`}>
+            <div className={`app-container ${((activeContact || activeGroupVm || showSettings || showRecents) && !isNavigatingBack) ? 'chat-active' : ''} ${isAppMinimized ? 'sidebar-minimized' : ''} ${isSidebarAnimating ? 'is-sidebar-animating' : ''}`}>
               
               {/* Network & Server Connectivity Status Bar */}
               {(!isOnline || !isSocketConnected) && (
@@ -2969,8 +4662,15 @@ export default function App() {
               <Sidebar
                 currentUser={currentUser}
                 contacts={contacts}
+                groups={groups}
                 activeContact={activeContact}
+                activeGroup={activeGroup}
                 setActiveContact={handleSelectContact}
+                onSelectGroup={handleSelectGroup}
+                onOpenCreateGroup={() => setShowCreateGroup(true)}
+                onOpenGroupInfo={(group) => setGroupInfoGroupId(group.id)}
+                onLeaveGroup={handleLeaveGroupById}
+                onDeleteGroup={handleDeleteGroupById}
                 addContact={handleAddContact}
                 onRenameContact={handleRenameContact}
                 onDeleteChat={handleDeleteChat}
@@ -2984,32 +4684,8 @@ export default function App() {
                 showRecents={showRecents}
                 isNavigatingBack={isNavigatingBack}
                 sidebarBackHandlerRef={sidebarBackHandlerRef}
-                onShowSettings={() => {
-                  if (window.history.state !== 'settings') {
-                    window.history.pushState('settings', '');
-                  }
-                  if (activeContactRef.current) {
-                    previousActiveContactRef.current = activeContactRef.current;
-                  }
-                  setShowRecents(false);
-                  setShowSettings(true);
-                  if (activeContactRef.current) {
-                    setTimeout(() => setActiveContact(null), 300);
-                  }
-                }}
-                onShowRecents={() => {
-                  if (window.history.state !== 'recents') {
-                    window.history.pushState('recents', '');
-                  }
-                  if (activeContactRef.current) {
-                    previousActiveContactRef.current = activeContactRef.current;
-                  }
-                  setShowSettings(false);
-                  setShowRecents(true);
-                  if (activeContactRef.current) {
-                    setTimeout(() => setActiveContact(null), 300);
-                  }
-                }}
+                onShowSettings={openSettingsView}
+                onShowRecents={openRecentsView}
               />
               <div className="main-content-pane">
                 <Dashboard
@@ -3017,19 +4693,7 @@ export default function App() {
                   contacts={contacts}
                   onInitiateCall={handleInitiateCall}
                   onSelectContact={handleSelectContact}
-                  onShowSettings={() => {
-                    if (window.history.state !== 'settings') {
-                      window.history.pushState('settings', '');
-                    }
-                    if (activeContactRef.current) {
-                      previousActiveContactRef.current = activeContactRef.current;
-                    }
-                    setShowRecents(false);
-                    setShowSettings(true);
-                    if (activeContactRef.current) {
-                      setTimeout(() => setActiveContact(null), 300);
-                    }
-                  }}
+                  onShowSettings={openSettingsView}
                   onBack={handleBackToMenu}
                   showBackButton={showRecents}
                 />
@@ -3060,34 +4724,53 @@ export default function App() {
                   />
                 )}
 
-                {(activeContact || (isNavigatingBack && navigatingBackFrom === 'chat')) && (
-                  <ChatArea
-                    currentUser={currentUser}
-                    activeContact={activeContact || lastActiveContactRef.current}
-                    isBlocked={(activeContact || lastActiveContactRef.current) && blockedUsers.includes((activeContact || lastActiveContactRef.current).username.toLowerCase())}
-                    onUnblockContact={handleUnblockContact}
-                    onSendMessage={handleSendMessage}
-                    onInitiateCall={handleInitiateCall}
-                    currentUserToken={currentUser.token}
-                    sharedSecret={sharedSecrets.current[(activeContact || lastActiveContactRef.current)?.username.toLowerCase()]}
-                    onBack={handleBackToMenu}
-                    isNavigatingBack={isNavigatingBack}
-                    markMessageAsReadLocal={markMessageAsReadLocal}
-                    markAllMessagesAsReadLocal={markAllMessagesAsReadLocal}
-                    onImageClick={handleOpenLightbox}
-                    onVerifyContact={handleVerifyContact}
-                    onSaveContact={handleSaveContact}
-                    onBlockContact={handleBlockContact}
-                    onDeleteMessages={deleteMessagesLocal}
-                    selectionCancelCallbackRef={selectionBackRef}
-                    chatBackHandlerRef={chatBackHandlerRef}
-                    onOpenSafetyModal={handleOpenSafetyModal}
-                    replyingTo={replyingTo}
-                    setReplyingTo={setReplyingTo}
-                    onForwardMessage={handleForwardRequest}
-                    showToast={showToast}
-                  />
-                )}
+                {(() => {
+                  // ONE persistent ChatArea instance serves both DMs and groups.
+                  // Switching chat types keeps the component mounted (no remount,
+                  // no viewSlideFadeIn replay) so the dashboard never flashes through.
+                  const showGroupNow = Boolean(activeGroupVm) ||
+                    (isNavigatingBack && navigatingBackFrom === 'chat' && lastChatKindRef.current === 'group');
+                  const activeVm = showGroupNow
+                    ? (activeGroupVm || lastActiveGroupVmRef.current)
+                    : (lastChatKindRef.current === 'group' && !activeContact
+                        ? null
+                        : (activeContact ||
+                            // Keep the DM visible ONLY during its exit animation window
+                            (isNavigatingBack && navigatingBackFrom === 'chat' ? lastActiveContactRef.current : null)));
+                  if (!activeVm) return null;
+
+                  const groupMode = Boolean(activeVm.isGroup);
+                  return (
+                    <ChatArea
+                      currentUser={currentUser}
+                      activeContact={activeVm}
+                      isBlocked={!groupMode && Boolean(activeVm.username && blockedUsers.includes(activeVm.username.toLowerCase()))}
+                      onUnblockContact={handleUnblockContact}
+                      onSendMessage={groupMode ? handleSendGroupMessage : handleSendMessage}
+                      onInitiateCall={groupMode ? handleStartGroupCall : handleInitiateCall}
+                      currentUserToken={currentUser.token}
+                      sharedSecret={groupMode ? null : sharedSecrets.current[activeVm.username?.toLowerCase()]}
+                      onBack={handleBackToMenu}
+                      isNavigatingBack={isNavigatingBack}
+                      markMessageAsReadLocal={groupMode ? () => {} : markMessageAsReadLocal}
+                      markAllMessagesAsReadLocal={groupMode ? () => {} : markAllMessagesAsReadLocal}
+                      onImageClick={handleOpenLightbox}
+                      onVerifyContact={groupMode ? () => {} : handleVerifyContact}
+                      onSaveContact={groupMode ? () => {} : handleSaveContact}
+                      onBlockContact={groupMode ? () => {} : handleBlockContact}
+                      onDeleteMessages={deleteMessagesLocal}
+                      selectionCancelCallbackRef={selectionBackRef}
+                      chatBackHandlerRef={chatBackHandlerRef}
+                      onOpenSafetyModal={groupMode ? () => {} : handleOpenSafetyModal}
+                      replyingTo={replyingTo}
+                      setReplyingTo={setReplyingTo}
+                      onForwardMessage={handleForwardRequest}
+                      showToast={showToast}
+                      onOpenGroupInfo={groupMode ? () => setGroupInfoGroupId(activeVm.id) : null}
+                      getGroupMemberName={groupMode ? getGroupMemberName : null}
+                    />
+                  );
+                })()}
               </div>
 
               {/* WebRTC P2P calling panel overlays */}
@@ -3120,6 +4803,47 @@ export default function App() {
                 setIsCallMinimized={setIsCallMinimized}
               />
 
+              {/* Group Call overlay (mesh WebRTC: voice / video / screen share) */}
+              <GroupCallWindow
+                visible={gcState !== 'idle'}
+                isIncoming={gcState === 'ringing'}
+                waitingOut={gcState === 'calling'}
+                mediaType={gcMediaType}
+                group={groups.find(g => g.id === gcGroupId) || null}
+                localStream={localStream}
+                remoteUsers={(() => {
+                  const usernames = new Set([
+                    ...Object.keys(gcPeers),
+                    ...Object.keys(gcRemoteStreams)
+                  ]);
+                  // Hard guarantee: the local user can never be tiled twice
+                  usernames.delete(currentUser.username.toLowerCase());
+                  return [...usernames].map((lower) => {
+                    const member = (groups.find(g => g.id === gcGroupId)?.members || []).find(m => m.username.toLowerCase() === lower);
+                    return {
+                      username: lower,
+                      displayName: member?.profile?.displayName || null,
+                      avatarIcon: member?.profile?.avatarIcon || null,
+                      stream: gcRemoteStreams[lower] || null,
+                      state: gcPeers[lower] || { muted: false, cameraOff: false, screenSharing: false }
+                    };
+                  });
+                })()}
+                myUsername={currentUser.username.toLowerCase()}
+                elapsed={gcElapsed}
+                isMuted={isMuted}
+                isCameraOff={isCameraOff}
+                isScreenSharing={isScreenSharing}
+                minimized={gcMinimized && gcState === 'connected'}
+                onToggleMinimize={() => setGcMinimized((v) => !v)}
+                onAccept={handleAcceptGroupCall}
+                onDecline={handleDeclineGroupCall}
+                onEnd={handleLeaveGroupCall}
+                onToggleMute={handleGcToggleMute}
+                onToggleCamera={handleGcToggleCamera}
+                onToggleScreenShare={handleGcToggleScreenShare}
+              />
+
           {/* Fullscreen Image Lightbox Modal */}
           <div 
             className={`image-lightbox-overlay ${lightboxImageSrc ? 'visible' : ''}`} 
@@ -3144,10 +4868,47 @@ export default function App() {
           <ForwardModal
             message={forwardingMessage}
             contacts={contacts}
+            groups={groups}
             blockedUsers={blockedUsers}
             onClose={() => setForwardingMessage(null)}
             onConfirm={handleConfirmForward}
           />
+
+          {/* New E2EE Group Creation Flow */}
+          {showCreateGroup && (
+            <CreateGroupModal
+              contacts={contacts}
+              currentUser={currentUser}
+              blockedUsers={blockedUsers}
+              showToast={showToast}
+              onClose={() => setShowCreateGroup(false)}
+              onCreate={handleCreateGroup}
+            />
+          )}
+
+          {/* Group Info & Management Modal */}
+          {groupInfoGroupId !== null && (() => {
+            const infoGroup = groups.find(g => g.id === groupInfoGroupId);
+            if (!infoGroup) return null;
+            return (
+              <GroupInfoModal
+                currentUser={currentUser}
+                group={{
+                  ...infoGroup,
+                  groupId: infoGroup.id,
+                  username: `group-${infoGroup.id}`
+                }}
+                onClose={() => setGroupInfoGroupId(null)}
+                onUpdateGroupInfo={handleUpdateGroupInfo}
+                onAddMembers={handleAddMembersToGroup}
+                onRemoveMember={handleRemoveMemberFromGroup}
+                onSetRole={handleSetMemberRole}
+                onLeaveGroup={(group) => handleLeaveGroupById(group.id)}
+                onDeleteGroup={(group) => handleDeleteGroupById(group.id)}
+                showToast={showToast}
+              />
+            );
+          })()}
 
           {/* E2EE Safety Number verification modal (Root level to overlap Sidebar) */}
           {(showSafetyModal || isSafetyModalClosing) && activeContact && (

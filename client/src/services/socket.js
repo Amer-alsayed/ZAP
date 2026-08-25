@@ -118,6 +118,9 @@ export const emitSendMessage = (recipient, ciphertext, iv, signature) => {
 export const emitDeleteMessages = (messageIds) =>
   emitWithTimeout('delete-messages', { messageIds });
 
+export const emitDeleteGroupMessages = (groupId, messageIds) =>
+  emitWithTimeout('delete-group-messages', { groupId, messageIds });
+
 export const emitDeleteChat = (withUser) =>
   emitWithTimeout('delete-chat', { withUser });
 
@@ -192,6 +195,86 @@ export const unsubscribeFromUserStatus = (callback) => {
  */
 export const emitUpdateProfile = (displayName, avatarIcon, themeColor) => {
   return emitWithTimeout('update-profile', { displayName, avatarIcon, themeColor });
+};
+
+// ==========================================
+// E2EE Group Chat Emits
+// ==========================================
+
+export const emitCreateGroup = (payload) =>
+  emitWithTimeout('create-group', payload);
+
+export const emitGetGroups = () =>
+  emitWithTimeout('get-groups', {}).then(res => res.groups || []);
+
+export const emitGetGroupMessages = (groupId, beforeId = null, limit = 300) =>
+  emitWithTimeout('get-group-messages', { groupId, beforeId, limit }).then(res => ({
+    messages: res.messages || [],
+    hasMore: Boolean(res.hasMore)
+  }));
+
+export const emitSendGroupMessage = (groupId, ciphertext, iv, signature) =>
+  emitWithTimeout('send-group-message', { groupId, ciphertext, iv, signature });
+
+export const emitAddGroupMembers = (payload) =>
+  emitWithTimeout('add-group-members', payload);
+
+export const emitRemoveGroupMember = (payload) =>
+  emitWithTimeout('remove-group-member', payload);
+
+export const emitLeaveGroup = (payload) =>
+  emitWithTimeout('leave-group', payload);
+
+export const emitDeleteGroup = (groupId) =>
+  emitWithTimeout('delete-group', { groupId });
+
+export const emitUpdateGroupInfo = (payload) =>
+  emitWithTimeout('update-group-info', payload);
+
+export const emitSetMemberRole = (groupId, targetUsername, role) =>
+  emitWithTimeout('set-member-role', { groupId, targetUsername, role });
+
+export const emitGetGroupKey = (groupId, kv) =>
+  emitWithTimeout('get-group-key', { groupId, kv }).then(res => res.envelope || null);
+
+export const emitMarkGroupRead = (groupId, lastReadId) => {
+  if (socket && socket.connected) {
+    socket.emit('mark-group-read', { groupId, lastReadId });
+  }
+};
+
+export const emitGroupTyping = (groupId, isTyping) => {
+  if (socket && socket.connected) {
+    socket.emit('group-typing', { groupId, isTyping });
+  }
+};
+
+// ==========================================
+// Group Call Signaling Emits
+// ==========================================
+
+export const emitStartGroupCall = (groupId, mediaType) =>
+  emitWithTimeout('start-group-call', { groupId, mediaType });
+
+export const emitJoinGroupCall = (groupId) =>
+  emitWithTimeout('join-group-call', { groupId });
+
+export const emitLeaveGroupCall = (groupId) => {
+  if (socket && socket.connected) {
+    socket.emit('leave-group-call', { groupId });
+  }
+};
+
+export const emitGroupCallSignal = (payload) => {
+  if (socket && socket.connected) {
+    socket.emit('group-call-signal', payload);
+  }
+};
+
+export const emitGroupCallState = (groupId, state) => {
+  if (socket && socket.connected) {
+    socket.emit('group-call-state', { groupId, ...state });
+  }
 };
 
 /**

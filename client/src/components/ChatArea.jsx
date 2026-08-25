@@ -4,12 +4,12 @@ import {
   Send, Shield, Phone, Video, Paperclip, Mic, X, Play, Pause, 
   FileText, Image, Video as VideoIcon, Download, AlertTriangle,
   ArrowLeft, CornerUpLeft, CornerUpRight, ArrowDown, PhoneOff, VideoOff, ArrowUp, Plus, ShieldCheck, Trash2, Camera, Music, Check, Copy, Ban, Unlock, Loader2,
-  ChevronLeft, ChevronRight, Smile
+  ChevronLeft, ChevronRight, Smile, Users, Info
 } from 'lucide-react';
 import AppleEmojiPicker from './AppleEmojiPicker';
 import { uploadEncryptedFile } from '../services/api';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
-import { getSocket } from '../services/socket';
+import { getSocket, emitGroupTyping } from '../services/socket';
 import { renderAvatar } from './Sidebar';
 import ZapLogo from './ZapLogo';
 import { loadOrFetchDecryptedMedia, setCachedMedia, getMemoryMediaUrl, warmupMediaCache, inferMimeType } from '../services/mediaCache';
@@ -33,6 +33,25 @@ const getSafetyNumber = (keyA, keyB) => {
   
   const absHash = Math.abs(hash).toString().padEnd(10, '7') + Math.abs(hash * 31 + 17).toString().padEnd(10, '3');
   return absHash.slice(0, 5) + ' ' + absHash.slice(5, 10) + ' ' + absHash.slice(10, 15) + ' ' + absHash.slice(15, 20);
+};
+
+// ==========================================
+// Group Chat Sender Attribution Helpers
+// ==========================================
+
+// Tasteful palette that stays readable on the dark theme
+const GROUP_SENDER_COLORS = [
+  '#64b5f6', '#81c784', '#ffb74d', '#ba68c8',
+  '#4dd0e1', '#f06292', '#aed581', '#ff8a65'
+];
+
+// Stable per-username color so every member keeps the same identity hue
+const getMemberColor = (username = '') => {
+  let h = 0;
+  for (let i = 0; i < username.length; i++) {
+    h = ((h * 31) + username.charCodeAt(i)) >>> 0;
+  }
+  return GROUP_SENDER_COLORS[h % GROUP_SENDER_COLORS.length];
 };
 
 // ==========================================
@@ -945,14 +964,22 @@ const MessageList = React.memo(({
   selectionCancelRef,
   onSelectionModeChange,
   setIsClosingReply,
-  onForwardMessage
+  onForwardMessage,
+  isGroupMode = false,
+  myUsername = '',
+  resolveSenderName = null,
+  getGroupMemberInfo = null
 }) => {
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [deletingIds, setDeletingIds] = useState([]);
-  const selectionMode = selectedIds.length > 0;
 
+  // Selection is per-conversation: clear it whenever the open chat changes
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [activeContactUsername]);
+  const selectionMode = selectedIds.length > 0;
   const groupedMessages = useMemo(() => groupMessagesWithAlbums(messages), [messages]);
 
   const selectedMsgForCopy = selectedIds.length === 1 ? messages.find(m => m.id === selectedIds[0]) : null;
@@ -1259,8 +1286,37 @@ const MessageList = React.memo(({
   return (
     <div className="message-list">
       {groupedMessages && groupedMessages.map((msg, index) => {
-        const isSent = msg.sender === activeContactUsername ? false : true;
+        const isSent = isGroupMode
+          ? String(msg.sender || '').toLowerCase() === String(myUsername || '').toLowerCase()
+          : (msg.sender === activeContactUsername ? false : true);
         const showDateSeparator = shouldShowDateSeparator(groupedMessages, index);
+
+        // Render group system events (joins, leaves, renames) as centered pills
+        if (isGroupMode && msg.mediaType === 'system') {
+          return (
+            <React.Fragment key={msg.id}>
+              {showDateSeparator && (
+                <div className="date-separator">
+                  <span>{formatSeparatorDate(msg.timestamp)}</span>
+                </div>
+              )}
+              <div 
+                id={`msg-${msg.id}`} 
+                ref={index === groupedMessages.length - 1 ? lastMessageRef : null}
+                className="system-call-log-container"
+              >
+                <div className="system-event-pill glass">
+                  <Users size={11} />
+                  <span className="system-event-text">{msg.text}</span>
+                  <span className="system-call-bullet">•</span>
+                  <span className="system-call-time">
+                    {formatMessageTime(msg.timestamp)}
+                  </span>
+                </div>
+              </div>
+            </React.Fragment>
+          );
+        }
 
         // Render call logs as centered E2EE system logs rather than message bubbles
         if (msg.mediaType === 'call') {
@@ -1272,7 +1328,9 @@ const MessageList = React.memo(({
           }
           const isVoice = callData.callType === 'voice';
           const status = callData.status;
-          const isSentByMe = msg.sender.toLowerCase() !== activeContactUsername.toLowerCase();
+          const isSentByMe = isGroupMode
+            ? String(msg.sender || '').toLowerCase() === String(myUsername || '').toLowerCase()
+            : msg.sender.toLowerCase() !== activeContactUsername.toLowerCase();
           const isMissedOrCancelled = status === 'cancelled' || status === 'missed' || status === 'declined';
 
           let statusText = '';
@@ -1344,10 +1402,20 @@ const MessageList = React.memo(({
         const emojiCount = isOnlyEmojiMsg ? getEmojiCount(msg.text) : 0;
 
         const prevMsg = groupedMessages[index - 1];
-        const isFirstOfGroup = !prevMsg || (prevMsg.mediaType === 'call') || (prevMsg.sender?.toLowerCase() !== msg.sender?.toLowerCase());
+        // System pills and call logs must break sender grouping, otherwise a
+        // message following a system event from the same person hides its name
+        const isGroupingBreaker = prevMsg && (prevMsg.mediaType === 'call' || prevMsg.mediaType === 'system');
+        const isFirstOfGroup = !prevMsg || isGroupingBreaker || (prevMsg.sender?.toLowerCase() !== msg.sender?.toLowerCase());
         const isSelectedMsg = (msg.isAlbum || msg.isMultiFile) 
           ? msg.allIds.some(id => selectedIds.includes(id)) 
           : selectedIds.includes(msg.id);
+
+        // Group attribution: colored name + gutter avatar for received messages
+        const showAttribution = isGroupMode && !isSent && msg.mediaType !== 'system';
+        const memberInfo = showAttribution && typeof getGroupMemberInfo === 'function'
+          ? getGroupMemberInfo(msg.sender)
+          : null;
+        const senderColor = showAttribution ? getMemberColor(String(msg.sender || '')) : null;
 
         return (
           <React.Fragment key={msg.id}>
@@ -1423,6 +1491,23 @@ const MessageList = React.memo(({
                     >
                       <CornerUpLeft size={16} color="var(--accent-color)" />
                     </div>
+                    {/* Group chat sender attribution above the bubble */}
+                    {showAttribution && isFirstOfGroup && (
+                      <div className="group-sender-label" style={{ color: senderColor }}>
+                        {typeof resolveSenderName === 'function' ? resolveSenderName(msg.sender) : msg.sender}
+                      </div>
+                    )}
+                    {/* Telegram-style gutter avatar beside the first message of a cluster */}
+                    {showAttribution && isFirstOfGroup && (
+                      <div className="group-msg-avatar">
+                        {renderAvatar(
+                          memberInfo?.username || msg.sender,
+                          memberInfo?.displayName,
+                          memberInfo?.avatarIcon || null,
+                          { width: '28px', height: '28px', fontSize: '11px' }
+                        )}
+                      </div>
+                    )}
                       <div className={`message-bubble ${isSelectedMsg ? 'is-selected' : ''} ${msg.isAlbum ? 'album-bubble' : ''} ${msg.isMultiFile ? 'multifile-bubble' : ''} ${isOnlyEmojiMsg ? `emoji-only-bubble count-${emojiCount}` : ''} ${msg.mediaType === 'file' && msg.fileMetadata?.mimeType?.startsWith('image/') ? 'single-image-bubble' : ''}`}>
                         {isSelectedMsg && (
                           <div className="selection-indicator-badge" aria-hidden="true">
@@ -1537,8 +1622,52 @@ const ChatArea = React.memo(function ChatArea({
   replyingTo,
   setReplyingTo,
   onForwardMessage,
-  showToast
+  showToast,
+  onOpenGroupInfo = null,
+  getGroupMemberName = null
 }) {
+  const isGroupMode = Boolean(activeContact?.isGroup);
+
+  // Resolve a member display name inside group chats (falls back to raw username)
+  const resolveSenderName = useCallback((username) => {
+    if (!username) return '';
+    if (isGroupMode && typeof getGroupMemberName === 'function') {
+      const lowerMe = currentUser?.username?.toLowerCase();
+      if (String(username).toLowerCase() === lowerMe) return 'You';
+      return getGroupMemberName(username) || username;
+    }
+    return username;
+  }, [isGroupMode, getGroupMemberName, currentUser]);
+
+  // Full member info (name + avatar) for group attribution rendering
+  const getGroupMemberInfo = useCallback((username) => {
+    if (!isGroupMode || !activeContact?.members) return null;
+    const lower = String(username).toLowerCase();
+    const member = activeContact.members.find(mm => mm.username.toLowerCase() === lower);
+    if (!member) return null;
+    return {
+      username: member.username,
+      displayName: member.profile?.displayName,
+      avatarIcon: member.profile?.avatarIcon
+    };
+  }, [isGroupMode, activeContact?.members]);
+
+  // Route typing events to the right channel (DM socket event or group room)
+  const emitTypingState = useCallback((target, isTyping) => {
+    const socket = getSocket();
+    if (!socket || !socket.connected || !target) return;
+    if (target.kind === 'group') {
+      emitGroupTyping(target.id, isTyping);
+    } else {
+      socket.emit('typing', { recipient: target.id, isTyping });
+    }
+  }, []);
+
+  const currentTypingTarget = useMemo(() => (
+    activeContact
+      ? (activeContact.isGroup ? { kind: 'group', id: activeContact.groupId } : { kind: 'dm', id: activeContact.username })
+      : null
+  ), [activeContact]);
   const notify = showToast || window.showAppToast || ((msg) => window.alert(msg));
   const selectionCancelRef = useRef(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -2054,6 +2183,7 @@ const ChatArea = React.memo(function ChatArea({
   const typingTimeoutRef = useRef(null);
   const isTypingRef = useRef(false);
   const prevContactRef = useRef(activeContact.username);
+  const prevTypingTargetRef = useRef(currentTypingTarget);
   const [justReceivedId, setJustReceivedId] = useState(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const isScrolledUpRef = useRef(false);
@@ -2222,14 +2352,14 @@ const ChatArea = React.memo(function ChatArea({
   // Clear typing and replying status on active contact change
   useEffect(() => {
     // If we were typing for the previous contact, notify them we stopped
-    const socket = getSocket();
-    if (socket && socket.connected && isTypingRef.current && prevContactRef.current) {
-      socket.emit('typing', { recipient: prevContactRef.current, isTyping: false });
+    if (isTypingRef.current && prevTypingTargetRef.current) {
+      emitTypingState(prevTypingTargetRef.current, false);
     }
     isTypingRef.current = false;
 
     // Track the new active contact
     prevContactRef.current = activeContact.username;
+    prevTypingTargetRef.current = currentTypingTarget;
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -2265,8 +2395,8 @@ const ChatArea = React.memo(function ChatArea({
         }
       }
       const currentSocket = getSocket();
-      if (currentSocket && currentSocket.connected && isTypingRef.current && prevContactRef.current) {
-        currentSocket.emit('typing', { recipient: prevContactRef.current, isTyping: false });
+      if (currentSocket && currentSocket.connected && isTypingRef.current && prevTypingTargetRef.current) {
+        emitTypingState(prevTypingTargetRef.current, false);
       }
     };
   }, [activeContact.username]);
@@ -2742,47 +2872,68 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, []);
 
-  // Smooth mobile keyboard — resizes-visual + visualViewport, no layout jank on open/close (mobile only)
+  // Smooth mobile keyboard handling — drives the --kb custom property consumed by CSS.
+  // With interactive-widget=resizes-content (Android 108+) the layout viewport shrinks
+  // natively so kb computes to ~0 and CSS does nothing. On iOS (which ignores the hint)
+  // kb equals the real keyboard height and CSS lifts the chat above it.
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
+
+    const root = document.documentElement;
     let rafId = null;
-    const handleViewportChange = () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const inputWrapper = document.querySelector('.chat-input-wrapper');
-        const container = messagesContainerRef.current;
-        if (!inputWrapper || !container) return;
-        // Only apply mobile keyboard handling
-        if (window.innerWidth > 768) {
-          inputWrapper.style.transform = '';
-          container.style.paddingBottom = '';
-          return;
+    let wasOpen = false;
+
+    const apply = () => {
+      rafId = null;
+      // Desktop is intentionally untouched
+      if (window.innerWidth > 768) {
+        root.style.removeProperty('--kb');
+        root.classList.remove('keyboard-open');
+        wasOpen = false;
+        return;
+      }
+      const el = document.activeElement;
+      const editing = !!el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable);
+      const kbHeight = Math.round(window.innerHeight - viewport.height - viewport.offsetTop);
+      const isOpen = editing && kbHeight > 60;
+      if (isOpen) {
+        root.style.setProperty('--kb', `${Math.min(kbHeight, Math.round(window.innerHeight * 0.7))}px`);
+        root.classList.add('keyboard-open');
+        // Keep the latest message in view once the keyboard settles open
+        if (!wasOpen && !isScrolledUpRef.current && messagesContainerRef.current) {
+          requestAnimationFrame(() => {
+            if (messagesContainerRef.current && !isScrolledUpRef.current) {
+              messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+            }
+          });
         }
-        const keyboardHeight = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-        if (keyboardHeight > 40) {
-          // With interactive-widget=resizes-visual (modern Chrome/iOS) the layout viewport
-          // already resizes, so manual transform double-offsets and can break focus.
-          // Mobile fix: keep input in normal flow, just add scroll padding so last messages stay visible.
-          inputWrapper.style.transform = '';
-          container.style.paddingBottom = `${keyboardHeight + 8}px`;
-          if (!isScrolledUpRef.current) {
-            try { container.scrollTop = container.scrollHeight; } catch (e) {}
-          }
-        } else {
-          inputWrapper.style.transform = '';
-          container.style.paddingBottom = '';
-        }
-      });
+      } else {
+        root.style.removeProperty('--kb');
+        root.classList.remove('keyboard-open');
+      }
+      wasOpen = isOpen;
     };
-    viewport.addEventListener('resize', handleViewportChange);
-    viewport.addEventListener('scroll', handleViewportChange);
-    window.addEventListener('orientationchange', handleViewportChange);
+
+    const schedule = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(apply);
+    };
+
+    viewport.addEventListener('resize', schedule);
+    viewport.addEventListener('scroll', schedule);
+    window.addEventListener('orientationchange', schedule);
+    window.addEventListener('focusin', schedule);
+    window.addEventListener('focusout', schedule);
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
-      viewport.removeEventListener('resize', handleViewportChange);
-      viewport.removeEventListener('scroll', handleViewportChange);
-      window.removeEventListener('orientationchange', handleViewportChange);
+      viewport.removeEventListener('resize', schedule);
+      viewport.removeEventListener('scroll', schedule);
+      window.removeEventListener('orientationchange', schedule);
+      window.removeEventListener('focusin', schedule);
+      window.removeEventListener('focusout', schedule);
+      root.style.removeProperty('--kb');
+      root.classList.remove('keyboard-open');
     };
   }, []);
 
@@ -2883,19 +3034,19 @@ const ChatArea = React.memo(function ChatArea({
       if (text.trim().length > 0) {
         if (!isTypingRef.current) {
           isTypingRef.current = true;
-          socket.emit('typing', { recipient: activeContact.username, isTyping: true });
+          emitTypingState(currentTypingTarget, true);
         }
 
         // Reset auto-stop typing timer
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = setTimeout(() => {
-          socket.emit('typing', { recipient: activeContact.username, isTyping: false });
+          emitTypingState(currentTypingTarget, false);
           isTypingRef.current = false;
         }, 3000);
       } else {
         // Immediately stop typing if text input cleared
         if (isTypingRef.current) {
-          socket.emit('typing', { recipient: activeContact.username, isTyping: false });
+          emitTypingState(currentTypingTarget, false);
           isTypingRef.current = false;
         }
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -2916,9 +3067,8 @@ const ChatArea = React.memo(function ChatArea({
     }
 
     // Immediately emit stop typing
-    const socket = getSocket();
-    if (socket && socket.connected && isTypingRef.current) {
-      socket.emit('typing', { recipient: activeContact.username, isTyping: false });
+    if (isTypingRef.current) {
+      emitTypingState(currentTypingTarget, false);
       isTypingRef.current = false;
     }
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -3746,30 +3896,43 @@ const ChatArea = React.memo(function ChatArea({
   }, [playingAudioId, playbackRate, downloadAndDecryptFile, togglePlayAudio, handlePlaybackRateChange, onImageClick, activeContact?.username, handleOpenGallery]);
 
   return (
-    <div className={`chat-area ${isNavigatingBack ? 'navigating-back' : ''}`}>
+    <div className={`chat-area ${isGroupMode ? 'group-chat-active' : ''} ${isNavigatingBack ? 'navigating-back' : ''}`}>
       {/* Header */}
       <div className="chat-header glass">
         <div className="chat-header-info">
-          <button className={`back-btn ${selectionMode ? 'selection-back-btn' : ''}`} onClick={handleHeaderBackClick} title={selectionMode ? 'Cancel selection' : 'Back to menu'} aria-label={selectionMode ? 'Cancel selection' : 'Back to menu'}>
+          <button className={`back-btn ${selectionMode ? 'selection-back-btn' : ''}`} onClick={(e) => { e.stopPropagation(); handleHeaderBackClick(); }} title={selectionMode ? 'Cancel selection' : 'Back to menu'} aria-label={selectionMode ? 'Cancel selection' : 'Back to menu'}>
             <div className="btn-icon-wrapper" key={selectionMode ? 'cancel-icon' : 'back-icon'}>
               {selectionMode ? <X size={18} /> : <ArrowLeft size={18} />}
             </div>
           </button>
-          {renderAvatar(activeContact.username, activeContact.customName || activeContact.displayName, activeContact.avatarIcon)}
+          <div className="group-avatar-stack-wrapper">
+            {renderAvatar(activeContact.username, activeContact.customName || activeContact.displayName, activeContact.avatarIcon)}
+            {isGroupMode && <span className="group-avatar-badge"><Users size={11} /></span>}
+          </div>
           <div className="chat-header-name">
             <h2 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {activeContact.customName || activeContact.displayName || activeContact.username}
               </span>
-              {activeContact.isVerified && <ShieldCheck size={15} style={{ color: 'var(--accent-color)', flexShrink: 0 }} title="Verified Identity" />}
+              {isGroupMode ? (
+                <Users size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+              ) : (
+                activeContact.isVerified && <ShieldCheck size={15} style={{ color: 'var(--accent-color)', flexShrink: 0 }} title="Verified Identity" />
+              )}
             </h2>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-              <span style={{ fontFamily: 'monospace' }}>@{activeContact.username}</span>
-              <span>•</span>
-              <span className={`chat-header-status ${activeContact.status === 'online' ? 'online' : ''}`}>
-                {activeContact.status === 'online' ? 'Online' : 'Offline'}
+            {isGroupMode ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <span>{(activeContact.members?.length || 0)} member{((activeContact.members?.length || 0) === 1) ? '' : 's'}</span>
               </span>
-            </span>
+            ) : (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <span style={{ fontFamily: 'monospace' }}>@{activeContact.username}</span>
+                <span>•</span>
+                <span className={`chat-header-status ${activeContact.status === 'online' ? 'online' : ''}`}>
+                  {activeContact.status === 'online' ? 'Online' : 'Offline'}
+                </span>
+              </span>
+            )}
           </div>
         </div>
         <div className={`chat-header-actions ${selectionMode ? 'selection-header-actions' : ''}`}>
@@ -3802,22 +3965,53 @@ const ChatArea = React.memo(function ChatArea({
             </>
           ) : (
             <>
-              <button 
-                className="header-action-btn" 
-                onClick={() => onInitiateCall('voice')}
-                title="Secure Voice Call"
-                aria-label="Secure Voice Call"
-              >
-                <Phone size={19} />
-              </button>
-              <button 
-                className="header-action-btn" 
-                onClick={() => onInitiateCall('video')}
-                title="Secure Video Call"
-                aria-label="Secure Video Call"
-              >
-                <Video size={19} />
-              </button>
+              {isGroupMode ? (
+                <>
+                  <button 
+                    className="header-action-btn" 
+                    onClick={() => onInitiateCall('voice')}
+                    title="Group Voice Call"
+                    aria-label="Start group voice call"
+                  >
+                    <Phone size={19} />
+                  </button>
+                  <button 
+                    className="header-action-btn" 
+                    onClick={() => onInitiateCall('video')}
+                    title="Group Video Call"
+                    aria-label="Start group video call"
+                  >
+                    <Video size={19} />
+                  </button>
+                  <button
+                    className="header-action-btn"
+                    onClick={() => onOpenGroupInfo?.()}
+                    title="Group info & members"
+                    aria-label="Group info and members"
+                  >
+                    <Info size={19} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button 
+                    className="header-action-btn" 
+                    onClick={() => onInitiateCall('voice')}
+                    title="Secure Voice Call"
+                    aria-label="Secure Voice Call"
+                  >
+                    <Phone size={19} />
+                  </button>
+                  <button 
+                    className="header-action-btn" 
+                    onClick={() => onInitiateCall('video')}
+                    title="Secure Video Call"
+                    aria-label="Secure Video Call"
+                  >
+                    <Video size={19} />
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -3881,7 +4075,10 @@ const ChatArea = React.memo(function ChatArea({
           )}
           <div className="e2ee-banner">
             <Shield size={14} />
-            <span>Messages and media are end-to-end encrypted. No one else, not even ZAP, can read them.</span>
+            <span>{isGroupMode
+              ? 'Messages are end-to-end encrypted. Only members of this group can read them — not even ZAP.'
+              : 'Messages and media are end-to-end encrypted. No one else, not even ZAP, can read them.'}
+            </span>
           </div>
 
           <MessageList
@@ -3897,11 +4094,22 @@ const ChatArea = React.memo(function ChatArea({
             onSelectionModeChange={handleSelectionModeChange}
             setIsClosingReply={setIsClosingReply}
             onForwardMessage={onForwardMessage}
+            isGroupMode={isGroupMode}
+            myUsername={currentUser?.username || ''}
+            resolveSenderName={resolveSenderName}
+            getGroupMemberInfo={getGroupMemberInfo}
           />
-          <TypingIndicator 
-            isVisible={Boolean(activeContact.isTyping && !(justReceivedId !== null && activeContact.messages?.length && activeContact.messages[activeContact.messages.length - 1]?.id === justReceivedId))} 
-            typingBubbleRef={typingBubbleRef} 
-          />
+          {(() => {
+            const typingNames = (activeContact.groupTypingNames || []);
+            const hasGroupTyping = isGroupMode && typingNames.length > 0;
+            const dmTyping = !isGroupMode && activeContact.isTyping;
+            return (
+              <TypingIndicator 
+                isVisible={Boolean((hasGroupTyping || dmTyping) && !(justReceivedId !== null && activeContact.messages?.length && activeContact.messages[activeContact.messages.length - 1]?.id === justReceivedId))} 
+                typingBubbleRef={typingBubbleRef} 
+              />
+            );
+          })()}
           <div ref={messagesEndRef} style={{ height: '1px', minHeight: '1px', width: '100%', pointerEvents: 'none' }} />
         </div>
       </div>
@@ -3910,16 +4118,25 @@ const ChatArea = React.memo(function ChatArea({
       <div className="chat-input-wrapper">
         {/* Floating Scroll-to-Bottom Button / Typing Indicator */}
         <button 
-          className={`scroll-to-bottom-btn glass ${(isScrolledUp && !isInlineTypingVisible) ? 'visible' : ''} ${(activeContact.isTyping && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
+          className={`scroll-to-bottom-btn glass ${(isScrolledUp && !isInlineTypingVisible) ? 'visible' : ''} ${((isGroupMode ? (activeContact.groupTypingNames || []).length > 0 : activeContact.isTyping) && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
           onClick={scrollToBottom} 
           title="Scroll to bottom"
           aria-label="Scroll to bottom"
         >
           <div className="scroll-btn-content">
             <span className="typing-text-wrapper">
-              {activeContact.username} is typing...
+              {(() => {
+                if (isGroupMode) {
+                  const names = activeContact.groupTypingNames || [];
+                  if (names.length === 0) return null;
+                  if (names.length === 1) return `${names[0]} is typing...`;
+                  if (names.length === 2) return `${names[0]} and ${names[1]} are typing...`;
+                  return 'Several people are typing...';
+                }
+                return activeContact.isTyping ? `${activeContact.username} is typing...` : null;
+              })()}
             </span>
-            <ArrowDown size={18} className={activeContact.isTyping ? 'typing-arrow-bounce' : ''} />
+            <ArrowDown size={18} className={(isGroupMode ? (activeContact.groupTypingNames || []).length > 0 : activeContact.isTyping) ? 'typing-arrow-bounce' : ''} />
           </div>
           {localUnreadCount > 0 && (
             <span className="scroll-unread-badge">
@@ -3941,7 +4158,7 @@ const ChatArea = React.memo(function ChatArea({
                 <div className="reply-preview-text-block">
                   <div className="reply-preview-badge-row">
                     <CornerUpLeft size={13} className="reply-preview-icon" />
-                    <span className="reply-preview-label">Replying to {activeReplyInfo.sender}</span>
+                    <span className="reply-preview-label">Replying to {resolveSenderName(activeReplyInfo.sender)}</span>
                   </div>
                   <span className="reply-preview-text">
                     {activeReplyInfo.mediaType === 'file' && activeReplyInfo.fileMetadata?.mimeType?.startsWith('image/')

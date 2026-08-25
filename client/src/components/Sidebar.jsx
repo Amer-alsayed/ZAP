@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Phone, PhoneOff, Video, VideoOff, Mic, Image, FileText, PanelLeftClose, PanelLeftOpen, Trash2, Ban, X, AlertTriangle, Pencil } from 'lucide-react';
+import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Phone, PhoneOff, Video, VideoOff, Mic, Image, FileText, PanelLeftClose, PanelLeftOpen, Trash2, Ban, X, AlertTriangle, Pencil, Users, LogOut } from 'lucide-react';
 import ZapLogo from './ZapLogo';
 import { searchUser } from '../services/api';
 import { emitGetUserStatus } from '../services/socket';
@@ -195,11 +195,56 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
   );
 };
 
+export const renderGroupMessageBody = (lastMsg) => {
+  if (!lastMsg) return null;
+  if (lastMsg.mediaType === 'voice' || lastMsg.mediaType === 'audio') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+        <Mic size={13} style={{ opacity: 0.7 }} />
+        Voice Message
+      </span>
+    );
+  }
+  if (lastMsg.mediaType === 'image') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+        <Image size={13} style={{ opacity: 0.7 }} />
+        Photo
+      </span>
+    );
+  }
+  if (lastMsg.mediaType === 'file') {
+    const isImg = lastMsg.fileMetadata?.mimeType?.startsWith('image/');
+    const isVid = lastMsg.fileMetadata?.mimeType?.startsWith('video/');
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+        {isImg ? <Image size={13} style={{ opacity: 0.7 }} /> : isVid ? <Video size={13} style={{ opacity: 0.7 }} /> : <FileText size={13} style={{ opacity: 0.7 }} />}
+        {isImg ? 'Photo' : isVid ? 'Video' : 'Document'}
+      </span>
+    );
+  }
+  return <span>{lastMsg.text || 'Message'}</span>;
+};
+
+export const renderGroupAvatar = (group, customSizeStyle = {}) => {
+  return renderAvatar(group.name || `Group ${group.id}`, null, group.avatarIcon, {
+    backgroundColor: 'var(--accent-color)',
+    ...customSizeStyle
+  });
+};
+
 const Sidebar = React.memo(function Sidebar({
   currentUser,
   contacts,
+  groups = [],
   activeContact,
+  activeGroup = null,
   setActiveContact,
+  onSelectGroup,
+  onOpenCreateGroup,
+  onOpenGroupInfo,
+  onLeaveGroup,
+  onDeleteGroup,
   addContact,
   onDeleteChat,
   onBlockChat,
@@ -258,10 +303,10 @@ const Sidebar = React.memo(function Sidebar({
       .sort((a, b) => {
         const aLastMsg = a.messages && a.messages.length > 0 ? a.messages[a.messages.length - 1] : null;
         const bLastMsg = b.messages && b.messages.length > 0 ? b.messages[b.messages.length - 1] : null;
-        
+
         const aTime = (aLastMsg && !isNaN(new Date(aLastMsg.timestamp).getTime())) ? new Date(aLastMsg.timestamp).getTime() : 0;
         const bTime = (bLastMsg && !isNaN(new Date(bLastMsg.timestamp).getTime())) ? new Date(bLastMsg.timestamp).getTime() : 0;
-        
+
         return bTime - aTime; // Newest messages at the top
       })
       .filter(contact => {
@@ -274,11 +319,51 @@ const Sidebar = React.memo(function Sidebar({
       });
   }, [contacts, searchQuery]);
 
+  // Unified chat entries: DM contacts and E2EE groups interleaved by latest activity
+  const unifiedEntries = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    const lastTimeOf = (messages) => {
+      if (!messages || messages.length === 0) return 0;
+      const ts = new Date(messages[messages.length - 1].timestamp).getTime();
+      return isNaN(ts) ? 0 : ts;
+    };
+
+    const contactEntries = contacts.map(c => ({
+      kind: 'contact',
+      key: `c_${c.username}`,
+      sortTime: lastTimeOf(c.messages),
+      contact: c
+    }));
+
+    const groupEntries = groups.map(g => ({
+      kind: 'group',
+      key: `g_${g.id}`,
+      sortTime: lastTimeOf(g.messages),
+      group: g
+    }));
+
+    return [...contactEntries, ...groupEntries]
+      .filter(entry => {
+        if (!query) return true;
+        if (entry.kind === 'contact') {
+          const c = entry.contact;
+          return (
+            (c.username || '').toLowerCase().includes(query) ||
+            (c.displayName || '').toLowerCase().includes(query) ||
+            (c.customName || '').toLowerCase().includes(query)
+          );
+        }
+        return entry.group.name.toLowerCase().includes(query);
+      })
+      .sort((a, b) => b.sortTime - a.sortTime);
+  }, [contacts, groups, searchQuery]);
+
   useLayoutEffect(() => {
     if (!listRef.current) return;
     
-    // Get current order of usernames in list
-    const currentOrder = filteredContacts.map(c => c.username);
+    // Get current order of entry keys in list
+    const currentOrder = unifiedEntries.map(e => e.key);
     
     // Only run reordering animations if the contact list order changed
     const isOrderChanged = prevOrderRef.current.length > 0 && 
@@ -473,7 +558,18 @@ const Sidebar = React.memo(function Sidebar({
     longPressTimerRef.current = window.setTimeout(() => {
       isLongPressTriggeredRef.current = true;
       if (navigator.vibrate) navigator.vibrate(20);
-      setModalDialog({ contact, step: 'menu' });
+      setModalDialog({ kind: 'contact', contact, step: 'menu' });
+    }, 450);
+  }, []);
+
+  const handleGroupPressStart = useCallback((group, e) => {
+    if (e.button === 2) return;
+    isLongPressTriggeredRef.current = false;
+    window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = window.setTimeout(() => {
+      isLongPressTriggeredRef.current = true;
+      if (navigator.vibrate) navigator.vibrate(20);
+      setModalDialog({ kind: 'group', group, step: 'menu' });
     }, 450);
   }, []);
 
@@ -486,7 +582,15 @@ const Sidebar = React.memo(function Sidebar({
     window.clearTimeout(longPressTimerRef.current);
     isLongPressTriggeredRef.current = true;
     if (navigator.vibrate) navigator.vibrate(20);
-    setModalDialog({ contact, step: 'menu' });
+    setModalDialog({ kind: 'contact', contact, step: 'menu' });
+  }, []);
+
+  const handleGroupContextMenu = useCallback((group, e) => {
+    e.preventDefault();
+    window.clearTimeout(longPressTimerRef.current);
+    isLongPressTriggeredRef.current = true;
+    if (navigator.vibrate) navigator.vibrate(20);
+    setModalDialog({ kind: 'group', group, step: 'menu' });
   }, []);
 
   const [renameInput, setRenameInput] = useState('');
@@ -524,7 +628,7 @@ const Sidebar = React.memo(function Sidebar({
 
   const handleTriggerRename = (contact) => {
     setRenameInput(contact.customName || contact.displayName || '');
-    setModalDialog({ contact, step: 'rename' });
+    setModalDialog({ kind: 'contact', contact, step: 'rename' });
   };
 
   const handleSaveRename = (e) => {
@@ -535,11 +639,16 @@ const Sidebar = React.memo(function Sidebar({
   };
 
   const handleTriggerDelete = (contact) => {
-    setModalDialog({ contact, step: 'confirm-delete' });
+    setModalDialog({ kind: 'contact', contact, step: 'confirm-delete' });
   };
 
   const handleTriggerBlock = (contact) => {
-    setModalDialog({ contact, step: 'confirm-block' });
+    setModalDialog({ kind: 'contact', contact, step: 'confirm-block' });
+  };
+
+  const handleGroupAction = (step) => {
+    if (!modalDialog || !modalDialog.group) return;
+    setModalDialog({ kind: 'group', group: modalDialog.group, step });
   };
 
   const handleConfirmAction = () => {
@@ -569,6 +678,17 @@ const Sidebar = React.memo(function Sidebar({
           <ZapLogo size={32} glow />
           <span className="app-name">ZAP</span>
         </div>
+        {!isMinimized && (
+          <button
+            type="button"
+            className="new-group-btn"
+            onClick={onOpenCreateGroup}
+            title="New Secure Group"
+            aria-label="New Secure Group"
+          >
+            <Users size={20} />
+          </button>
+        )}
       </div>
 
       {/* User Search */}
@@ -629,18 +749,18 @@ const Sidebar = React.memo(function Sidebar({
         )}
       </div>
 
-      {/* Contacts List */}
+      {/* Conversations & Groups List */}
       <div className="contacts-header">Conversations</div>
       <div className="contacts-list-container">
-        {contacts.length === 0 ? (
+        {contacts.length === 0 && groups.length === 0 ? (
           !isMinimized ? (
             <div className="no-contacts">
               <MessageSquare size={36} strokeWidth={1} style={{ marginBottom: '8px', color: 'var(--text-subtle)' }} />
               <p>No active chats.</p>
-              <p style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '4px' }}>Search a username above to start a secure chat.</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '4px' }}>Search a username above to start a secure chat, or create a group.</p>
             </div>
           ) : null
-        ) : filteredContacts.length === 0 ? (
+        ) : unifiedEntries.length === 0 ? (
           !isMinimized ? (
             <div className="no-contacts">
               <Search size={36} strokeWidth={1} style={{ marginBottom: '8px', color: 'var(--text-subtle)' }} />
@@ -650,7 +770,105 @@ const Sidebar = React.memo(function Sidebar({
           ) : null
         ) : (
           <div ref={listRef} className="contacts-list">
-            {filteredContacts.map((contact) => {
+            {unifiedEntries.map((entry) => {
+              if (entry.kind === 'group') {
+                const group = entry.group;
+                const isGroupSelected = !isNavigatingBack && activeGroup?.id === group.id;
+                const lastMsg = group.messages && group.messages.length > 0
+                  ? group.messages[group.messages.length - 1]
+                  : null;
+
+                const typingNames = (group.typingUsers || []).filter(u => u.toLowerCase() !== currentUser.username.toLowerCase());
+
+                let senderPrefix = null;
+                let previewBody = renderGroupMessageBody(lastMsg);
+                if (lastMsg && previewBody) {
+                  const senderLower = String(lastMsg.sender || '').toLowerCase();
+                  const isMine = senderLower === currentUser.username.toLowerCase();
+                  if (!isMine) {
+                    const member = (group.members || []).find(m => m.username.toLowerCase() === senderLower);
+                    const senderName = member?.profile?.displayName || lastMsg.sender;
+                    senderPrefix = (
+                      <span className="group-preview-sender" style={{ fontWeight: '600', marginRight: '4px' }}>
+                        {senderName}:
+                      </span>
+                    );
+                  }
+                }
+
+                return (
+                  <div
+                    key={entry.key}
+                    data-key={entry.key}
+                    className={`contact-item group-item ${isGroupSelected ? 'active' : ''}`}
+                    onMouseDown={(e) => handleGroupPressStart(group, e)}
+                    onMouseUp={handleContactPressEnd}
+                    onMouseLeave={handleContactPressEnd}
+                    onTouchStart={(e) => handleGroupPressStart(group, e)}
+                    onTouchEnd={handleContactPressEnd}
+                    onTouchCancel={handleContactPressEnd}
+                    onContextMenu={(e) => handleGroupContextMenu(group, e)}
+                    onClick={() => {
+                      if (isLongPressTriggeredRef.current) {
+                        isLongPressTriggeredRef.current = false;
+                        return;
+                      }
+                      onSelectGroup?.(group);
+                      setSearchQuery('');
+                      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                        document.activeElement.blur();
+                      }
+                    }}
+                    title="Click to open group • Hold for options"
+                  >
+                    <div className="contact-avatar-container">
+                      {renderGroupAvatar(group, { width: '46px', height: '46px', fontSize: '17px' })}
+                      {isMinimized && group.unreadCount > 0 && (
+                        <span key={group.unreadCount} className="unread-badge minimized-badge">{group.unreadCount}</span>
+                      )}
+                    </div>
+                    <div className="contact-info">
+                      <div className="contact-name-row">
+                        <span className="contact-name">
+                          <span className="contact-display-name">{group.name}</span>
+                          <Users size={12} className="group-list-indicator" />
+                        </span>
+                        {lastMsg && (
+                          <span className="last-msg-time">
+                            {formatSidebarTime(lastMsg.timestamp)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="contact-preview-row">
+                        <div className="contact-preview-text">
+                          {typingNames.length > 0
+                            ? `${typingNames.slice(0, 2).map(u => {
+                                const m = (group.members || []).find(mm => mm.username.toLowerCase() === u.toLowerCase());
+                                return m?.profile?.displayName || u;
+                              }).join(', ')} ${typingNames.length > 1 ? 'are' : 'is'} typing...`
+                            : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                                {lastMsg?.sender?.toLowerCase() === currentUser.username.toLowerCase() && (
+                                  <span style={{ color: 'rgba(255,255,255,0.4)', marginRight: '4px', fontSize: '11px', fontWeight: 'bold', flexShrink: 0 }}>
+                                    {lastMsg.status >= 1 ? '✓✓' : '✓'}
+                                  </span>
+                                )}
+                                {senderPrefix}
+                                {previewBody || <span>No messages yet</span>}
+                              </span>
+                            )
+                          }
+                        </div>
+                        {group.unreadCount > 0 && (
+                          <span key={group.unreadCount} className="unread-badge">{group.unreadCount}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              const contact = entry.contact;
               const isSelected = !isNavigatingBack && activeContact?.username === contact.username;
               const lastMsg = contact.messages && contact.messages.length > 0 
                 ? contact.messages[contact.messages.length - 1]
@@ -658,8 +876,8 @@ const Sidebar = React.memo(function Sidebar({
 
               return (
                 <div
-                  key={contact.username}
-                  data-key={contact.username}
+                  key={entry.key}
+                  data-key={entry.key}
                   className={`contact-item ${isSelected ? 'active' : ''} ${contact.isTyping ? 'typing' : ''}`}
                   onMouseDown={(e) => handleContactPressStart(contact, e)}
                   onMouseUp={handleContactPressEnd}
@@ -748,7 +966,128 @@ const Sidebar = React.memo(function Sidebar({
       {(modalDialog || isModalClosing) && modalDialog && createPortal(
         <div className={`modal-overlay contact-action-overlay ${isModalClosing ? 'closing' : ''}`} onClick={closeModal}>
           <div className="contact-action-modal glass" onClick={(e) => e.stopPropagation()}>
-            {modalDialog.step === 'menu' ? (
+            {modalDialog.kind === 'group' ? (
+              modalDialog.step === 'menu' ? (
+                <div className="modal-step-wrapper" key="group-menu-step">
+                  <div className="contact-action-header">
+                    {renderGroupAvatar(modalDialog.group, { width: '48px', height: '48px', fontSize: '18px' })}
+                    <div className="contact-action-header-info">
+                      <h4>{modalDialog.group.name}</h4>
+                      <span>{(modalDialog.group.members || []).length} members • E2EE</span>
+                    </div>
+                    <button className="contact-action-close" onClick={closeModal} aria-label="Close">
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="contact-action-body">
+                    <button
+                      className="contact-action-option rename-option"
+                      onClick={() => {
+                        const g = modalDialog.group;
+                        setIsModalClosing(true);
+                        setTimeout(() => {
+                          setModalDialog(null);
+                          setIsModalClosing(false);
+                        }, 180);
+                        onOpenGroupInfo?.(g);
+                      }}
+                    >
+                      <div className="action-icon-circle rename-icon">
+                        <Users size={17} />
+                      </div>
+                      <div className="action-option-text">
+                        <span className="action-title">Group Info & Members</span>
+                        <span className="action-desc">Manage members, roles and group identity</span>
+                      </div>
+                    </button>
+
+                    <button
+                      className="contact-action-option block-option"
+                      onClick={() => handleGroupAction('confirm-leave')}
+                    >
+                      <div className="action-icon-circle block-icon">
+                        <LogOut size={17} />
+                      </div>
+                      <div className="action-option-text">
+                        <span className="action-title">Leave Group</span>
+                        <span className="action-desc">Stop receiving messages from this group</span>
+                      </div>
+                    </button>
+
+                    {modalDialog.group.myRole === 'owner' && (
+                      <button
+                        className="contact-action-option delete-option"
+                        onClick={() => handleGroupAction('confirm-delete')}
+                      >
+                        <div className="action-icon-circle delete-icon">
+                          <Trash2 size={18} />
+                        </div>
+                        <div className="action-option-text">
+                          <span className="action-title">Delete Group</span>
+                          <span className="action-desc">Permanently remove this group for everyone</span>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="contact-action-footer">
+                    <button className="contact-action-cancel-btn" onClick={closeModal}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="modal-step-wrapper confirmation-step-wrapper" key={modalDialog.step}>
+                  <div className="confirmation-icon-container">
+                    {modalDialog.step === 'confirm-delete' ? (
+                      <div className="confirmation-icon delete-icon">
+                        <Trash2 size={24} />
+                      </div>
+                    ) : (
+                      <div className="confirmation-icon block-icon">
+                        <LogOut size={24} />
+                      </div>
+                    )}
+                  </div>
+
+                  <h3 className="confirmation-title">
+                    {modalDialog.step === 'confirm-delete'
+                      ? `Delete "${modalDialog.group?.name}"?`
+                      : `Leave "${modalDialog.group?.name}"?`}
+                  </h3>
+
+                  <p className="confirmation-desc">
+                    {modalDialog.step === 'confirm-delete'
+                      ? 'The group and its encrypted history will be permanently destroyed for every member. This cannot be undone.'
+                      : 'You will stop receiving messages in this group. Encryption keys will be rotated so the group stays protected.'}
+                  </p>
+
+                  <div className="confirmation-actions">
+                    <button className="confirmation-cancel-btn" onClick={() => handleGroupAction('menu')}>
+                      Cancel
+                    </button>
+                    <button
+                      className={`confirmation-danger-btn ${modalDialog.step === 'confirm-delete' ? 'delete-confirm' : 'block-confirm'}`}
+                      onClick={() => {
+                        const groupId = modalDialog.group.id;
+                        const action = modalDialog.step;
+                        setIsModalClosing(true);
+                        setTimeout(() => {
+                          setModalDialog(null);
+                          setIsModalClosing(false);
+                        }, 180);
+                        if (action === 'confirm-delete') onDeleteGroup?.(groupId);
+                        else onLeaveGroup?.(groupId);
+                      }}
+                    >
+                      {modalDialog.step === 'confirm-delete' ? 'Delete Forever' : 'Leave Group'}
+                    </button>
+                  </div>
+                </div>
+              )
+            ) : (
+            modalDialog.step === 'menu' ? (
               <div className="modal-step-wrapper" key="menu-step">
                 <div className="contact-action-header">
                   {renderAvatar(modalDialog.contact.username, modalDialog.contact.customName || modalDialog.contact.displayName, modalDialog.contact.avatarIcon, { width: '48px', height: '48px', fontSize: '18px' })}
@@ -884,7 +1223,7 @@ const Sidebar = React.memo(function Sidebar({
                 </p>
 
                 <div className="confirmation-actions">
-                  <button className="confirmation-cancel-btn" onClick={() => setModalDialog({ contact: modalDialog.contact, step: 'menu' })}>
+                  <button className="confirmation-cancel-btn" onClick={() => setModalDialog({ kind: 'contact', contact: modalDialog.contact, step: 'menu' })}>
                     Cancel
                   </button>
                   <button 
@@ -895,6 +1234,7 @@ const Sidebar = React.memo(function Sidebar({
                   </button>
                 </div>
               </div>
+            )
             )}
           </div>
         </div>,

@@ -11,7 +11,22 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        // The backend takes a few seconds to boot (SQLite init) while Vite is
+        // already up. Socket.IO retries automatically, so swallow the startup
+        // race errors instead of flooding the console with red ECONNREFUSED.
+        configure: (proxy) => {
+          proxy.on('error', (err, req, res) => {
+            if (err.code === 'ECONNREFUSED' || err.code === 'ECONNRESET') {
+              if (res && !res.headersSent && typeof res.writeHead === 'function') {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Server starting, retrying...' }));
+              }
+              return;
+            }
+            console.error('proxy error:', err.message);
+          });
+        }
       },
       '/uploads': {
         target: 'http://localhost:5000',
@@ -20,7 +35,19 @@ export default defineConfig({
       '/socket.io': {
         target: 'http://localhost:5000',
         ws: true,
-        changeOrigin: true
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err, req, res) => {
+            if (err.code === 'ECONNREFUSED' || err.code === 'ECONNRESET') {
+              if (res && !res.headersSent && typeof res.writeHead === 'function') {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Server starting, retrying...' }));
+              }
+              return;
+            }
+            console.error('proxy error:', err.message);
+          });
+        }
       }
     }
   }

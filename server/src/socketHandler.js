@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { dbRun, dbAll, dbGet } from './db.js';
 import config from './config.js';
 import logger from './logger.js';
+import { registerGroupHandlers } from './groupHandler.js';
 
 // Map to track active sockets by username: username (lowercase) -> Set(socketId)
 const onlineUsers = new Map();
@@ -117,6 +118,15 @@ export const socketHandler = (io) => {
     // Track online user socket
     const wentOnline = addUserSocket(username, socket.id);
     socket.join(username.toLowerCase()); // Case-insensitive room name subscription
+
+    // Subscribe the socket to every group room this user is a member of
+    dbAll('SELECT group_id FROM group_members WHERE LOWER(username) = LOWER(?)', [username])
+      .then((rows) => {
+        for (const row of rows) {
+          socket.join(`group_${row.group_id}`);
+        }
+      })
+      .catch((err) => logger.error('Failed to join group rooms on connect:', err));
 
     // Per-socket event rate limiting (max 120 event packets per second per connection)
     let eventCount = 0;
@@ -820,6 +830,11 @@ export const socketHandler = (io) => {
         logger.error('Error in typing event:', err);
       }
     });
+
+    // ==========================================
+    // E2EE Group Chat handlers (see groupHandler.js)
+    // ==========================================
+    registerGroupHandlers(socket, io, { isUserOnline });
 
     socket.on('disconnect', () => {
       clearInterval(resetTimer);

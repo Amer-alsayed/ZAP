@@ -35,3 +35,15 @@
 - [x] Implement client-side file encryption & server-side `/api/upload` endpoint
 - [x] Implement voice notes recording & playback (E2EE)
 - [x] Implement WebRTC P2P voice/video call setup
+
+## Phase 7: E2EE Group Chats (Sender-Key model)
+- [x] Server schema: `groups`, `group_members`, `group_messages`, `group_key_envelopes`, `group_reads` (+ indexes)
+- [x] Group socket API: create / list / history / send / add / remove / leave / delete / roles / typing / read state
+- [x] Versioned group keys sealed per-member via pairwise ECDH envelopes; rotation on every membership change
+- [x] Late-joiner isolation (`joined_kv` history filter) & removed-member future-secrecy
+- [x] Encrypted group identity: names & avatars stored only as ciphertext under the group key
+- [x] Client group engine in App.jsx (key cache, envelope fetch, verify+decrypt pipeline, unread badges)
+- [x] CreateGroupModal & GroupInfoModal (members, roles, rename/re-avatar, add/remove, leave, delete)
+- [x] Sidebar unified chats list (DMs + groups), sender-prefixed previews, multi-user typing indicator
+- [x] ChatArea group mode: member count header, info panel, sender attribution labels, system event pills
+- [x] Forwarding into groups; permission checks; rate limiting; full protocol test suite passing
