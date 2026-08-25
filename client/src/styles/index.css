@@ -11506,6 +11506,19 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.group-info-header-title {
+  animation: groupHeaderTitleSwap 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes groupHeaderTitleSwap {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 3px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
 .create-group-title-icon {
   width: 30px;
   height: 30px;
@@ -11554,6 +11567,76 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.group-info-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  will-change: transform, opacity;
+}
+
+.group-info-view.forward {
+  animation: groupViewSlideInForward 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.group-info-view.back {
+  animation: groupViewSlideInBack 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.group-info-view.forward.leaving {
+  animation: groupViewSlideOutForward 0.15s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+.group-info-view.back.leaving {
+  animation: groupViewSlideOutBack 0.15s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes groupViewSlideInForward {
+  from {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes groupViewSlideOutForward {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-16px, 0, 0);
+  }
+}
+
+@keyframes groupViewSlideInBack {
+  from {
+    opacity: 0;
+    transform: translate3d(-16px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes groupViewSlideOutBack {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0);
+  }
 }
 
 /* Group avatar photo upload */
@@ -12125,16 +12208,20 @@ textarea {
 .group-confirm-layer {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 18px;
   z-index: 10;
   border-radius: 20px;
-  animation: modalOverlayIn 0.18s ease forwards;
+  animation: modalOverlayFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.group-confirm-layer.closing {
+  animation: modalOverlayFadeOut 0.18s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
 }
 .group-confirm-card {
   width: 100%;
@@ -12144,7 +12231,10 @@ textarea {
   border-radius: 16px;
   padding: 18px;
   text-align: center;
-  animation: modalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: modalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.group-confirm-card.closing {
+  animation: modalScaleOut 0.18s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 .group-confirm-card h4 {
   margin: 0 0 8px 0;

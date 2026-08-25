@@ -257,7 +257,7 @@ const CreateGroupModal = ({ contacts = [], currentUser, blockedUsers = [], onClo
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, .png, .jpg, .jpeg, .webp, .gif"
             style={{ display: 'none' }}
             onChange={handleAvatarFileChange}
           />

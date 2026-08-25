@@ -341,7 +341,7 @@ const GroupInfoModal = ({
           ) : (
             <div className="create-group-title-icon"><Users size={18} /></div>
           )}
-          <h3>
+          <h3 key={view} className="group-info-header-title">
             {view === 'main' && 'Group Info'}
             {view === 'add-members' && 'Add Members'}
             {view === 'edit-info' && 'Edit Group'}
@@ -361,174 +361,200 @@ const GroupInfoModal = ({
           {error && <div className="create-group-error">{error}</div>}
 
           <div key={view} className={`group-info-view ${navDir} ${viewLeaving ? 'leaving' : ''}`}>
-          {view === 'main' && (
-            <>
-              <div className="group-info-hero">
-                {renderAvatar(group.name || 'G', null, group.avatarIcon, { width: '64px', height: '64px', fontSize: '30px' })}
-                <div className="group-info-hero-text">
-                  <h4>{group.name}</h4>
-                  <span>{members.length} member{members.length === 1 ? '' : 's'} • End-to-end encrypted</span>
+            {view === 'main' && (
+              <>
+                <div className="group-info-hero">
+                  {renderAvatar(group.name || 'G', null, group.avatarIcon, { width: '64px', height: '64px', fontSize: '30px' })}
+                  <div className="group-info-hero-text">
+                    <h4>{group.name}</h4>
+                    <span>{members.length} member{members.length === 1 ? '' : 's'} • End-to-end encrypted</span>
+                  </div>
                 </div>
-              </div>
 
-              {isAdmin && (
-                <div className="group-info-actions-row">
-                  <button type="button" className="group-info-action-pill" onClick={() => { setView('edit-info'); setEditName(group.name || ''); setEditAvatarImage(parseGroupAvatarImage(group.avatarIcon)); setError(''); }} disabled={busy}>
-                    <Pencil size={14} /> Edit
-                  </button>
-                  <button type="button" className="group-info-action-pill" onClick={() => { setView('add-members'); setPendingAdd([]); setError(''); }} disabled={busy}>
-                    <UserPlus size={14} /> Add
-                  </button>
+                {isAdmin && (
+                  <div className="group-info-actions-row">
+                    <button
+                      type="button"
+                      className="group-info-action-pill"
+                      onClick={() => {
+                        setEditName(group.name || '');
+                        setEditAvatarImage(parseGroupAvatarImage(group.avatarIcon));
+                        setError('');
+                        changeView('edit-info', 'forward');
+                      }}
+                      disabled={busy}
+                    >
+                      <Pencil size={14} /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="group-info-action-pill"
+                      onClick={() => {
+                        setPendingAdd([]);
+                        setError('');
+                        changeView('add-members', 'forward');
+                      }}
+                      disabled={busy}
+                    >
+                      <UserPlus size={14} /> Add
+                    </button>
+                  </div>
+                )}
+
+                <div className="group-info-section-label">Members</div>
+                <div className="group-member-list">
+                  {members.map(renderMemberRow)}
                 </div>
-              )}
 
-              <div className="group-info-section-label">Members</div>
-              <div className="group-member-list">
-                {members.map(renderMemberRow)}
-              </div>
+                <div className="group-info-danger-zone">
+                  <button type="button" className="group-info-danger-btn leave" onClick={() => setConfirmAction({ type: 'leave' })} disabled={busy}>
+                    <LogOut size={15} /> Leave Group
+                  </button>
+                  {isOwner && (
+                    <button type="button" className="group-info-danger-btn delete" onClick={() => setConfirmAction({ type: 'delete' })} disabled={busy}>
+                      <Trash2 size={15} /> Delete Group
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
 
-              <div className="group-info-danger-zone">
-                <button type="button" className="group-info-danger-btn leave" onClick={() => setConfirmAction({ type: 'leave' })} disabled={busy}>
-                  <LogOut size={15} /> Leave Group
+            {view === 'add-members' && (
+              <>
+                <div className="create-group-search-wrap">
+                  <Search size={14} className="create-group-search-icon" />
+                  <input
+                    type="text"
+                    className="create-group-search-input"
+                    placeholder="Find by exact username..."
+                    value={addSearchQuery}
+                    onChange={(e) => { setAddSearchQuery(e.target.value); setError(''); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchForAdd(); } }}
+                    disabled={busy}
+                  />
+                  {isSearching && <span className="create-group-search-spinner" />}
+                </div>
+
+                {searchedUser && (
+                  <div className="create-group-search-result">
+                    {renderAvatar(searchedUser.username, searchedUser.displayName, searchedUser.avatarIcon, { width: '34px', height: '34px', fontSize: '13px' })}
+                    <div className="create-group-search-result-info">
+                      <span className="create-group-result-name">{searchedUser.displayName || searchedUser.username}</span>
+                      <span className="create-group-result-username">@{searchedUser.username}</span>
+                    </div>
+                    <button type="button" className="create-group-add-user-btn" onClick={addSearchedUser}>Select</button>
+                  </div>
+                )}
+
+                {pendingAdd.length > 0 && (
+                  <>
+                    <div className="create-group-members-label-row">
+                      <span className="create-group-picker-label">Pending invites</span>
+                      <span className="create-group-member-count">{pendingAdd.length}</span>
+                    </div>
+                    <div className="group-pending-list">
+                      {pendingAdd.map((user) => (
+                        <div key={user.username} className="group-member-row">
+                          {renderAvatar(user.username, user.displayName, user.avatarIcon, { width: '36px', height: '36px', fontSize: '13px' })}
+                          <div className="group-member-info">
+                            <span className="group-member-name">{user.displayName || user.username}</span>
+                            <span className="group-member-username">@{user.username}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="group-member-action-btn remove-btn"
+                            title="Remove from selection"
+                            onClick={() => setPendingAdd(prev => prev.filter(u => u.username !== user.username))}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  className={`group-add-confirm-btn ${pendingAdd.length === 0 || busy ? 'disabled' : ''}`}
+                  onClick={confirmAddPending}
+                  disabled={pendingAdd.length === 0 || busy}
+                >
+                  {busy ? 'Sealing new encryption keys…' : `Add ${pendingAdd.length || ''} to group`}
                 </button>
-                {isOwner && (
-                  <button type="button" className="group-info-danger-btn delete" onClick={() => setConfirmAction({ type: 'delete' })} disabled={busy}>
-                    <Trash2 size={15} /> Delete Group
+                <p className="group-add-note">Adding members rotates the group encryption key. New members will only see messages sent after they join.</p>
+              </>
+            )}
+
+            {view === 'edit-info' && (
+              <>
+                <div className="create-group-identity-row">
+                  <div className="group-avatar-upload">
+                    {renderAvatar(editName.trim() || 'G', null, editAvatarImage ? JSON.stringify({ image: editAvatarImage }) : null, { width: '64px', height: '64px', fontSize: '24px' })}
+                    <button
+                      type="button"
+                      className="group-avatar-cam-btn"
+                      onClick={() => editFileInputRef.current?.click()}
+                      disabled={busy}
+                      title={editAvatarImage ? 'Change photo' : 'Add photo'}
+                      aria-label="Change group photo"
+                    >
+                      <Camera size={13} />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    className="create-group-name-input"
+                    placeholder="Group name"
+                    value={editName}
+                    maxLength={32}
+                    onChange={(e) => setEditName(e.target.value)}
+                    disabled={busy}
+                  />
+                </div>
+
+                <input
+                  ref={editFileInputRef}
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, .png, .jpg, .jpeg, .webp, .gif"
+                  style={{ display: 'none' }}
+                  onChange={handleEditAvatarFileChange}
+                />
+
+                {editAvatarImage && (
+                  <button type="button" className="group-avatar-remove-btn" onClick={() => setEditAvatarImage('')} disabled={busy}>
+                    <Trash2 size={13} /> Remove photo
                   </button>
                 )}
-              </div>
-            </>
-          )}
 
-          {view === 'add-members' && (
-            <>
-              <div className="create-group-search-wrap">
-                <Search size={14} className="create-group-search-icon" />
-                <input
-                  type="text"
-                  className="create-group-search-input"
-                  placeholder="Find by exact username..."
-                  value={addSearchQuery}
-                  onChange={(e) => { setAddSearchQuery(e.target.value); setError(''); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchForAdd(); } }}
+                <button
+                  type="button"
+                  className={`group-add-confirm-btn ${busy ? 'disabled' : ''}`}
+                  onClick={confirmUpdateInfo}
                   disabled={busy}
-                />
-                {isSearching && <span className="create-group-search-spinner" />}
-              </div>
-
-              {searchedUser && (
-                <div className="create-group-search-result">
-                  {renderAvatar(searchedUser.username, searchedUser.displayName, searchedUser.avatarIcon, { width: '34px', height: '34px', fontSize: '13px' })}
-                  <div className="create-group-search-result-info">
-                    <span className="create-group-result-name">{searchedUser.displayName || searchedUser.username}</span>
-                    <span className="create-group-result-username">@{searchedUser.username}</span>
-                  </div>
-                  <button type="button" className="create-group-add-user-btn" onClick={addSearchedUser}>Select</button>
-                </div>
-              )}
-
-              {pendingAdd.length > 0 && (
-                <>
-                  <div className="create-group-members-label-row">
-                    <span className="create-group-picker-label">Pending invites</span>
-                    <span className="create-group-member-count">{pendingAdd.length}</span>
-                  </div>
-                  <div className="group-pending-list">
-                    {pendingAdd.map((user) => (
-                      <div key={user.username} className="group-member-row">
-                        {renderAvatar(user.username, user.displayName, user.avatarIcon, { width: '36px', height: '36px', fontSize: '13px' })}
-                        <div className="group-member-info">
-                          <span className="group-member-name">{user.displayName || user.username}</span>
-                          <span className="group-member-username">@{user.username}</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="group-member-action-btn remove-btn"
-                          title="Remove from selection"
-                          onClick={() => setPendingAdd(prev => prev.filter(u => u.username !== user.username))}
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              <button
-                type="button"
-                className={`group-add-confirm-btn ${pendingAdd.length === 0 || busy ? 'disabled' : ''}`}
-                onClick={confirmAddPending}
-                disabled={pendingAdd.length === 0 || busy}
-              >
-                {busy ? 'Sealing new encryption keys…' : `Add ${pendingAdd.length || ''} to group`}
-              </button>
-              <p className="group-add-note">Adding members rotates the group encryption key. New members will only see messages sent after they join.</p>
-            </>
-          )}
-
-          {view === 'edit-info' && (
-            <>
-              <div className="create-group-identity-row">
-                <div className="group-avatar-upload">
-                  {renderAvatar(editName.trim() || 'G', null, editAvatarImage ? JSON.stringify({ image: editAvatarImage }) : null, { width: '64px', height: '64px', fontSize: '24px' })}
-                  <button
-                    type="button"
-                    className="group-avatar-cam-btn"
-                    onClick={() => editFileInputRef.current?.click()}
-                    disabled={busy}
-                    title={editAvatarImage ? 'Change photo' : 'Add photo'}
-                    aria-label="Change group photo"
-                  >
-                    <Camera size={13} />
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  className="create-group-name-input"
-                  placeholder="Group name"
-                  value={editName}
-                  maxLength={32}
-                  onChange={(e) => setEditName(e.target.value)}
-                  disabled={busy}
-                />
-              </div>
-
-              <input
-                ref={editFileInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={handleEditAvatarFileChange}
-              />
-
-              {editAvatarImage && (
-                <button type="button" className="group-avatar-remove-btn" onClick={() => setEditAvatarImage('')} disabled={busy}>
-                  <Trash2 size={13} /> Remove photo
+                >
+                  {busy ? 'Encrypting & saving…' : 'Save changes'}
                 </button>
-              )}
-
-              <button
-                type="button"
-                className={`group-add-confirm-btn ${busy ? 'disabled' : ''}`}
-                onClick={confirmUpdateInfo}
-                disabled={busy}
-              >
-                {busy ? 'Encrypting & saving…' : 'Save changes'}
-              </button>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
 
         {confirmAction && (
-          <div className="group-confirm-layer">
-            <div className="group-confirm-card glass">
+          <div
+            className={`group-confirm-layer ${confirmClosing ? 'closing' : ''}`}
+            onClick={busy ? undefined : closeConfirm}
+          >
+            <div
+              className={`group-confirm-card glass ${confirmClosing ? 'closing' : ''}`}
+              onClick={(e) => e.stopPropagation()}
+            >
               {confirmAction.type === 'remove' && (
                 <>
                   <h4>Remove @{confirmAction.username}?</h4>
                   <p>They will no longer receive messages in this group. The encryption key will be rotated immediately so they cannot read future messages.</p>
                   <div className="group-confirm-actions">
-                    <button className="confirmation-cancel-btn" onClick={() => setConfirmAction(null)} disabled={busy}>Cancel</button>
+                    <button className="confirmation-cancel-btn" onClick={closeConfirm} disabled={busy}>Cancel</button>
                     <button className="confirmation-danger-btn delete-confirm" onClick={runConfirmed} disabled={busy}>Remove</button>
                   </div>
                 </>
@@ -538,7 +564,7 @@ const GroupInfoModal = ({
                   <h4>Leave this group?</h4>
                   <p>You will stop receiving messages{isOwner ? '. Ownership will transfer to the earliest joined member.' : '.'}</p>
                   <div className="group-confirm-actions">
-                    <button className="confirmation-cancel-btn" onClick={() => setConfirmAction(null)} disabled={busy}>Cancel</button>
+                    <button className="confirmation-cancel-btn" onClick={closeConfirm} disabled={busy}>Cancel</button>
                     <button className="confirmation-danger-btn leave-confirm" onClick={runConfirmed} disabled={busy}>Leave</button>
                   </div>
                 </>
@@ -548,7 +574,7 @@ const GroupInfoModal = ({
                   <h4>Delete this group?</h4>
                   <p>The group and its encrypted history will be permanently removed for all members. This cannot be undone.</p>
                   <div className="group-confirm-actions">
-                    <button className="confirmation-cancel-btn" onClick={() => setConfirmAction(null)} disabled={busy}>Cancel</button>
+                    <button className="confirmation-cancel-btn" onClick={closeConfirm} disabled={busy}>Cancel</button>
                     <button className="confirmation-danger-btn delete-confirm" onClick={runConfirmed} disabled={busy}>Delete Forever</button>
                   </div>
                 </>

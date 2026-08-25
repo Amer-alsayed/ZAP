@@ -414,7 +414,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept="image/*"
+            accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, .png, .jpg, .jpeg, .webp, .gif"
             style={{ display: 'none' }}
           />
 
