@@ -67,12 +67,17 @@ export const dbRun = async (query, params = []) => {
   if (isPostgres) {
     let sql = query
       .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'SERIAL PRIMARY KEY')
-      .replace(/DATETIME DEFAULT CURRENT_TIMESTAMP/g, 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
-    
+      .replace(/DATETIME DEFAULT CURRENT_TIMESTAMP/g, 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+      .replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO');
+
     if (sql.trim().toUpperCase().startsWith('INSERT') && !sql.toUpperCase().includes('RETURNING')) {
-      sql += ' RETURNING id';
+      // RETURNING * works for every table shape: tables with an `id` column
+      // expose it through rows[0].id, composite-key tables simply return
+      // their own columns. `OR IGNORE` maps to ON CONFLICT DO NOTHING.
+      const wasIgnore = /INSERT OR IGNORE/i.test(query);
+      sql += wasIgnore ? ' ON CONFLICT DO NOTHING RETURNING *' : ' RETURNING *';
     }
-    
+
     sql = convertSqlPlaceholders(sql);
     const res = await pgPool.query(sql, params);
     return {
