@@ -4834,7 +4834,7 @@ export default function App() {
                 isMuted={isMuted}
                 isCameraOff={isCameraOff}
                 isScreenSharing={isScreenSharing}
-                minimized={gcMinimized && gcState === 'connected'}
+                minimized={gcMinimized && (gcState === 'connected' || gcState === 'calling')}
                 onToggleMinimize={() => setGcMinimized((v) => !v)}
                 onAccept={handleAcceptGroupCall}
                 onDecline={handleDeclineGroupCall}
