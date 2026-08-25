@@ -232,22 +232,33 @@ export const registerGroupHandlers = (socket, io, helpers) => {
       const group = await getGroupMeta(groupId);
       const ownerPayload = await buildGroupPayload(group, username);
 
-      // Join online sockets to the group room and inform everyone.
-      // This MUST complete before the ack: the creator's next action (system
-      // message, call, etc.) broadcasts into this room immediately after.
+      // The creator's OWN room join must complete before the ack: their next
+      // action (system message, call, etc.) broadcasts into this room.
+      if (isUserOnline(username.toLowerCase())) {
+        await io.in(username.toLowerCase()).socketsJoin(`group_${groupId}`);
+      }
+
+      // Ack BEFORE fanout: the rows are committed, so the creation must never
+      // be reported as failed because of a post-mutation notification issue.
+      callback?.({ success: true, groupId, group: ownerPayload });
+
+      // Other members: best effort — offline members get their room
+      // subscription on next connect anyway.
       for (const memberLower of allMembers) {
-        if (isUserOnline(memberLower)) {
-          await io.in(memberLower.toLowerCase()).socketsJoin(`group_${groupId}`);
-          if (memberLower !== username.toLowerCase()) {
-            const memberPayload = await buildGroupPayload(group, memberLower);
+        try {
+          if (memberLower === username.toLowerCase()) continue;
+          if (isUserOnline(memberLower)) {
+            await io.in(memberLower.toLowerCase()).socketsJoin(`group_${groupId}`);
+            const memberPayload = await buildGroupPayload(group, memberLower).catch(() => null);
             if (memberPayload) {
               io.to(memberLower.toLowerCase()).emit('group-added', memberPayload);
             }
           }
+        } catch (fanoutErr) {
+          logger.warn(`create-group: post-setup issue for ${memberLower} in group ${groupId}:`, fanoutErr);
         }
       }
 
-      callback?.({ success: true, groupId, group: ownerPayload });
       logger.info(`Group ${groupId} created by ${username} with ${allMembers.length} members`);
     } catch (error) {
       logger.error('Error creating group:', error);
@@ -442,10 +453,14 @@ export const registerGroupHandlers = (socket, io, helpers) => {
       }
 
       // Room joins must complete before the ack — the actor may broadcast
-      // (system message, call) into this room immediately after
+      // (system message, call) into this room immediately after.
       for (const lower of toAdd) {
-        if (isUserOnline(lower)) {
-          await io.in(lower.toLowerCase()).socketsJoin(`group_${gid}`);
+        try {
+          if (isUserOnline(lower)) {
+            await io.in(lower.toLowerCase()).socketsJoin(`group_${gid}`);
+          }
+        } catch (joinErr) {
+          logger.warn(`add-group-members: room join issue for ${lower}:`, joinErr);
         }
       }
 

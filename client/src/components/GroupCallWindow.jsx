@@ -163,10 +163,64 @@ const GroupCallWindow = ({
       velocityRef.current.vy
     );
     currentPosRef.current = { x: targetX, y: targetY };
+    // Restore the class transition so the snap eases into the corner
     if (overlayRef.current) {
-      overlayRef.current.style.transform = `translate3d(${targetX}px, ${targetY}px, 0)`;
+      overlayRef.current.style.transition = 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease';
+      overlayRef.current.style.transform = `translate3d(${targetX}px, ${targetY}px, 0) scale(1) rotate(0deg)`;
     }
   }, [calculateSnapTarget, handleMouseMove]);
+
+  const handleTouchMove = useCallback((e) => {
+    if (!isDraggingRef.current) return;
+    e.preventDefault();
+
+    const dx = e.touches[0].clientX - dragStartRef.current.mouseX;
+    const dy = e.touches[0].clientY - dragStartRef.current.mouseY;
+
+    const now = performance.now();
+    const dt = Math.max(1, now - velocityRef.current.lastTime);
+    velocityRef.current.vx = (e.touches[0].clientX - velocityRef.current.lastX) / dt;
+    velocityRef.current.vy = (e.touches[0].clientY - velocityRef.current.lastY) / dt;
+    velocityRef.current.lastX = e.touches[0].clientX;
+    velocityRef.current.lastY = e.touches[0].clientY;
+    velocityRef.current.lastTime = now;
+
+    const { minX, maxX, minY, maxY } = getDockBounds();
+    let curX = dragStartRef.current.pipX + dx;
+    let curY = dragStartRef.current.pipY + dy;
+
+    if (curX < minX) curX = minX + (curX - minX) * 0.3;
+    else if (curX > maxX) curX = maxX + (curX - maxX) * 0.3;
+    if (curY < minY) curY = minY + (curY - minY) * 0.3;
+    else if (curY > maxY) curY = maxY + (curY - maxY) * 0.3;
+
+    currentPosRef.current = { x: curX, y: curY };
+    const tilt = Math.max(-5, Math.min(5, velocityRef.current.vx * 3));
+    if (overlayRef.current) {
+      overlayRef.current.style.transform = `translate3d(${curX}px, ${curY}px, 0) scale(1.03) rotate(${tilt}deg)`;
+    }
+  }, [getDockBounds]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    setIsDraggingPip(false);
+    document.body.classList.remove('dragging-pip');
+    document.removeEventListener('touchmove', handleTouchMove);
+    document.removeEventListener('touchend', handleTouchEnd);
+
+    const { targetX, targetY } = calculateSnapTarget(
+      currentPosRef.current.x,
+      currentPosRef.current.y,
+      velocityRef.current.vx,
+      velocityRef.current.vy
+    );
+    currentPosRef.current = { x: targetX, y: targetY };
+    if (overlayRef.current) {
+      overlayRef.current.style.transition = 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease';
+      overlayRef.current.style.transform = `translate3d(${targetX}px, ${targetY}px, 0) scale(1) rotate(0deg)`;
+    }
+  }, [calculateSnapTarget, handleTouchMove]);
 
   const handleMouseDown = (e) => {
     if (!minimized) return;
@@ -195,9 +249,24 @@ const GroupCallWindow = ({
   const handleTouchStart = (e) => {
     if (!minimized) return;
     if (e.target.closest('button')) return;
-    const touch = e.touches[0];
-    if (!touch) return;
-    handleMouseDown(touch);
+    if (window.getSelection) window.getSelection().removeAllRanges();
+    document.body.classList.add('dragging-pip');
+
+    isDraggingRef.current = true;
+    setIsDraggingPip(true);
+
+    const now = performance.now();
+    dragStartRef.current = {
+      mouseX: e.touches[0].clientX,
+      mouseY: e.touches[0].clientY,
+      pipX: currentPosRef.current.x,
+      pipY: currentPosRef.current.y
+    };
+    velocityRef.current = { vx: 0, vy: 0, lastX: e.touches[0].clientX, lastY: e.touches[0].clientY, lastTime: now };
+
+    if (overlayRef.current) overlayRef.current.style.transition = 'none';
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd);
   };
 
   // ===== Minimize / Expand: same FLIP keyframe animation as the DM call =====
