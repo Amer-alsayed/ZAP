@@ -1402,10 +1402,10 @@ const MessageList = React.memo(({
         const emojiCount = isOnlyEmojiMsg ? getEmojiCount(msg.text) : 0;
 
         const prevMsg = groupedMessages[index - 1];
-        // System pills and call logs must break sender grouping, otherwise a
-        // message following a system event from the same person hides its name
+        // Date separators, system pills, and call logs must break sender grouping, otherwise a
+        // message on a new day or following a system event from the same person hides its sender name and avatar
         const isGroupingBreaker = prevMsg && (prevMsg.mediaType === 'call' || prevMsg.mediaType === 'system');
-        const isFirstOfGroup = !prevMsg || isGroupingBreaker || (prevMsg.sender?.toLowerCase() !== msg.sender?.toLowerCase());
+        const isFirstOfGroup = !prevMsg || showDateSeparator || isGroupingBreaker || (prevMsg.sender?.toLowerCase() !== msg.sender?.toLowerCase());
         const isSelectedMsg = (msg.isAlbum || msg.isMultiFile) 
           ? msg.allIds.some(id => selectedIds.includes(id)) 
           : selectedIds.includes(msg.id);
