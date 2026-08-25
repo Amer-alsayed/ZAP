@@ -1220,18 +1220,17 @@ button {
 
 /* Contact Item Typing States & Unread Badges Micro-animations */
 .contact-item.typing .avatar {
-  animation: avatar-typing-glow 1.5s infinite ease-in-out;
-  border-color: var(--accent-color);
+  animation: avatar-typing-pulse 1.5s infinite ease-in-out;
 }
 
 .contact-item.typing .contact-preview-row p {
   animation: typing-text-breathe 1.2s infinite ease-in-out;
 }
 
-@keyframes avatar-typing-glow {
-  0% { box-shadow: 0 0 0 0 rgba(0, 122, 204, 0.4); border-color: rgba(0, 122, 204, 0.4); }
-  70% { box-shadow: 0 0 0 6px rgba(0, 122, 204, 0); border-color: var(--accent-color); }
-  100% { box-shadow: 0 0 0 0 rgba(0, 122, 204, 0); border-color: rgba(0, 122, 204, 0.4); }
+@keyframes avatar-typing-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
 }
 
 @keyframes typing-text-breathe {
@@ -11080,6 +11079,10 @@ textarea {
 .forward-contact-item.is-sending {
   background: var(--accent-surface);
   border-color: var(--accent-border);
+}
+
+.forward-contact-item:not(:disabled):active {
+  transform: scale(0.98);
 }
 
 .forward-contact-item:disabled {

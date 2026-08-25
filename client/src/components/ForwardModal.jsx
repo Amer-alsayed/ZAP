@@ -30,6 +30,9 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
   };
 
   useEffect(() => {
+    // Fresh state for every newly opened forward session (the modal component
+    // stays mounted, so lingering isClosing/search/selection must be cleared)
+    setIsClosing(false);
     setSearchQuery('');
     setForwardingTo(null);
   }, [message]);
@@ -84,13 +87,18 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
   const previewText = buildForwardPreview(message);
 
   const handleSelect = async (target) => {
-    if (forwardingTo) return;
+    if (forwardingTo || isClosing) return;
     setForwardingTo(target.key);
+    let succeeded = false;
     try {
       await onConfirm(target);
+      succeeded = true;
     } finally {
       setForwardingTo(null);
     }
+    // Success follows the app's animated close; failures keep the modal
+    // open with the row back to idle so the user can retry elsewhere
+    if (succeeded) requestClose();
   };
 
   return (

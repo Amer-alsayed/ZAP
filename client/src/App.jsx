@@ -2464,9 +2464,8 @@ export default function App() {
       } catch (err) {
         console.error('Group forwarding failed:', err);
         showToast(`Failed to forward message: ${err.message || 'Unknown error'}`, 'error');
-      } finally {
-        setForwardingMessage(null);
       }
+      // The modal animates itself closed on success and stays open on failure
       return;
     }
 
@@ -2521,8 +2520,6 @@ export default function App() {
     } catch (err) {
       console.error('E2EE forwarding failed:', err);
       showToast(`Failed to forward message: ${err.message || 'Unknown error'}`, 'error');
-    } finally {
-      setForwardingMessage(null);
     }
   };
 
