@@ -1003,10 +1003,10 @@ const Sidebar = React.memo(function Sidebar({
                     </button>
 
                     <button
-                      className="contact-action-option block-option"
+                      className="contact-action-option leave-option"
                       onClick={() => handleGroupAction('confirm-leave')}
                     >
-                      <div className="action-icon-circle block-icon">
+                      <div className="action-icon-circle leave-icon">
                         <LogOut size={17} />
                       </div>
                       <div className="action-option-text">
@@ -1045,7 +1045,7 @@ const Sidebar = React.memo(function Sidebar({
                         <Trash2 size={24} />
                       </div>
                     ) : (
-                      <div className="confirmation-icon block-icon">
+                      <div className="confirmation-icon leave-icon">
                         <LogOut size={24} />
                       </div>
                     )}
@@ -1068,7 +1068,7 @@ const Sidebar = React.memo(function Sidebar({
                       Cancel
                     </button>
                     <button
-                      className={`confirmation-danger-btn ${modalDialog.step === 'confirm-delete' ? 'delete-confirm' : 'block-confirm'}`}
+                      className={`confirmation-danger-btn ${modalDialog.step === 'confirm-delete' ? 'delete-confirm' : 'leave-confirm'}`}
                       onClick={() => {
                         const groupId = modalDialog.group.id;
                         const action = modalDialog.step;

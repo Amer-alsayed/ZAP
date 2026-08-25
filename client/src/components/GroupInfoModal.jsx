@@ -6,10 +6,15 @@ import { searchUser } from '../services/api';
 // Same center-crop + compression pipeline as the profile avatar in Settings
 const processGroupImage = (file) => {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
+    const url = URL.createObjectURL(file);
+    const cleanup = () => {
+      img.onload = null;
+      img.onerror = null;
+      URL.revokeObjectURL(url);
+    };
+    const img = new Image();
+    img.onload = () => {
+      try {
         const canvas = document.createElement('canvas');
         const size = 128;
         canvas.width = size;
@@ -19,13 +24,18 @@ const processGroupImage = (file) => {
         const sx = (img.width - minDim) / 2;
         const sy = (img.height - minDim) / 2;
         ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+        cleanup();
         resolve(canvas.toDataURL('image/jpeg', 0.7));
-      };
-      img.onerror = () => reject(new Error('Failed to load image file'));
-      img.src = e.target.result;
+      } catch (err) {
+        cleanup();
+        reject(err);
+      }
     };
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      cleanup();
+      reject(new Error('Failed to load image file'));
+    };
+    img.src = url;
   });
 };
 
@@ -163,7 +173,7 @@ const GroupInfoModal = ({
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setError('Please select a valid image file');
+      setError('Please choose an image file (JPG, PNG, WebP or GIF)');
       return;
     }
     try {
@@ -496,7 +506,7 @@ const GroupInfoModal = ({
                   <p>You will stop receiving messages{isOwner ? '. Ownership will transfer to the earliest joined member.' : '.'}</p>
                   <div className="group-confirm-actions">
                     <button className="confirmation-cancel-btn" onClick={() => setConfirmAction(null)} disabled={busy}>Cancel</button>
-                    <button className="confirmation-danger-btn block-confirm" onClick={runConfirmed} disabled={busy}>Leave</button>
+                    <button className="confirmation-danger-btn leave-confirm" onClick={runConfirmed} disabled={busy}>Leave</button>
                   </div>
                 </>
               )}
