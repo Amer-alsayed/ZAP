@@ -740,8 +740,6 @@ button {
   color: white;
   text-transform: uppercase;
   font-size: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: none;
   flex-shrink: 0;
 }
 
@@ -1078,10 +1076,6 @@ button {
     border-color 0.2s ease,
     box-shadow 0.2s ease,
     transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.contact-item.active .avatar {
-  border-color: rgba(var(--accent-rgb), 0.5) !important;
 }
 
 .contact-item .last-msg-time,
@@ -2727,6 +2721,7 @@ button {
 
 .apple-emoji-search-bar {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.08);
@@ -5568,6 +5563,29 @@ textarea {
     width: auto !important;
   }
 
+  .apple-emoji-header {
+    padding: 10px 10px 8px 10px !important;
+    gap: 6px !important;
+  }
+
+  .apple-emoji-search-bar {
+    padding: 6px 8px !important;
+    gap: 6px !important;
+  }
+
+  .apple-backspace-btn,
+  .apple-close-btn {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 9px !important;
+  }
+
+  .apple-backspace-btn svg,
+  .apple-close-btn svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
   .apple-emoji-picker-container {
     width: 100% !important;
     height: 350px !important;
@@ -6319,10 +6337,6 @@ textarea {
     background: transparent !important;
     border-color: transparent !important;
     transform: none !important;
-  }
-
-  .contact-item.active .avatar {
-    border-color: rgba(255, 255, 255, 0.1) !important;
   }
 
   .control-btn:hover,
@@ -8701,10 +8715,6 @@ textarea {
   transition: box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sidebar-minimized .contact-item.active .avatar {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
-}
-
 .sidebar-minimized .contact-info {
   max-width: 0;
   width: 0;
@@ -10608,7 +10618,6 @@ textarea {
     max-height: 42px !important;
     font-size: 15px !important;
     font-weight: 600 !important;
-    border-width: 1px !important;
     box-shadow: none !important;
     flex-shrink: 0 !important;
   }
@@ -10929,6 +10938,7 @@ textarea {
 
 /* ==========================================
    Forward Message Modal
+   (mirrors the Create Group / Group Info modals)
    ========================================== */
 .forward-modal-overlay {
   position: fixed;
@@ -10937,78 +10947,59 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  animation: forwardOverlayIn 0.18s ease forwards;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: modalOverlayFadeIn 0.22s ease forwards;
 }
 
-@keyframes forwardOverlayIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* App-consistent exit animations (same curve & timing as contact action modals) */
+.forward-modal-overlay.closing {
+  animation: modalOverlayFadeOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+.forward-modal-overlay.closing .forward-modal-card {
+  animation: modalScaleOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .forward-modal-card {
   width: 100%;
-  max-width: 380px;
-  max-height: min(70vh, 520px);
+  max-width: 420px;
+  max-height: min(640px, calc(100dvh - 36px));
   display: flex;
   flex-direction: column;
-  background: var(--bg-card-solid, #121212);
-  border: 1px solid var(--border-color);
-  border-radius: 18px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
   overflow: hidden;
-  animation: forwardCardIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes forwardCardIn {
-  from { opacity: 0; transform: translateY(14px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  background: rgba(18, 18, 18, 0.96) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 24px 48px rgba(0, 0, 0, 0.65) !important;
+  backdrop-filter: blur(var(--blur-amount)) !important;
+  -webkit-backdrop-filter: blur(var(--blur-amount)) !important;
+  animation: modalScaleIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .forward-modal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px 10px 16px;
+  gap: 10px;
+  padding: 16px 18px 12px 18px;
+  border-bottom: 1px solid var(--border-color);
 }
-
-.forward-modal-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.forward-modal-title-row h3 {
+.forward-modal-header h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
-}
-
-.forward-modal-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.forward-modal-close:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .forward-preview-box {
-  margin: 0 16px 10px 16px;
+  margin: 14px 18px 12px 18px;
   padding: 8px 12px;
   font-size: 12.5px;
   color: var(--text-muted);
@@ -11022,34 +11013,34 @@ textarea {
 
 .forward-search-wrap {
   position: relative;
-  margin: 0 16px 10px 16px;
+  margin: 0 18px 12px 18px;
 }
 
 .forward-search-icon {
   position: absolute;
   top: 50%;
-  left: 11px;
+  left: 12px;
   transform: translateY(-50%);
-  color: var(--text-muted);
+  color: var(--text-subtle);
   pointer-events: none;
 }
 
 .forward-search-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 9px 12px 9px 33px;
-  font-size: 13.5px;
+  padding: 9.5px 12px 9.5px 33px;
+  font-size: 13px;
   font-family: inherit;
   color: var(--text-primary);
-  background: var(--bg-input, rgba(26, 26, 26, 0.9));
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 11px;
   outline: none;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.2s ease;
 }
 
 .forward-search-input:focus {
-  border-color: var(--accent-color);
+  border-color: var(--accent-border);
 }
 
 .forward-search-input::placeholder {
@@ -11058,8 +11049,12 @@ textarea {
 
 .forward-contact-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 2px 8px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 10px 14px 10px;
 }
 
 .forward-contact-item {
@@ -11067,22 +11062,24 @@ textarea {
   align-items: center;
   gap: 11px;
   width: 100%;
-  padding: 9px 10px;
-  border: none;
+  padding: 7px 9px;
+  border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s ease;
+  font-family: inherit;
+  transition: background 0.16s ease, border-color 0.16s ease;
 }
 
 .forward-contact-item:hover:not(:disabled),
 .forward-contact-item:focus-visible {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .forward-contact-item.is-sending {
   background: var(--accent-surface);
+  border-color: var(--accent-border);
 }
 
 .forward-contact-item:disabled {
@@ -11098,6 +11095,7 @@ textarea {
   height: 38px;
   min-width: 38px;
   border-radius: 50%;
+  overflow: hidden;
   background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.5), rgba(var(--accent-rgb), 0.25));
   color: #ffffff;
   font-size: 16px;
@@ -11113,7 +11111,7 @@ textarea {
 }
 
 .forward-contact-name {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -11122,8 +11120,7 @@ textarea {
 }
 
 .forward-contact-username {
-  font-size: 12px;
-  font-family: var(--font-mono);
+  font-size: 11.5px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -11131,16 +11128,24 @@ textarea {
 }
 
 .forward-contact-action {
-  font-size: 12px;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--accent-text);
+  background: rgba(var(--accent-rgb), 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transform: scale(0.96);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
 }
 
 .forward-contact-item:hover .forward-contact-action,
+.forward-contact-item:focus-visible .forward-contact-action,
 .forward-contact-item.is-sending .forward-contact-action {
   opacity: 1;
+  transform: scale(1);
 }
 
 .forward-empty-state {
@@ -11455,7 +11460,7 @@ textarea {
   align-items: center;
   justify-content: center;
   padding: 18px;
-  animation: modalOverlayIn 0.22s ease forwards;
+  animation: modalOverlayFadeIn 0.22s ease forwards;
 }
 
 /* App-consistent exit animations (same curve & timing as contact action modals) */

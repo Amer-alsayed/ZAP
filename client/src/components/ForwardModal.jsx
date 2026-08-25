@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Forward, X, Search, MessageSquare, Users } from 'lucide-react';
+import { Forward, X, Search, MessageSquare } from 'lucide-react';
+import { renderAvatar } from './Sidebar';
 
 const buildForwardPreview = (message) => {
   if (!message) return '';
@@ -18,6 +19,15 @@ const buildForwardPreview = (message) => {
 const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], onClose, onConfirm }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [forwardingTo, setForwardingTo] = useState(null);
+  const [isClosing, setIsClosing] = useState(false);
+
+  // App-consistent exit: fade + scale out before unmounting (same 0.22s curve
+  // as the contact action modals), then hand control back to the parent
+  const requestClose = () => {
+    if (isClosing || forwardingTo) return;
+    setIsClosing(true);
+    setTimeout(onClose, 220);
+  };
 
   useEffect(() => {
     setSearchQuery('');
@@ -27,11 +37,11 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
   useEffect(() => {
     if (!message) return;
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') requestClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [message, onClose]);
+  }, [message, isClosing, forwardingTo]);
 
   const blocked = useMemo(() => new Set(blockedUsers.map(b => String(b).toLowerCase())), [blockedUsers]);
 
@@ -52,8 +62,7 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
         id: c.username,
         name: c.customName || c.displayName || c.username,
         sub: `@${c.username}`,
-        avatarIcon: c.avatarIcon,
-        fallbackLetter: (c.customName || c.displayName || c.username || '?').charAt(0).toUpperCase()
+        avatarIcon: c.avatarIcon
       }));
 
     const groupTargets = groups
@@ -64,8 +73,7 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
         id: g.id,
         name: g.name || `Group ${g.id}`,
         sub: `${(g.members || []).length} members`,
-        avatarIcon: g.avatarIcon,
-        fallbackLetter: (g.name || 'G').charAt(0).toUpperCase()
+        avatarIcon: g.avatarIcon
       }));
 
     return [...contactTargets, ...groupTargets];
@@ -86,15 +94,19 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
   };
 
   return (
-    <div className="forward-modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Forward message">
+    <div
+      className={`forward-modal-overlay ${isClosing ? 'closing' : ''}`}
+      onClick={forwardingTo ? undefined : requestClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Forward message"
+    >
       <div className="forward-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="forward-modal-header">
-          <div className="forward-modal-title-row">
-            <Forward size={18} style={{ color: 'var(--accent-color)' }} />
-            <h3>Forward Message</h3>
-          </div>
-          <button className="forward-modal-close" onClick={onClose} aria-label="Close">
-            <X size={17} />
+          <div className="create-group-title-icon"><Forward size={16} /></div>
+          <h3>Forward Message</h3>
+          <button className="create-group-close" onClick={requestClose} disabled={Boolean(forwardingTo)} aria-label="Close">
+            <X size={16} />
           </button>
         </div>
 
@@ -128,7 +140,11 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
                 disabled={Boolean(forwardingTo)}
               >
                 <span className={`forward-contact-avatar ${target.type === 'group' ? 'is-group' : ''}`}>
-                  {target.type === 'group' ? <Users size={14} /> : (target.avatarIcon || target.fallbackLetter)}
+                  {target.type === 'group'
+                    ? (target.avatarIcon
+                        ? renderAvatar(target.name, null, target.avatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '13px' })
+                        : <MessageSquare size={14} />)
+                    : renderAvatar(target.id, target.name, target.avatarIcon || null, { width: '100%', height: '100%', borderRadius: '50%' })}
                 </span>
                 <span className="forward-contact-details">
                   <span className="forward-contact-name">{target.name}</span>
