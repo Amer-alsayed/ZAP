@@ -9658,6 +9658,12 @@ textarea {
   box-shadow: none !important;
 }
 
+.contact-action-option.leave-option:hover {
+  background: rgba(255, 69, 58, 0.08);
+  border-color: rgba(255, 69, 58, 0.25);
+  box-shadow: none !important;
+}
+
 .action-icon-circle {
   width: 38px;
   height: 38px;
@@ -9691,6 +9697,12 @@ textarea {
   color: var(--warning-color);
 }
 
+.action-icon-circle.leave-icon {
+  background: rgba(255, 69, 58, 0.1);
+  border: 1px solid rgba(255, 69, 58, 0.2);
+  color: var(--danger-color);
+}
+
 .action-option-text {
   display: flex;
   flex-direction: column;
@@ -9715,6 +9727,10 @@ textarea {
 
 .contact-action-option.block-option .action-title {
   color: var(--warning-color);
+}
+
+.contact-action-option.leave-option .action-title {
+  color: var(--danger-color);
 }
 
 .action-desc {
@@ -9935,6 +9951,12 @@ textarea {
   border: 1px solid rgba(255, 159, 10, 0.25);
 }
 
+.confirmation-icon.leave-icon {
+  background: rgba(255, 69, 58, 0.12);
+  color: var(--danger-color);
+  border: 1px solid rgba(255, 69, 58, 0.25);
+}
+
 .confirmation-title {
   margin: 0;
   font-size: 16.5px;
@@ -10022,6 +10044,23 @@ textarea {
 }
 
 .confirmation-danger-btn.block-confirm:active {
+  transform: scale(0.985);
+}
+
+.confirmation-danger-btn.leave-confirm {
+  background: rgba(255, 69, 58, 0.14);
+  border: 1px solid rgba(255, 69, 58, 0.35);
+  color: var(--danger-color);
+}
+
+.confirmation-danger-btn.leave-confirm:hover {
+  background: rgba(255, 69, 58, 0.25);
+  border-color: rgba(255, 69, 58, 0.5);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.confirmation-danger-btn.leave-confirm:active {
   transform: scale(0.985);
 }
 
@@ -12060,13 +12099,13 @@ textarea {
   font-family: inherit;
 }
 .group-info-danger-btn.leave {
-  background: rgba(255, 159, 10, 0.12);
-  border: 1px solid rgba(255, 159, 10, 0.32);
-  color: #ffb340;
+  background: rgba(255, 69, 58, 0.12);
+  border: 1px solid rgba(255, 69, 58, 0.34);
+  color: var(--danger-color);
 }
 .group-info-danger-btn.leave:hover {
-  background: rgba(255, 159, 10, 0.2);
-  border-color: rgba(255, 159, 10, 0.5);
+  background: rgba(255, 69, 58, 0.2);
+  border-color: rgba(255, 69, 58, 0.52);
   transform: translateY(-1px);
 }
 .group-info-danger-btn.leave:active { transform: scale(0.985); }
