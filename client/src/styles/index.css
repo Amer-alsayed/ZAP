@@ -8933,6 +8933,21 @@ textarea {
   will-change: transform;
 }
 
+.contacts-bounce-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  transform: translate3d(0px, 0px, 0px);
+  will-change: transform;
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .contacts-list-container {
+    overscroll-behavior-y: contain;
+  }
+}
+
 .recents-empty {
   display: flex;
   flex-direction: column;
