@@ -16,7 +16,7 @@ const buildForwardPreview = (message) => {
   return message.text || '';
 };
 
-const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], onClose, onConfirm }) => {
+const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], onClose, onConfirm, backHandlerRef }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKey, setSelectedKey] = useState(null);
   const [forwardingTo, setForwardingTo] = useState(null);
@@ -24,8 +24,13 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
 
   // App-consistent exit: fade + scale out before unmounting (same 0.22s curve
   // as the contact action modals), then hand control back to the parent
-  const requestClose = () => {
+  const requestClose = (isFromPopState = false) => {
     if (isClosing || forwardingTo) return;
+    if (isFromPopState !== true && window.history.state === 'forward') {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => { window.__isProgrammaticPop = false; }, 100);
+    }
     setIsClosing(true);
     setTimeout(onClose, 220);
   };
@@ -38,6 +43,16 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
     setSelectedKey(null);
     setForwardingTo(null);
   }, [message]);
+
+  useEffect(() => {
+    if (!backHandlerRef) return;
+    backHandlerRef.current = () => {
+      if (isClosing || forwardingTo || !message) return false;
+      requestClose(true);
+      return true;
+    };
+    return () => { backHandlerRef.current = null; };
+  }, [backHandlerRef, isClosing, forwardingTo, message]);
 
   useEffect(() => {
     if (!message) return;

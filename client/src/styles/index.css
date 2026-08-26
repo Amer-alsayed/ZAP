@@ -3495,7 +3495,7 @@ button {
   padding: 0 4px;
 }
 
-/* Single Image Message Shrink-Wrap */
+/* Single Image Message Shrink-Wrap — layout-reserved, no CLS */
 .image-message-wrapper,
 .image-loader-container {
   width: 100%;
@@ -3506,14 +3506,48 @@ button {
   position: relative;
   background: transparent !important;
   margin: 0 auto;
+  contain: layout paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 280px 210px;
 }
 
-.single-image-bubble .image-loader-container.is-decrypting {
+.single-image-bubble .image-loader-container {
   min-width: 220px;
-  min-height: 180px;
-  width: 240px;
+  min-height: 160px;
+  width: 260px;
   max-width: 280px;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: var(--skeleton-aspect, 4 / 3);
+  background: #111315 !important;
+  transition: aspect-ratio 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.single-image-bubble .image-loader-container.is-ready {
+  aspect-ratio: auto;
+  min-height: 0;
+  contain: layout paint;
+  background: transparent !important;
+}
+
+.video-loader-container {
+  width: 100%;
+  max-width: 280px;
+  min-width: 220px;
+  min-height: 160px;
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+  background: #111315 !important;
+  aspect-ratio: var(--skeleton-aspect, 16 / 10);
+  contain: layout paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 280px 180px;
+  transition: aspect-ratio 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.video-loader-container.is-ready {
+  aspect-ratio: auto;
+  min-height: 0;
+  background: transparent !important;
 }
 
 .image-message-wrapper img,
@@ -3523,15 +3557,18 @@ button {
   display: block;
   width: 100%;
   max-width: 280px !important;
-  max-height: 320px;
+  max-height: 340px;
   object-fit: cover;
   border-radius: 1rem;
   cursor: pointer;
   opacity: 0;
-  filter: blur(8px);
-  transform: scale(1);
-  transition: opacity 0.35s ease, filter 0.35s ease;
-  will-change: opacity, filter;
+  filter: blur(10px) saturate(0.85);
+  transform: scale(1.02);
+  transition:
+    opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, filter, transform;
   z-index: 2;
   -webkit-user-drag: none !important;
   -khtml-user-drag: none !important;
@@ -3543,17 +3580,39 @@ button {
   user-select: none !important;
 }
 
+.message-image.is-loading {
+  opacity: 0 !important;
+  filter: blur(10px) saturate(0.85) !important;
+  transform: scale(1.02) !important;
+}
+
 .message-image.loaded {
   opacity: 1 !important;
-  filter: blur(0px) !important;
+  filter: blur(0px) saturate(1) !important;
   transform: scale(1) !important;
 }
 
 .message-image:hover {
-  opacity: 0.94 !important;
+  opacity: 0.96 !important;
 }
 
-/* Minimalist & Premium Media Decryption Loading Card */
+/* In single bubble, loaded image fills reserved container — no reflow */
+.single-image-bubble .image-loader-container.is-ready .message-image {
+  position: relative;
+  width: 100%;
+  height: auto;
+  max-height: 340px;
+  object-fit: cover;
+}
+
+/* Gallery / full-res images keep natural contain sizing */
+.image-loader-container.is-fullres .message-image {
+  object-fit: contain !important;
+  max-width: min(90vw, 1100px) !important;
+  max-height: 74vh !important;
+}
+
+/* Professional Skeleton — Twitter/X + Facebook style shimmer (no layout shift) */
 .image-skeleton-loader {
   position: absolute;
   top: 0;
@@ -3562,7 +3621,7 @@ button {
   bottom: 0;
   width: 100%;
   height: 100%;
-  background: rgba(18, 18, 18, 0.6) !important;
+  background: #17181b !important;
   border-radius: inherit;
   display: flex;
   flex-direction: column;
@@ -3572,8 +3631,122 @@ button {
   z-index: 1;
   box-sizing: border-box;
   overflow: hidden;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity 0.42s cubic-bezier(0.4, 0, 0.2, 1) 0.08s,
+    transform 0.42s cubic-bezier(0.4, 0, 0.2, 1) 0.08s,
+    visibility 0.42s;
+  visibility: visible;
+  pointer-events: none;
+}
+
+.image-loader-container.is-ready .image-skeleton-loader,
+.video-loader-container.is-ready .image-skeleton-loader {
+  opacity: 0 !important;
+  transform: scale(0.985) !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Crossfade: skeleton stays underneath image then gracefully fades as image sharpens */
+.image-loader-container.is-decrypting .message-image,
+.video-loader-container.is-decrypting .message-video {
+  opacity: 0 !important;
+}
+
+.skeleton-shimmer-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #1a1d20 0%, #191b1e 100%);
+  z-index: 0;
+}
+
+.skeleton-shimmer-wave {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 22%,
+    rgba(255, 255, 255, 0.06) 42%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.06) 58%,
+    transparent 78%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmerWave 1.35s infinite linear;
+  will-change: background-position;
+}
+
+@keyframes skeletonShimmerWave {
+  0% { background-position: 200% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* Album grid: skeleton fills cell — no aspect enforcement, cell size governs layout */
+.album-grid-cell .image-loader-container,
+.album-grid-cell .video-loader-container {
+  aspect-ratio: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  contain: layout paint !important;
+  content-visibility: visible !important;
+  contain-intrinsic-size: none !important;
+}
+
+/* Keep spinner + pill above shimmer layers */
+.image-skeleton-loader .media-decrypt-spinner-badge,
+.image-skeleton-loader .media-decrypt-size-pill {
+  position: relative;
+  z-index: 2;
+}
+
+/* Album cells: slightly smaller badge so skeleton feels proportional */
+.album-grid-cell .media-decrypt-spinner-badge {
+  width: 38px !important;
+  height: 38px !important;
+}
+.album-grid-cell .media-decrypt-spinner-badge .media-decrypt-logo {
+  transform: scale(0.85);
+}
+.album-grid-cell .media-decrypt-size-pill {
+  font-size: 10px !important;
+  padding: 2px 7px !important;
+}
+
+/* Reply thumbnail skeleton — compact */
+.reply-image-thumbnail .image-loader-container {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  aspect-ratio: 1 / 1 !important;
+  border-radius: 6px !important;
+  contain: none !important;
+}
+.reply-image-thumbnail .image-skeleton-loader {
+  gap: 0 !important;
+}
+.reply-image-thumbnail .media-decrypt-spinner-badge {
+  width: 22px !important;
+  height: 22px !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.reply-image-thumbnail .media-decrypt-spinner-badge .media-decrypt-logo { display: none !important; }
+.reply-image-thumbnail .media-decrypt-size-pill { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer-wave { animation: none; opacity: 0.5; }
+  .message-image { transition: opacity 0.2s ease !important; filter: none !important; }
 }
 
 .media-decrypt-spinner-badge {
@@ -3621,9 +3794,31 @@ button {
 
 .message-video {
   max-width: 100%;
-  max-height: 250px;
+  max-height: 320px;
   display: block;
-  border-radius: 8px;
+  border-radius: 12px;
+  opacity: 0;
+  transform: scale(1.01);
+  filter: blur(6px);
+  transition:
+    opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, filter, transform;
+  z-index: 2;
+  position: relative;
+}
+
+.message-video.loaded {
+  opacity: 1 !important;
+  filter: blur(0px) !important;
+  transform: scale(1) !important;
+}
+
+.video-loader-container .message-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .file-attachment-card {

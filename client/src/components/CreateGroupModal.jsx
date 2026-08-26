@@ -43,7 +43,7 @@ const isTouchDevice =
   typeof window !== 'undefined' &&
   (window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window);
 
-const CreateGroupModal = ({ contacts = [], currentUser, blockedUsers = [], onClose, onCreate }) => {
+const CreateGroupModal = ({ contacts = [], currentUser, blockedUsers = [], onClose, onCreate, backHandlerRef }) => {
   const [groupName, setGroupName] = useState('');
   const [avatarImage, setAvatarImage] = useState('');
   const [selectedMembers, setSelectedMembers] = useState(new Set());
@@ -59,8 +59,13 @@ const CreateGroupModal = ({ contacts = [], currentUser, blockedUsers = [], onClo
 
   // App-consistent exit: fade + scale out before unmounting (same 0.22s curve
   // as the contact action modals), then hand control back to the parent
-  const requestClose = () => {
+  const requestClose = (isFromPopState = false) => {
     if (isClosing || isCreating) return;
+    if (isFromPopState !== true && window.history.state === 'create-group') {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => { window.__isProgrammaticPop = false; }, 100);
+    }
     setIsClosing(true);
     setTimeout(onClose, 220);
   };
@@ -85,6 +90,16 @@ const CreateGroupModal = ({ contacts = [], currentUser, blockedUsers = [], onClo
       document.body.style.overflow = '';
     };
   }, []);
+
+  useEffect(() => {
+    if (!backHandlerRef) return;
+    backHandlerRef.current = () => {
+      if (isClosing || isCreating) return false;
+      requestClose(true);
+      return true;
+    };
+    return () => { backHandlerRef.current = null; };
+  }, [backHandlerRef, isClosing, isCreating]);
 
   const availableContacts = useMemo(() => {
     const blocked = new Set(blockedUsers.map(b => String(b).toLowerCase()));

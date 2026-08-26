@@ -308,7 +308,21 @@ export default function App() {
   const previousActiveGroupRef = useRef(null);
 
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const showCreateGroupRef = useRef(false);
+  useEffect(() => {
+    showCreateGroupRef.current = showCreateGroup;
+    if (showCreateGroup && window.history.state !== 'create-group') {
+      window.history.pushState('create-group', '');
+    }
+  }, [showCreateGroup]);
   const [groupInfoGroupId, setGroupInfoGroupId] = useState(null);
+  const groupInfoGroupIdRef = useRef(null);
+  useEffect(() => {
+    groupInfoGroupIdRef.current = groupInfoGroupId;
+    if (groupInfoGroupId !== null && window.history.state !== 'group-info') {
+      window.history.pushState('group-info', '');
+    }
+  }, [groupInfoGroupId]);
 
   // Group key material cache: `${groupId}:${kv}` -> CryptoKey (AES-GCM)
   const groupKeysRef = useRef({});
@@ -436,6 +450,13 @@ export default function App() {
   const gcIceQueues = useRef({});
   const [replyingTo, setReplyingTo] = useState(null);
   const [forwardingMessage, setForwardingMessage] = useState(null);
+  const forwardingMessageRef = useRef(null);
+  useEffect(() => {
+    forwardingMessageRef.current = forwardingMessage;
+    if (forwardingMessage && window.history.state !== 'forward') {
+      window.history.pushState('forward', '');
+    }
+  }, [forwardingMessage]);
 
   // Handle call sound effects for calling, incoming, connected, and idle states
   useEffect(() => {
@@ -774,6 +795,7 @@ export default function App() {
   const showRecentsRef = useRef(false);
   const previousActiveContactRef = useRef(null);
   const hasRestoredNavRef = useRef(false);
+  const settingsOpenTimeoutRef = useRef(null);
 
   useEffect(() => {
     activeContactRef.current = activeContact;
@@ -789,6 +811,9 @@ export default function App() {
   const showSafetyModalRef = useRef(false);
   const selectionBackRef = useRef(null);
   const sidebarBackHandlerRef = useRef(null);
+  const createGroupBackHandlerRef = useRef(null);
+  const groupInfoBackHandlerRef = useRef(null);
+  const forwardBackHandlerRef = useRef(null);
 
   useEffect(() => {
     showSettingsRef.current = showSettings;
@@ -839,6 +864,30 @@ export default function App() {
       // 2. Close safety verification modal if active
       if (showSafetyModalRef.current) {
         handleCloseSafetyModal(true);
+        return;
+      }
+
+      // 2b. Close overlay group modals (Create Group, Group Info, Forward) before anything else
+      if (forwardBackHandlerRef.current?.()) {
+        return;
+      }
+      if (createGroupBackHandlerRef.current?.()) {
+        return;
+      }
+      if (groupInfoBackHandlerRef.current?.()) {
+        return;
+      }
+      // Fallback direct state checks (if ref not yet registered but overlay is visible)
+      if (forwardingMessageRef.current) {
+        setForwardingMessage(null);
+        return;
+      }
+      if (showCreateGroupRef.current) {
+        setShowCreateGroup(false);
+        return;
+      }
+      if (groupInfoGroupIdRef.current !== null) {
+        setGroupInfoGroupId(null);
         return;
       }
       
@@ -2986,13 +3035,22 @@ export default function App() {
     }
     setShowRecents(false);
     setShowSettings(true);
+    if (settingsOpenTimeoutRef.current) {
+      clearTimeout(settingsOpenTimeoutRef.current);
+      settingsOpenTimeoutRef.current = null;
+    }
     if (activeContactRef.current) {
-      setTimeout(() => setActiveContact(null), 300);
+      settingsOpenTimeoutRef.current = setTimeout(() => {
+        if (showSettingsRef.current) setActiveContact(null);
+        settingsOpenTimeoutRef.current = null;
+      }, 300);
     }
     if (activeGroupRef.current) {
       setTimeout(() => {
-        setActiveGroup(null);
-        activeGroupRef.current = null;
+        if (showSettingsRef.current) {
+          setActiveGroup(null);
+          activeGroupRef.current = null;
+        }
       }, 300);
     }
   }, []);
@@ -3028,29 +3086,56 @@ export default function App() {
       document.activeElement.blur();
     }
 
-    if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings' || window.history.state === 'recents')) {
-      window.history.back();
-    }
-
-    // Context-aware back navigation: Return directly to active chat if Settings/Recents was opened from a chat
+    // Context-aware back navigation: Settings was opened from a chat -> return directly to that chat without flashing dashboard.
+    // Handle BEFORE generic history.back to avoid double-traversal (the reported "main menu flash" bug was caused by two consecutive history.back() calls).
     if (previousActiveContactRef.current && showSettingsRef.current) {
       const prevContact = previousActiveContactRef.current;
       previousActiveContactRef.current = null;
-      // Play the shared slide-fade exit on settings before landing back in the chat
+      if (settingsOpenTimeoutRef.current) {
+        clearTimeout(settingsOpenTimeoutRef.current);
+        settingsOpenTimeoutRef.current = null;
+      }
+      // Single history pop: 'settings' -> 'chat'. For browser-initiated popstate the traversal already happened.
       if (!isFromPopState && window.history.state === 'settings') {
         window.__isProgrammaticPop = true;
         window.history.back();
         setTimeout(() => {
           window.__isProgrammaticPop = false;
-        }, 100);
+        }, 120);
+      }
+      // Restore the DM underneath the still-mounted settings view so the dashboard never becomes visible.
+      // Keep showSettings true for the exit animation; set the chat active immediately so app-container stays chat-active.
+      const cachedContact = prevContact;
+      setActiveContact(cachedContact);
+      activeContactRef.current = cachedContact;
+      lastActiveContactRef.current = cachedContact;
+      lastChatKindRef.current = 'contact';
+      if (activeGroupRef.current) {
+        setActiveGroup(null);
+        activeGroupRef.current = null;
+        lastActiveGroupVmRef.current = null;
       }
       setNavigatingBackFrom('settings');
       setIsNavigatingBack(true);
       setTimeout(() => {
+        setShowSettings(false);
+        showSettingsRef.current = false;
+        setShowRecents(false);
+        showRecentsRef.current = false;
         setIsNavigatingBack(false);
         setNavigatingBackFrom(null);
         isNavigatingBackRef.current = false;
-        handleSelectContact(prevContact);
+        if (window.history.state !== 'chat') {
+          window.history.pushState('chat', '');
+        }
+        // Background refresh like handleSelectContact (decrypt latest history without blocking UI)
+        emitGetChatHistory(cachedContact.username).then(encryptedHistory => decryptMessagesBatch(encryptedHistory, cachedContact).then(decryptedMessages => {
+          const readMessages = decryptedMessages.map(m => m.sender.toLowerCase() === cachedContact.username.toLowerCase() ? { ...m, status: 2 } : m);
+          warmupMediaCache(readMessages);
+          setContacts(prev => prev.map(c => c.username.toLowerCase() === cachedContact.username.toLowerCase() ? { ...c, unreadCount: 0, messages: readMessages } : c));
+          setActiveContact(pp => pp && pp.username.toLowerCase() === cachedContact.username.toLowerCase() ? { ...pp, messages: readMessages } : pp);
+          emitMarkAsRead(cachedContact.username);
+        }).catch(()=>{}));
       }, 220);
       return;
     }
@@ -3059,20 +3144,61 @@ export default function App() {
     if (previousActiveGroupRef.current && showSettingsRef.current) {
       const prevGroup = previousActiveGroupRef.current;
       previousActiveGroupRef.current = null;
+      if (settingsOpenTimeoutRef.current) {
+        clearTimeout(settingsOpenTimeoutRef.current);
+        settingsOpenTimeoutRef.current = null;
+      }
       if (!isFromPopState && window.history.state === 'settings') {
         window.__isProgrammaticPop = true;
         window.history.back();
         setTimeout(() => {
           window.__isProgrammaticPop = false;
-        }, 100);
+        }, 120);
       }
+      const gid = prevGroup.id ?? prevGroup.groupId;
+      const source = groupsRef.current.find(g => g.id === gid) || prevGroup;
+      const vm = {
+        ...source,
+        isGroup: true,
+        groupId: source.id,
+        username: `group-${source.id}`,
+        customName: null,
+        displayName: source.name,
+        status: 'online',
+        isSaved: true,
+        isVerified: false,
+        unreadCount: 0,
+        groupTypingNames: (source.typingUsers || [])
+          .filter(u => u.toLowerCase() !== currentUser.username.toLowerCase())
+          .map(u => {
+            const m = (source.members || []).find(mm => mm.username.toLowerCase() === u.toLowerCase());
+            return m?.profile?.displayName || u;
+          })
+      };
+      if (activeContactRef.current) {
+        setActiveContact(null);
+        activeContactRef.current = null;
+        lastActiveContactRef.current = null;
+      }
+      lastActiveGroupVmRef.current = vm;
+      lastChatKindRef.current = 'group';
+      setActiveGroup(vm);
+      activeGroupRef.current = vm;
+      setGroupInfoGroupId(null);
       setNavigatingBackFrom('settings');
       setIsNavigatingBack(true);
       setTimeout(() => {
+        setShowSettings(false);
+        showSettingsRef.current = false;
+        setShowRecents(false);
+        showRecentsRef.current = false;
         setIsNavigatingBack(false);
         setNavigatingBackFrom(null);
         isNavigatingBackRef.current = false;
-        handleSelectGroup(prevGroup);
+        if (window.history.state !== 'chat') window.history.pushState('chat', '');
+        const lastId = source.messages.length > 0 ? source.messages[source.messages.length - 1].id : 0;
+        patchGroup(gid, g => ({ ...g, unreadCount: 0, lastReadId: Math.max(g.lastReadId || 0, lastId) }));
+        emitMarkGroupRead(gid, Math.max(source.lastReadId || 0, lastId));
       }, 220);
       return;
     }
@@ -3081,6 +3207,13 @@ export default function App() {
       const prevContact = previousActiveContactRef.current;
       previousActiveContactRef.current = null;
       isNavigatingBackRef.current = false;
+      if (!isFromPopState && window.history.state === 'recents') {
+        window.__isProgrammaticPop = true;
+        window.history.back();
+        setTimeout(() => { window.__isProgrammaticPop = false; }, 120);
+      } else if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings')) {
+        window.history.back();
+      }
       handleSelectContact(prevContact);
       return;
     }
@@ -3089,8 +3222,19 @@ export default function App() {
       const prevGroup = previousActiveGroupRef.current;
       previousActiveGroupRef.current = null;
       isNavigatingBackRef.current = false;
+      if (!isFromPopState && window.history.state === 'recents') {
+        window.__isProgrammaticPop = true;
+        window.history.back();
+        setTimeout(() => { window.__isProgrammaticPop = false; }, 120);
+      } else if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings')) {
+        window.history.back();
+      }
       handleSelectGroup(prevGroup);
       return;
+    }
+
+    if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings' || window.history.state === 'recents')) {
+      window.history.back();
     }
 
     const source = showSettings ? 'settings' : activeContact || activeGroupRef.current ? 'chat' : showRecents ? 'recents' : null;
@@ -3108,6 +3252,10 @@ export default function App() {
     activeContactRef.current = null;
     showSettingsRef.current = false;
     showRecentsRef.current = false;
+    if (settingsOpenTimeoutRef.current) {
+      clearTimeout(settingsOpenTimeoutRef.current);
+      settingsOpenTimeoutRef.current = null;
+    }
     setTimeout(() => {
       setIsNavigatingBack(false);
       setNavigatingBackFrom(null);
@@ -4714,8 +4862,10 @@ export default function App() {
             if (m.username.toLowerCase() === currentUser.username.toLowerCase()) return 'You';
             return m.profile?.displayName || m.username;
           };
+          // Keep chat-active during context-aware Settings→chat return so dashboard doesn't flash through
+          const keepChatActiveDuringSettingsReturn = isNavigatingBack && navigatingBackFrom === 'settings' && Boolean(activeContact || activeGroupVm);
           return (
-            <div className={`app-container ${((activeContact || activeGroupVm || showSettings || showRecents) && !isNavigatingBack) ? 'chat-active' : ''} ${isAppMinimized ? 'sidebar-minimized' : ''} ${isSidebarAnimating ? 'is-sidebar-animating' : ''}`}>
+            <div className={`app-container ${((activeContact || activeGroupVm || showSettings || showRecents) && (!isNavigatingBack || keepChatActiveDuringSettingsReturn)) ? 'chat-active' : ''} ${isAppMinimized ? 'sidebar-minimized' : ''} ${isSidebarAnimating ? 'is-sidebar-animating' : ''}`}>
               
               {/* Network & Server Connectivity Status Bar */}
               {(!isOnline || !isSocketConnected) && (
@@ -4826,7 +4976,7 @@ export default function App() {
                       currentUserToken={currentUser.token}
                       sharedSecret={groupMode ? null : sharedSecrets.current[activeVm.username?.toLowerCase()]}
                       onBack={handleBackToMenu}
-                      isNavigatingBack={isNavigatingBack}
+                      isNavigatingBack={isNavigatingBack && navigatingBackFrom === 'chat'}
                       markMessageAsReadLocal={groupMode ? () => {} : markMessageAsReadLocal}
                       markAllMessagesAsReadLocal={groupMode ? () => {} : markAllMessagesAsReadLocal}
                       onImageClick={handleOpenLightbox}
@@ -4945,6 +5095,7 @@ export default function App() {
             contacts={contacts}
             groups={groups}
             blockedUsers={blockedUsers}
+            backHandlerRef={forwardBackHandlerRef}
             onClose={() => setForwardingMessage(null)}
             onConfirm={handleConfirmForward}
           />
@@ -4956,6 +5107,7 @@ export default function App() {
               currentUser={currentUser}
               blockedUsers={blockedUsers}
               showToast={showToast}
+              backHandlerRef={createGroupBackHandlerRef}
               onClose={() => setShowCreateGroup(false)}
               onCreate={handleCreateGroup}
             />
@@ -4973,6 +5125,7 @@ export default function App() {
                   groupId: infoGroup.id,
                   username: `group-${infoGroup.id}`
                 }}
+                backHandlerRef={groupInfoBackHandlerRef}
                 onClose={() => setGroupInfoGroupId(null)}
                 onUpdateGroupInfo={handleUpdateGroupInfo}
                 onAddMembers={handleAddMembersToGroup}

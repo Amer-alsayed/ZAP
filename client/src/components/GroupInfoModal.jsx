@@ -58,7 +58,8 @@ const GroupInfoModal = ({
   onSetRole,
   onLeaveGroup,
   onDeleteGroup,
-  showToast
+  showToast,
+  backHandlerRef
 }) => {
   const [view, setView] = useState('main');
   const [confirmAction, setConfirmAction] = useState(null);
@@ -102,8 +103,13 @@ const GroupInfoModal = ({
     }, 160);
   };
 
-  const requestClose = () => {
+  const requestClose = (isFromPopState = false) => {
     if (isClosing || busy) return;
+    if (isFromPopState !== true && window.history.state === 'group-info') {
+      window.__isProgrammaticPop = true;
+      window.history.back();
+      setTimeout(() => { window.__isProgrammaticPop = false; }, 100);
+    }
     setIsClosing(true);
     setTimeout(onClose, 220);
   };
@@ -120,6 +126,31 @@ const GroupInfoModal = ({
       document.body.style.overflow = '';
     };
   }, []);
+
+  useEffect(() => {
+    if (!backHandlerRef) return;
+    backHandlerRef.current = () => {
+      if (isClosing || busy) return false;
+      if (confirmAction) {
+        closeConfirm();
+        setTimeout(() => {
+          if (window.history.state !== 'group-info') window.history.pushState('group-info', '');
+        }, 0);
+        return true;
+      }
+      if (view !== 'main') {
+        changeView('main', 'back');
+        // keep history entry alive: we consumed a pop, re-push it so the next back still closes the modal
+        setTimeout(() => {
+          if (window.history.state !== 'group-info') window.history.pushState('group-info', '');
+        }, 0);
+        return true;
+      }
+      requestClose(true);
+      return true;
+    };
+    return () => { backHandlerRef.current = null; };
+  }, [backHandlerRef, isClosing, busy, confirmAction, view, requestClose]);
 
   useEffect(() => {
     const onKey = (e) => {
