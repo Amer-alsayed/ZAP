@@ -384,8 +384,8 @@
 /* Bottom controls bar — pill glass, matches attachment-preview-bar / reply-preview-bar */
 .cvp-controls {
   position: absolute;
-  left: 10px;
-  right: 10px;
+  left: 50%;
+  right: auto;
   bottom: 10px;
   z-index: 5;
   display: flex;
@@ -400,41 +400,37 @@
   border-radius: 12px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 18px rgba(0, 0, 0, 0.35);
   opacity: 0;
-  transform: translateY(8px) scale(0.98);
+  transform: translateX(-50%) translateY(8px) scale(0.98);
   visibility: hidden;
   pointer-events: none;
   transition:
     opacity 0.24s cubic-bezier(0.16,1,0.3,1),
-    transform 0.24s cubic-bezier(0.16,1,0.3,1),
+    transform 0.32s cubic-bezier(0.16,1,0.3,1),
+    width 0.32s cubic-bezier(0.16,1,0.3,1),
+    left 0.32s cubic-bezier(0.16,1,0.3,1),
+    max-width 0.32s cubic-bezier(0.16,1,0.3,1),
     visibility 0.24s ease;
-  will-change: opacity, transform;
+  will-change: opacity, transform, width;
   box-sizing: border-box;
-  max-width: calc(100% - 20px);
+  width: calc(100% - 20px);
+  max-width: 520px;
   overflow: visible;
 }
 
 .cvp-controls.visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateX(-50%) translateY(0) scale(1);
   visibility: visible;
   pointer-events: auto;
 }
 
-/* When video is paused/ended/error, keep controls visible without hide delay flash */
+/* When video is paused/ended/error, keep controls visible without hide delay flash — keep centered transform */
 .cvp-root.is-paused .cvp-controls,
 .cvp-root.is-ended .cvp-controls,
 .cvp-root.has-error .cvp-controls {
   opacity: 1 !important;
   visibility: visible !important;
   pointer-events: auto !important;
-  transform: translateY(0) scale(1) !important;
-}
-.cvp-root.is-fullscreen.is-paused .cvp-controls,
-.cvp-root.is-fullscreen.is-ended .cvp-controls,
-.cvp-root.is-fullscreen.has-error .cvp-controls,
-.album-gallery-stage .cvp-root.is-paused .cvp-controls,
-.album-gallery-stage .cvp-root.is-ended .cvp-controls,
-.album-gallery-stage .cvp-root.has-error .cvp-controls {
   transform: translateX(-50%) translateY(0) scale(1) !important;
 }
 
