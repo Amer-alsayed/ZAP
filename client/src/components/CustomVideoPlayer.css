@@ -400,26 +400,28 @@
   border-radius: 12px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 18px rgba(0, 0, 0, 0.35);
   opacity: 0;
-  transform: translateX(-50%) translateY(8px) scale(0.98);
+  transform: translateX(-50%) translateY(12px) scale(0.92);
+  filter: blur(4px);
   visibility: hidden;
   pointer-events: none;
   transition:
-    opacity 0.24s cubic-bezier(0.16,1,0.3,1),
-    transform 0.32s cubic-bezier(0.16,1,0.3,1),
-    width 0.32s cubic-bezier(0.16,1,0.3,1),
-    left 0.32s cubic-bezier(0.16,1,0.3,1),
-    max-width 0.32s cubic-bezier(0.16,1,0.3,1),
-    visibility 0.24s ease;
-  will-change: opacity, transform, width;
+    opacity 0.28s cubic-bezier(0.16,1,0.3,1),
+    transform 0.34s cubic-bezier(0.16,1,0.3,1),
+    filter 0.28s cubic-bezier(0.16,1,0.3,1),
+    width 0.34s cubic-bezier(0.16,1,0.3,1),
+    max-width 0.34s cubic-bezier(0.16,1,0.3,1),
+    visibility 0.28s ease;
+  will-change: opacity, transform, filter, width;
   box-sizing: border-box;
   width: calc(100% - 20px);
-  max-width: 520px;
+  max-width: 360px;
   overflow: visible;
 }
 
 .cvp-controls.visible {
   opacity: 1;
   transform: translateX(-50%) translateY(0) scale(1);
+  filter: blur(0px);
   visibility: visible;
   pointer-events: auto;
 }
@@ -432,6 +434,7 @@
   visibility: visible !important;
   pointer-events: auto !important;
   transform: translateX(-50%) translateY(0) scale(1) !important;
+  filter: blur(0px) !important;
 }
 
 /* Progress bar */
@@ -828,13 +831,15 @@
   opacity: 1 !important;
 }
 
-/* Fullscreen tweaks — keep pill floating, larger padding and buttons */
+/* Fullscreen tweaks — keep pill floating, larger padding and buttons — same spring as inline */
 .cvp-root.is-fullscreen .cvp-controls {
   left: 50%;
   right: auto;
   bottom: 14px;
-  transform: translateX(-50%) translateY(8px) scale(0.98);
+  transform: translateX(-50%) translateY(12px) scale(0.92);
+  filter: blur(4px);
   width: min(640px, calc(100% - 24px));
+  max-width: 640px;
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 12px;
   background: rgba(18, 18, 18, 0.88);
   border-radius: 14px;
@@ -842,18 +847,22 @@
 
 .cvp-root.is-fullscreen .cvp-controls.visible {
   transform: translateX(-50%) translateY(0) scale(1);
+  filter: blur(0px);
 }
 
 .album-gallery-stage .cvp-root .cvp-controls {
   left: 50%;
   right: auto;
   bottom: 12px;
-  transform: translateX(-50%) translateY(8px) scale(0.98);
+  transform: translateX(-50%) translateY(12px) scale(0.92);
+  filter: blur(4px);
   width: min(640px, calc(100% - 20px));
+  max-width: 640px;
 }
 
 .album-gallery-stage .cvp-root .cvp-controls.visible {
   transform: translateX(-50%) translateY(0) scale(1);
+  filter: blur(0px);
 }
 
 .cvp-root.is-fullscreen .cvp-btn {
