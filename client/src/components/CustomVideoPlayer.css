@@ -384,15 +384,15 @@
 /* Bottom controls bar — pill glass, matches attachment-preview-bar / reply-preview-bar */
 .cvp-controls {
   position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 6px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
   z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 7px 8px 7px 8px;
-  padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px) * 0.5);
+  padding: 8px 12px 8px 12px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px) * 0.5);
   background: rgba(18, 18, 18, 0.88);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -409,7 +409,7 @@
     visibility 0.24s ease;
   will-change: opacity, transform;
   box-sizing: border-box;
-  max-width: calc(100% - 12px);
+  max-width: calc(100% - 16px);
 }
 
 .cvp-controls.visible {
@@ -900,10 +900,18 @@
   }
 
   .cvp-controls {
-    padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)) 12px;
   }
 
   .cvp-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  .cvp-root.is-fullscreen .cvp-btn,
+  .album-gallery-stage .cvp-root .cvp-btn {
     width: 36px;
     height: 36px;
     min-width: 36px;
