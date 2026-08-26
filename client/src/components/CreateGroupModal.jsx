@@ -39,6 +39,10 @@ const processGroupImage = (file) => {
   });
 };
 
+const isTouchDevice =
+  typeof window !== 'undefined' &&
+  (window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window);
+
 const CreateGroupModal = ({ contacts = [], currentUser, blockedUsers = [], onClose, onCreate }) => {
   const [groupName, setGroupName] = useState('');
   const [avatarImage, setAvatarImage] = useState('');
@@ -249,7 +253,7 @@ const CreateGroupModal = ({ contacts = [], currentUser, blockedUsers = [], onClo
               value={groupName}
               maxLength={32}
               onChange={(e) => setGroupName(e.target.value)}
-              autoFocus
+              autoFocus={!isTouchDevice}
               disabled={isCreating}
             />
           </div>

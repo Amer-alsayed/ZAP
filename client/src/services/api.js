@@ -72,14 +72,25 @@ export const searchUser = async (username, token) => {
  * @param {string} filename 
  * @param {string} fileDataBase64 
  * @param {string} token 
+ * @param {Function} [onProgress]
+ * @param {{ current: Function|null }} [cancelRef] - receives an abort() handle in `.current`
  * @returns {Promise<{ fileUrl: string }>}
  */
-export const uploadEncryptedFile = (filename, fileDataBase64, token, onProgress) => {
+export const uploadEncryptedFile = (filename, fileDataBase64, token, onProgress, cancelRef) => {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${BASE_URL}/api/upload`);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    if (cancelRef && typeof cancelRef === 'object') {
+      cancelRef.current = () => xhr.abort();
+    }
+    const clearCancelHandle = () => {
+      if (cancelRef && typeof cancelRef === 'object') {
+        cancelRef.current = null;
+      }
+    };
 
     if (xhr.upload && typeof onProgress === 'function') {
       xhr.upload.onprogress = (event) => {
@@ -91,6 +102,7 @@ export const uploadEncryptedFile = (filename, fileDataBase64, token, onProgress)
     }
 
     xhr.onload = () => {
+      clearCancelHandle();
       let data = null;
       try {
         data = JSON.parse(xhr.responseText);
@@ -109,11 +121,15 @@ export const uploadEncryptedFile = (filename, fileDataBase64, token, onProgress)
     };
 
     xhr.onerror = () => {
+      clearCancelHandle();
       reject(new Error('Network error during file upload'));
     };
 
     xhr.onabort = () => {
-      reject(new Error('File upload was aborted'));
+      clearCancelHandle();
+      const err = new Error('File upload was aborted');
+      err.isCancelled = true;
+      reject(err);
     };
 
     xhr.send(JSON.stringify({ filename, fileData: fileDataBase64 }));

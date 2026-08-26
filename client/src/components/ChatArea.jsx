@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import AppleEmojiPicker from './AppleEmojiPicker';
 import { uploadEncryptedFile } from '../services/api';
+import { uploadManager, UploadCancelledError } from '../services/uploadManager';
 import { bufferToBase64, base64ToBuffer } from '../services/crypto';
 import { getSocket, emitGroupTyping } from '../services/socket';
 import { renderAvatar } from './Sidebar';
@@ -1689,8 +1690,20 @@ const ChatArea = React.memo(function ChatArea({
   const [isClearingFiles, setIsClearingFiles] = useState(false);
   const [removingFileIndex, setRemovingFileIndex] = useState(null);
   const [isClosingReply, setIsClosingReply] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(null); // { filename, current, total, status, percent }
+  // Upload state is owned by the module-level UploadManager so the progress
+  // banner survives navigating away from (and back into) a chat.
+  const [uploading, setUploadingState] = useState(uploadManager.getSnapshot().uploading);
+  const [uploadProgress, setUploadProgressState] = useState(uploadManager.getSnapshot().progress); // { filename, current, total, status, percent }
+  useEffect(() => uploadManager.subscribe((snapshot) => {
+    setUploadingState(snapshot.uploading);
+    setUploadProgressState(snapshot.progress);
+  }), []);
+  const setUploading = (value) => uploadManager.setUploading(value);
+  const setUploadProgress = (progress) => uploadManager.setProgress(progress);
+
+  const handleCancelUpload = () => {
+    uploadManager.requestCancel();
+  };
 
   // Refs for tracking back-navigation state without stale closures
   const isRecordingRef = useRef(false);
@@ -3104,6 +3117,7 @@ const ChatArea = React.memo(function ChatArea({
 
     if (selectedFiles.length > 0) {
       // Batch send files sequentially
+      uploadManager.beginBatch();
       setUploading(true);
       const filesToUpload = [...selectedFiles];
       setSelectedFiles([]); // Clear queue immediately
@@ -3111,6 +3125,7 @@ const ChatArea = React.memo(function ChatArea({
 
       try {
         for (let idx = 0; idx < totalFiles; idx++) {
+          if (uploadManager.isCancelled()) throw new UploadCancelledError();
           const rawFile = filesToUpload[idx];
           const fileBasePct = (idx / totalFiles) * 100;
           const filePctWeight = (1 / totalFiles);
@@ -3167,29 +3182,40 @@ const ChatArea = React.memo(function ChatArea({
 
           updateProgress(35, 'Uploading...');
 
-          // 5. Upload encrypted file payload with real-time XHR upload progress & auto-retry
+          // 5. Upload encrypted file payload with real-time XHR upload progress, cancellation & auto-retry
           let uploadResult = null;
           let lastUploadError = null;
+          const abortRef = { current: null };
+          const unregisterCancelHandler = uploadManager.registerCancelHandler(() => {
+            if (abortRef.current) abortRef.current();
+          });
 
-          for (let attempt = 0; attempt < 2; attempt++) {
-            try {
-              uploadResult = await uploadEncryptedFile(
-                fileToUpload.name, 
-                encryptedBase64, 
-                currentUserToken,
-                (uploadPct) => {
-                  const stagePct = 35 + (uploadPct * 0.60);
-                  updateProgress(stagePct, 'Uploading...');
+          try {
+            for (let attempt = 0; attempt < 2; attempt++) {
+              try {
+                uploadResult = await uploadEncryptedFile(
+                  fileToUpload.name, 
+                  encryptedBase64, 
+                  currentUserToken,
+                  (uploadPct) => {
+                    const stagePct = 35 + (uploadPct * 0.60);
+                    updateProgress(stagePct, 'Uploading...');
+                  },
+                  abortRef
+                );
+                break;
+              } catch (err) {
+                if (err?.isCancelled || uploadManager.isCancelled()) throw new UploadCancelledError();
+                lastUploadError = err;
+                if (attempt === 0) {
+                  updateProgress(35, 'Retrying upload...');
+                  await new Promise(r => setTimeout(r, 600));
                 }
-              );
-              break;
-            } catch (err) {
-              lastUploadError = err;
-              if (attempt === 0) {
-                updateProgress(35, 'Retrying upload...');
-                await new Promise(r => setTimeout(r, 600));
               }
             }
+          } finally {
+            unregisterCancelHandler();
+            abortRef.current = null;
           }
 
           if (!uploadResult) {
@@ -3197,6 +3223,9 @@ const ChatArea = React.memo(function ChatArea({
           }
 
           const { fileUrl } = uploadResult;
+
+          // Don't emit the message if the user cancelled during the final network round-trips
+          if (uploadManager.isCancelled()) throw new UploadCancelledError();
 
           updateProgress(98, 'Sending...');
 
@@ -3231,8 +3260,12 @@ const ChatArea = React.memo(function ChatArea({
         }
         soundEngine.playMessageSent();
       } catch (err) {
-        console.error("Encryption/Upload failed:", err);
-        notify(`Failed to send encrypted file: ${err.message || 'Unknown upload error'}`, 'error', 'Upload Error');
+        if (err instanceof UploadCancelledError || err?.isCancelled || uploadManager.isCancelled()) {
+          notify('Upload cancelled.', 'info', 'Upload Cancelled');
+        } else {
+          console.error("Encryption/Upload failed:", err);
+          notify(`Failed to send encrypted file: ${err.message || 'Unknown upload error'}`, 'error', 'Upload Error');
+        }
       } finally {
         setUploadProgress(null);
         setUploading(false);
@@ -4204,6 +4237,14 @@ const ChatArea = React.memo(function ChatArea({
               <div className="upload-progress-percent-badge">
                 {uploadProgress.percent !== null ? `${Math.round(uploadProgress.percent)}%` : ''}
               </div>
+              <button
+                className="upload-progress-cancel-btn"
+                onClick={handleCancelUpload}
+                title="Cancel upload"
+                aria-label="Cancel upload"
+              >
+                <X size={14} />
+              </button>
             </div>
             <div className="upload-progress-track">
               <div 
