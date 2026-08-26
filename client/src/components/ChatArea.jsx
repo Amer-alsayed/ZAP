@@ -1781,6 +1781,9 @@ const ChatArea = React.memo(function ChatArea({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isClosingEmojiPicker, setIsClosingEmojiPicker] = useState(false);
   const [hasMountedEmojiPicker, setHasMountedEmojiPicker] = useState(false);
+  // Increments on every open so the picker remounts and re-reads the persisted
+  // recents order (updates are deferred until close to avoid mid-session jumps).
+  const [emojiPickerSession, setEmojiPickerSession] = useState(0);
   const showEmojiPickerRef = useRef(false);
   useEffect(() => {
     showEmojiPickerRef.current = showEmojiPicker;
@@ -1873,6 +1876,7 @@ const ChatArea = React.memo(function ChatArea({
       closeEmojiPicker(false);
     } else {
       setHasMountedEmojiPicker(true);
+      setEmojiPickerSession(s => s + 1);
       cancelEmojiPickerClose();
       if (showAttachMenu) closeAttachMenu(false);
       setShowEmojiPicker(true);
@@ -4439,6 +4443,7 @@ const ChatArea = React.memo(function ChatArea({
                 }}
               >
                 <AppleEmojiPicker 
+                  key={emojiPickerSession}
                   onSelectEmoji={handleInsertEmoji} 
                   onDelete={handleDeleteChar}
                   onClose={closeEmojiPicker}

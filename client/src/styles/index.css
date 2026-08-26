@@ -2745,6 +2745,7 @@ button {
 
 .apple-emoji-search-bar {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.08);
@@ -5584,6 +5585,29 @@ textarea {
     left: 8px !important;
     bottom: calc(100% + 10px) !important;
     width: auto !important;
+  }
+
+  .apple-emoji-header {
+    padding: 10px 10px 8px 10px !important;
+    gap: 6px !important;
+  }
+
+  .apple-emoji-search-bar {
+    padding: 6px 8px !important;
+    gap: 6px !important;
+  }
+
+  .apple-backspace-btn,
+  .apple-close-btn {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 9px !important;
+  }
+
+  .apple-backspace-btn svg,
+  .apple-close-btn svg {
+    width: 15px !important;
+    height: 15px !important;
   }
 
   .apple-emoji-picker-container {

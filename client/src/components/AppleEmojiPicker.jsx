@@ -163,6 +163,12 @@ const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSe
     }
   }, [onSelectEmoji]);
 
+  // Prevent taps on emoji cells from stealing focus from the message input,
+  // otherwise the mobile keyboard dismisses and immediately reopens on every pick.
+  const handleGridPointerDown = useCallback((e) => {
+    e.preventDefault();
+  }, []);
+
   return (
     <div 
       id={`apple-emoji-cat-${category.id}`} 
@@ -171,7 +177,12 @@ const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSe
       <div className="apple-emoji-section-title">
         {category.name}
       </div>
-      <div className="apple-emoji-grid" onClick={handleGridClick}>
+      <div
+        className="apple-emoji-grid"
+        onClick={handleGridClick}
+        onPointerDown={handleGridPointerDown}
+        onMouseDown={handleGridPointerDown}
+      >
         {category.emojis.map((emoji, idx) => (
           <div
             key={`${category.id}-${idx}-${emoji}`}
@@ -197,6 +208,7 @@ const AppleEmojiDock = memo(function AppleEmojiDock({ categories, activeCategory
         <button
           key={cat.id}
           className={`apple-dock-tab ${activeCategory === cat.id && !isSearching ? 'is-active' : ''}`}
+          onPointerDown={(e) => e.preventDefault()}
           onClick={() => onCategoryClick(cat.id)}
           title={cat.name}
           aria-label={cat.name}
@@ -283,18 +295,24 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
     }).filter(cat => cat.emojis.length > 0);
   }, [searchQuery, allCategoriesWithRecents, renderedCategoryCount]);
 
-  // Record emoji selection into history / frequently used (capped at MAX_RECENT_EMOJIS)
+  // Record emoji selection into history / frequently used (capped at MAX_RECENT_EMOJIS).
+  // Persist to localStorage right away, but do NOT reorder the visible "Frequently
+  // Used" row mid-session — the fresh order is picked up the next time the picker
+  // is opened (matches native iOS keyboard behavior and avoids rows jumping around
+  // while the user is still tapping).
   const handleSelectEmojiWithTracking = useCallback((emoji) => {
-    setRecentEmojis(prev => {
-      const filtered = prev.filter(e => e !== emoji);
-      const updated = [emoji, ...filtered].slice(0, MAX_RECENT_EMOJIS);
-      try {
-        localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
+    try {
+      const saved = localStorage.getItem(RECENT_EMOJIS_KEY);
+      let prev = recentEmojis;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) prev = parsed;
+      }
+      const updated = [emoji, ...prev.filter(e => e !== emoji)].slice(0, MAX_RECENT_EMOJIS);
+      localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(updated));
+    } catch (e) {}
     onSelectEmoji(emoji);
-  }, [onSelectEmoji]);
+  }, [onSelectEmoji, recentEmojis]);
 
   // Smooth gliding to target category section
   const handleCategoryClick = useCallback((categoryId) => {
