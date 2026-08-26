@@ -179,20 +179,48 @@ const audioProgressManager = new AudioProgressManager();
 function useLazyInView(ref, rootMargin = '700px') {
   const [isInView, setIsInView] = useState(false);
   useEffect(() => {
-    if (!ref.current || isInView) return;
-    // If already cached in memory, treat as instantly in view
-    const el = ref.current;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsInView(true);
-          observer.disconnect();
-        }
-      },
-      { root: null, rootMargin, threshold: 0.01 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
+    if (isInView) return;
+    // No IntersectionObserver support -> show immediately
+    if (typeof window === 'undefined' || typeof window.IntersectionObserver === 'undefined') {
+      setIsInView(true);
+      return;
+    }
+    let observer = null;
+    let fallbackTimer = null;
+    let rafId = null;
+
+    const setupObserver = () => {
+      const el = ref.current;
+      if (!el) {
+        // Element not yet mounted (e.g. inside animating modal) — retry next frame
+        rafId = requestAnimationFrame(setupObserver);
+        return;
+      }
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            setIsInView(true);
+            if (observer) observer.disconnect();
+            if (fallbackTimer) clearTimeout(fallbackTimer);
+          }
+        },
+        { root: null, rootMargin, threshold: 0.01 }
+      );
+      observer.observe(el);
+      // Safety net: if observer never fires (hidden container, content-visibility, etc.),
+      // force visible after a short delay so the skeleton never sticks forever.
+      fallbackTimer = setTimeout(() => {
+        setIsInView(true);
+      }, 1200);
+    };
+
+    setupObserver();
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      if (observer) observer.disconnect();
+    };
   }, [ref, isInView, rootMargin]);
   return isInView;
 }
