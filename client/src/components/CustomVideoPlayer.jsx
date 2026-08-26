@@ -268,6 +268,12 @@ export default function CustomVideoPlayer({
       const fsEl = document.fullscreenElement || document.webkitFullscreenElement || null;
       const active = fsEl === containerRef.current || (containerRef.current && containerRef.current.contains(fsEl));
       setIsFullscreen(Boolean(active));
+      if (!active) {
+        // Exited fullscreen (button or ESC) — clear stuck focus ring that makes the button look weird (blue border in screenshot)
+        setTimeout(() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        }, 30);
+      }
     };
     const onEnterPiP = () => setIsPiP(true);
     const onLeavePiP = () => setIsPiP(false);
@@ -491,6 +497,7 @@ export default function CustomVideoPlayer({
   }, [playbackRate, showControls]);
 
   const toggleFullscreen = useCallback(async (e) => {
+    const triggerEl = e?.currentTarget;
     if (e) { e.stopPropagation(); e.preventDefault(); }
     const el = containerRef.current;
     const video = videoRef.current;
@@ -502,6 +509,9 @@ export default function CustomVideoPlayer({
         else if (video && video.webkitEnterFullscreen) {
           // iOS Safari fallback - enters native fullscreen
           video.webkitEnterFullscreen();
+          // blur trigger on iOS as well
+          if (triggerEl?.blur) triggerEl.blur();
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
           return;
         } else if (el.msRequestFullscreen) await el.msRequestFullscreen();
       } else {
@@ -517,6 +527,18 @@ export default function CustomVideoPlayer({
         }
       } catch (_) {}
     }
+    // Immediately blur the trigger so focus-visible blue ring never sticks after exit (matches app's touchend blur for header/input buttons)
+    if (triggerEl?.blur) triggerEl.blur();
+    // Also blur whichever element ended up focused (container or video) after fullscreen change
+    setTimeout(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      // Return focus to the player container for keyboard shortcuts (k, m, f) without showing ring
+      try { containerRef.current?.focus({ preventScroll: true }); } catch (_) {}
+      // Then immediately blur container as well to avoid persistent ring, but keep it focusable for next keyboard press
+      setTimeout(() => {
+        if (document.activeElement === containerRef.current) containerRef.current.blur();
+      }, 30);
+    }, 40);
     showControls();
   }, [isFullscreen, showControls]);
 

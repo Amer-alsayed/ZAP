@@ -223,7 +223,7 @@ export default function App() {
   // On mobile/touch devices, immediately blur clicked buttons to prevent lingering focus/hover states
   useEffect(() => {
     const handleTouchEnd = (e) => {
-      if (e.target.closest('button, [role="button"], .back-btn, .header-action-btn, .sidebar-settings-btn, .sidebar-calls-btn, .input-circle-btn, .scroll-to-bottom-btn')) {
+      if (e.target.closest('button, [role="button"], .back-btn, .header-action-btn, .sidebar-settings-btn, .sidebar-calls-btn, .input-circle-btn, .scroll-to-bottom-btn, .cvp-btn, .cvp-center-btn, .cvp-controls button')) {
         setTimeout(() => {
           if (document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.getAttribute('role') === 'button')) {
             document.activeElement.blur();
