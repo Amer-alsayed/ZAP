@@ -38,6 +38,7 @@ export default function CustomVideoPlayer({
   const lastTapRef = useRef({ time: 0, x: 0 });
   const isDraggingProgressRef = useRef(false);
   const isDraggingVolumeRef = useRef(false);
+  const singleClickTimerRef = useRef(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -303,6 +304,12 @@ export default function CustomVideoPlayer({
 
   const togglePlay = useCallback((e) => {
     if (e) {
+      // Double-click's second click (detail === 2) would otherwise toggle twice → ignore
+      if (e.detail === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       // If click originated while bubble is in selection mode, don't play — let row toggle selection
       const selActive = document.querySelector('.message-row.row-selected') || document.querySelector('.selection-mode-message') || document.querySelector('.message-wrapper.is-selected');
       if (selActive) {
@@ -572,8 +579,19 @@ export default function CustomVideoPlayer({
       return;
     }
     // desktop: if click directly on video area (not controls), toggle play
+    // Delay single-click slightly to allow double-click → fullscreen to cancel it (professional YouTube-like)
     if (e.target === videoRef.current || e.target === containerRef.current) {
-      togglePlay(e);
+      if (e.detail === 2) return; // second click of a double-click is handled by onDoubleClick → fullscreen, not play
+      if (singleClickTimerRef.current) clearTimeout(singleClickTimerRef.current);
+      // Capture needed values for delayed toggle
+      const capturedTarget = e.target;
+      const capturedEvent = { ...e, target: capturedTarget, currentTarget: e.currentTarget, detail: e.detail, stopPropagation: () => {}, preventDefault: () => {} };
+      singleClickTimerRef.current = setTimeout(() => {
+        singleClickTimerRef.current = null;
+        // Re-check selection mode at execution time
+        if (document.querySelector('.message-row.row-selected') || document.querySelector('.selection-mode-message')) return;
+        togglePlay(capturedEvent);
+      }, 210);
     }
   }, [hasError, isControlsVisible, isPlaying, showControls, togglePlay]);
 
@@ -588,20 +606,35 @@ export default function CustomVideoPlayer({
 
   const handleDoubleClick = useCallback((e) => {
     if (hasError) return;
-    e.stopPropagation();
-    e.preventDefault();
-    // on double click, toggle fullscreen on desktop; on video area seek on mobile mimic?
-    const isCoarse = window.matchMedia('(pointer: coarse)').matches;
-    if (!isCoarse) {
-      toggleFullscreen(e);
+    // Never handle double-click when it originates from controls — play button double-click should just toggle play, not seek/fullscreen
+    if (e.target.closest('.cvp-controls') || e.target.closest('.cvp-btn') || e.target.closest('.cvp-center-btn') || e.target.closest('.cvp-progress-wrap')) {
       return;
     }
-    // coarse pointer double tap already handled via touch?
+    // Cancel pending single-click → play so double-click doesn't also pause
+    if (singleClickTimerRef.current) {
+      clearTimeout(singleClickTimerRef.current);
+      singleClickTimerRef.current = null;
+    }
+    e.stopPropagation();
+    e.preventDefault();
+    // Desktop: double-click video surface toggles fullscreen (standard)
+    // Mobile coarse pointer uses double-tap-to-seek via handleTouchEnd, not this handler
+    const isCoarse = window.matchMedia('(pointer: coarse)').matches;
+    if (isCoarse) return;
     toggleFullscreen(e);
   }, [hasError, toggleFullscreen]);
 
   const handleTouchEnd = useCallback((e) => {
     if (hasError) return;
+    // Ignore double-tap that started on controls (play, progress, volume etc.) — preserve button taps
+    const rawTarget = e.target;
+    if (rawTarget && rawTarget.closest && rawTarget.closest('.cvp-controls, .cvp-btn, .cvp-center-btn, .cvp-progress-wrap')) {
+      // Still update lastTap to prevent next tap being counted as double, but don't seek
+      const touchNow = e.changedTouches && e.changedTouches[0];
+      if (touchNow) lastTapRef.current = { time: Date.now(), x: touchNow.clientX };
+      return;
+    }
+    // Also ignore if touch was on the central play button (its own tap already handled)
     // detect double tap for seek
     const touch = e.changedTouches && e.changedTouches[0];
     if (!touch) return;
@@ -613,6 +646,7 @@ export default function CustomVideoPlayer({
     lastTapRef.current = { time: now, x };
 
     if (!isDouble) return;
+    // Only seek when double-tap is on video surface, not controls
     e.stopPropagation();
     e.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();

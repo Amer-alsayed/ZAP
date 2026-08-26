@@ -381,35 +381,40 @@
 }
 .cvp-retry-btn:active { transform: scale(0.97); }
 
-/* Bottom controls bar — glass like chat-input-pill / attachment preview */
+/* Bottom controls bar — pill glass, matches attachment-preview-bar / reply-preview-bar */
 .cvp-controls {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
   z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
-  background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.55) 28%, rgba(8,8,10,0.92) 100%);
+  padding: 7px 8px 7px 8px;
+  padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px) * 0.5);
+  background: rgba(18, 18, 18, 0.88);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 18px rgba(0, 0, 0, 0.35);
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateY(8px) scale(0.98);
   visibility: hidden;
   pointer-events: none;
   transition:
-    opacity 0.26s cubic-bezier(0.16,1,0.3,1),
-    transform 0.26s cubic-bezier(0.16,1,0.3,1),
-    visibility 0.26s ease;
+    opacity 0.24s cubic-bezier(0.16,1,0.3,1),
+    transform 0.24s cubic-bezier(0.16,1,0.3,1),
+    visibility 0.24s ease;
   will-change: opacity, transform;
+  box-sizing: border-box;
+  max-width: calc(100% - 12px);
 }
 
 .cvp-controls.visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
   visibility: visible;
   pointer-events: auto;
 }
@@ -511,14 +516,16 @@
   box-shadow: 0 4px 14px rgba(0,0,0,0.55);
 }
 
-/* Controls row */
+/* Controls row — perfectly centered, space-between but never overflows pill */
 .cvp-controls-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-top: 6px;
+  padding-top: 4px;
   min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cvp-controls-left,
@@ -527,11 +534,18 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex-shrink: 1;
+}
+
+.cvp-controls-left {
+  flex: 1 1 auto;
+  justify-content: flex-start;
 }
 
 .cvp-controls-right {
-  gap: 4px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 /* Buttons — exactly matching app's header-action-btn / input-circle-btn language */
@@ -624,6 +638,9 @@
 }
 
 .cvp-time {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
   font-size: 11px;
   font-weight: 500;
   color: rgba(255,255,255,0.86);
@@ -805,10 +822,32 @@
   opacity: 1 !important;
 }
 
-/* Fullscreen tweaks */
+/* Fullscreen tweaks — keep pill floating, larger padding and buttons */
 .cvp-root.is-fullscreen .cvp-controls {
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)) 14px;
-  background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.62) 32%, rgba(0,0,0,0.94) 100%);
+  left: 50%;
+  right: auto;
+  bottom: 14px;
+  transform: translateX(-50%) translateY(8px) scale(0.98);
+  width: min(640px, calc(100% - 24px));
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 12px;
+  background: rgba(18, 18, 18, 0.88);
+  border-radius: 14px;
+}
+
+.cvp-root.is-fullscreen .cvp-controls.visible {
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.album-gallery-stage .cvp-root .cvp-controls {
+  left: 50%;
+  right: auto;
+  bottom: 12px;
+  transform: translateX(-50%) translateY(8px) scale(0.98);
+  width: min(640px, calc(100% - 20px));
+}
+
+.album-gallery-stage .cvp-root .cvp-controls.visible {
+  transform: translateX(-50%) translateY(0) scale(1);
 }
 
 .cvp-root.is-fullscreen .cvp-btn {
