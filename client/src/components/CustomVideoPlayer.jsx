@@ -302,7 +302,15 @@ export default function CustomVideoPlayer({
   }, [isPlaying, hasError, isEnded]);
 
   const togglePlay = useCallback((e) => {
-    if (e) { e.stopPropagation(); e.preventDefault(); }
+    if (e) {
+      // If click originated while bubble is in selection mode, don't play — let row toggle selection
+      const selActive = document.querySelector('.message-row.row-selected') || document.querySelector('.selection-mode-message') || document.querySelector('.message-wrapper.is-selected');
+      if (selActive) {
+        return;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+    }
     const video = videoRef.current;
     if (!video) return;
     if (hasError) return;
@@ -538,10 +546,18 @@ export default function CustomVideoPlayer({
   }, []);
 
   const handleContainerClick = useCallback((e) => {
-    // prevent bubbling to message row (selection / swipe)
-    e.stopPropagation();
     // If error, ignore (retry button handles)
     if (hasError) return;
+    // If message is in selection mode, let the row handle selection instead of playing
+    // Detect via DOM — mirrors MessageList selectionMode
+    if (e.target.closest('.cvp-controls') || e.target.closest('.cvp-btn') || e.target.closest('.cvp-center-btn')) {
+      // Click on controls already handled by their own handlers; don't double-handle
+      return;
+    }
+    if (document.querySelector('.message-row.row-selected') || document.querySelector('.selection-mode-message') || document.querySelector('.message-wrapper.is-selected')) {
+      // In selection mode, propagate to row for toggleSelected — do not consume
+      return;
+    }
     // On mobile, single tap toggles controls; on desktop click on video toggles play
     const isTouch = window.matchMedia('(pointer: coarse)').matches;
     if (isTouch) {
@@ -552,23 +568,22 @@ export default function CustomVideoPlayer({
       } else {
         showControls();
       }
+      // Do not stopPropagation — allow swipe/long-press detection on the bubble to run
       return;
     }
     // desktop: if click directly on video area (not controls), toggle play
-    // we check if target is video or container background
     if (e.target === videoRef.current || e.target === containerRef.current) {
       togglePlay(e);
     }
   }, [hasError, isControlsVisible, isPlaying, showControls, togglePlay]);
 
   const handleVideoTouchStart = useCallback((e) => {
-    // stop parent swipe handling
-    e.stopPropagation();
+    // Intentionally NOT calling stopPropagation — allow bubble swipe-to-reply / hold-to-select
+    // Only controls block swipe (guarded in ChatArea handleMessageTouchStart)
   }, []);
 
   const handleVideoPointerDown = useCallback((e) => {
-    // prevent message swipe / long-press selection from triggering
-    e.stopPropagation();
+    // Same — video surface should behave like image bubble for swipe/long-press
   }, []);
 
   const handleDoubleClick = useCallback((e) => {
@@ -726,6 +741,7 @@ export default function CustomVideoPlayer({
       onPointerDown={handleVideoPointerDown}
       onKeyDown={handleKeyDown}
       onDoubleClick={handleDoubleClick}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <video
         ref={videoRef}
@@ -736,18 +752,34 @@ export default function CustomVideoPlayer({
         playsInline
         crossOrigin="anonymous"
         disablePictureInPicture={false}
+        controlsList="nodownload noplaybackrate noremoteplayback"
+        disableRemotePlayback
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
         onClick={(e) => {
-          e.stopPropagation();
-          // on coarse pointer, click handled by container; on fine pointer toggle play
+          // In selection mode, let the bubble handle selection — don't intercept
+          if (document.querySelector('.message-row.row-selected') || document.querySelector('.selection-mode-message') || document.querySelector('.message-wrapper.is-selected')) {
+            return;
+          }
+          // Allow swipe/long-press to work — don't stopPropagation for video surface
           const isCoarse = window.matchMedia('(pointer: coarse)').matches;
-          if (!isCoarse) togglePlay(e);
-          else {
-            // mobile: just ensure controls toggle; don't toggle play on every tap maybe?
+          if (!isCoarse) {
+            e.stopPropagation();
+            togglePlay(e);
+          } else {
+            // mobile: container handles toggle
+            // don't stopPropagation here either — keep bubble gestures alive
             if (isControlsVisible && isPlaying) setIsControlsVisible(false);
             else showControls();
           }
         }}
-        onContextMenu={(e) => e.stopPropagation()}
+        onContextMenu={(e) => {
+          // Block browser's "Save video / Open in new tab" menu — match image behavior (user-select: none)
+          e.preventDefault();
+        }}
+        onTouchStart={(e) => {
+          // Don't block swipe/long-press; controls already guard via ChatArea
+        }}
       />
 
       {/* Top gradient scrim with filename */}
@@ -761,8 +793,15 @@ export default function CustomVideoPlayer({
       <button
         className={`cvp-center-btn ${showCenterPlay ? 'visible' : ''} ${showBigPlayPulse ? 'pulse' : ''}`}
         onClick={togglePlay}
-        onPointerDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
+        onPointerDown={(e) => {
+          const sel = document.querySelector('.message-row.row-selected') || document.querySelector('.selection-mode-message');
+          if (!sel) e.stopPropagation();
+        }}
+        onTouchStart={(e) => {
+          const sel = document.querySelector('.message-row.row-selected') || document.querySelector('.selection-mode-message');
+          if (!sel) e.stopPropagation();
+        }}
+        onContextMenu={(e) => e.preventDefault()}
         aria-label={isEnded ? 'Replay' : isPlaying ? 'Pause' : 'Play'}
         tabIndex={-1}
       >

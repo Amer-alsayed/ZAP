@@ -1059,6 +1059,37 @@
   z-index: 2;
 }
 
+/* Prevent browser long-press menu on video — match image behavior */
+.cvp-root, .cvp-video, .cvp-compact-thumb, .cvp-compact-video {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+  user-drag: none !important;
+}
+
+.cvp-video {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+/* Reply video thumbnail — consistent with reply-image-thumbnail (36px) */
+.reply-video-thumbnail {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 6px;
+  background: rgba(var(--accent-rgb), 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent-color);
+}
+
 /* Accessibility hint hidden */
 .cvp-a11y-hint {
   position: absolute;

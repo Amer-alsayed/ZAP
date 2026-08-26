@@ -1334,7 +1334,9 @@ const MessageList = React.memo(({
 
   const handleMessageTouchStart = (msg, isSent, e) => {
     if (window.__isMediaModalOpen || selectionMode) return;
-    if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .album-gallery-modal-overlay, .system-call-log-card, .cvp-root, .cvp-controls, .cvp-btn, .cvp-progress-wrap, .cvp-volume-slider')) {
+    // Only block swipe/long-press when touching actual controls, not the video surface itself
+    // This allows swipe-to-reply and hold-to-select on the video like images do
+    if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .album-gallery-modal-overlay, .system-call-log-card, .cvp-controls, .cvp-btn, .cvp-progress-wrap, .cvp-volume-slider, .cvp-center-btn')) {
       return;
     }
     
@@ -1662,7 +1664,7 @@ const MessageList = React.memo(({
               onTouchStart={(e) => handleMessageTouchStart(msg, isSent, e)}
               onMouseDown={(e) => {
                 if (window.__isMediaModalOpen || selectionMode || e.button !== 0) return;
-                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .cvp-root, .cvp-controls, .cvp-btn, .cvp-progress-wrap, .cvp-volume-slider')) {
+                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .cvp-controls, .cvp-btn, .cvp-progress-wrap, .cvp-volume-slider, .cvp-center-btn')) {
                   return;
                 }
                 startLongPress(msg);
@@ -1768,15 +1770,21 @@ const MessageList = React.memo(({
                         <div className="message-reply-context" onClick={() => scrollToMessage(msg.replyTo.id)}>
                           <span className="reply-context-sender">{msg.replyTo.sender}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                            {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') && (
+                            {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/') ? (
                               <div className="reply-image-thumbnail">
                                 <ImagePreviewLoader fileMetadata={msg.replyTo.fileMetadata} />
                               </div>
-                            )}
+                            ) : msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('video/') ? (
+                              <div className="reply-video-thumbnail">
+                                <VideoIcon size={14} style={{ color: 'var(--accent-color)' }} />
+                              </div>
+                            ) : null}
                             <p className="reply-context-text">
                               {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
                                 ? 'Photo'
-                                : msg.replyTo.text
+                                : msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('video/')
+                                  ? 'Video'
+                                  : msg.replyTo.text
                               }
                             </p>
                           </div>
@@ -4449,11 +4457,15 @@ const ChatArea = React.memo(function ChatArea({
           {activeReplyInfo && (
             <div className="reply-preview-inner">
               <div className="reply-preview-left">
-                {activeReplyInfo.mediaType === 'file' && activeReplyInfo.fileMetadata?.mimeType?.startsWith('image/') && (
+                {activeReplyInfo.mediaType === 'file' && activeReplyInfo.fileMetadata?.mimeType?.startsWith('image/') ? (
                   <div className="reply-image-thumbnail">
                     <ImagePreviewLoader fileMetadata={activeReplyInfo.fileMetadata} />
                   </div>
-                )}
+                ) : activeReplyInfo.mediaType === 'file' && activeReplyInfo.fileMetadata?.mimeType?.startsWith('video/') ? (
+                  <div className="reply-video-thumbnail">
+                    <VideoIcon size={14} style={{ color: 'var(--accent-color)' }} />
+                  </div>
+                ) : null}
                 <div className="reply-preview-text-block">
                   <div className="reply-preview-badge-row">
                     <CornerUpLeft size={13} className="reply-preview-icon" />
@@ -4462,7 +4474,9 @@ const ChatArea = React.memo(function ChatArea({
                   <span className="reply-preview-text">
                     {activeReplyInfo.mediaType === 'file' && activeReplyInfo.fileMetadata?.mimeType?.startsWith('image/')
                       ? 'Photo'
-                      : activeReplyInfo.text
+                      : activeReplyInfo.mediaType === 'file' && activeReplyInfo.fileMetadata?.mimeType?.startsWith('video/')
+                        ? 'Video'
+                        : activeReplyInfo.text
                     }
                   </span>
                 </div>
@@ -5145,9 +5159,6 @@ function VideoPreviewLoader({ fileMetadata, compact = false }) {
       {videoSrc && (
         <div
           className="cvp-host"
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
         >
           <CustomVideoPlayer src={videoSrc} fileMetadata={fileMetadata} compact={false} />
         </div>
