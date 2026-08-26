@@ -18,6 +18,7 @@ const buildForwardPreview = (message) => {
 
 const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], onClose, onConfirm }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedKey, setSelectedKey] = useState(null);
   const [forwardingTo, setForwardingTo] = useState(null);
   const [isClosing, setIsClosing] = useState(false);
 
@@ -34,6 +35,7 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
     // stays mounted, so lingering isClosing/search/selection must be cleared)
     setIsClosing(false);
     setSearchQuery('');
+    setSelectedKey(null);
     setForwardingTo(null);
   }, [message]);
 
@@ -86,7 +88,12 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
 
   const previewText = buildForwardPreview(message);
 
-  const handleSelect = async (target) => {
+  const handleSelect = (target) => {
+    if (forwardingTo || isClosing) return;
+    setSelectedKey(prev => (prev === target.key ? null : target.key));
+  };
+
+  const handleSend = async (target) => {
     if (forwardingTo || isClosing) return;
     setForwardingTo(target.key);
     let succeeded = false;
@@ -139,30 +146,49 @@ const ForwardModal = ({ message, contacts = [], groups = [], blockedUsers = [], 
               <span>No chats or groups found</span>
             </div>
           ) : (
-            targets.map((target) => (
-              <button
-                key={target.key}
-                type="button"
-                className={`forward-contact-item ${forwardingTo === target.key ? 'is-sending' : ''}`}
-                onClick={() => handleSelect(target)}
-                disabled={Boolean(forwardingTo)}
-              >
-                <span className={`forward-contact-avatar ${target.type === 'group' ? 'is-group' : ''}`}>
-                  {target.type === 'group'
-                    ? (target.avatarIcon
-                        ? renderAvatar(target.name, null, target.avatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '13px' })
-                        : <MessageSquare size={14} />)
-                    : renderAvatar(target.id, target.name, target.avatarIcon || null, { width: '100%', height: '100%', borderRadius: '50%' })}
-                </span>
-                <span className="forward-contact-details">
-                  <span className="forward-contact-name">{target.name}</span>
-                  <span className="forward-contact-username">{target.sub}</span>
-                </span>
-                <span className="forward-contact-action">
-                  {forwardingTo === target.key ? 'Sending...' : 'Send'}
-                </span>
-              </button>
-            ))
+            targets.map((target) => {
+              const isSelected = selectedKey === target.key;
+              const isSending = forwardingTo === target.key;
+              return (
+                <div
+                  key={target.key}
+                  role="button"
+                  tabIndex={forwardingTo ? -1 : 0}
+                  aria-pressed={isSelected}
+                  className={`forward-contact-item ${isSelected ? 'is-selected' : ''} ${isSending ? 'is-sending' : ''}`}
+                  onClick={() => handleSelect(target)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSelect(target);
+                    }
+                  }}
+                >
+                  <span className={`forward-contact-avatar ${target.type === 'group' ? 'is-group' : ''}`}>
+                    {target.type === 'group'
+                      ? (target.avatarIcon
+                          ? renderAvatar(target.name, null, target.avatarIcon, { width: '100%', height: '100%', borderRadius: '50%', fontSize: '13px' })
+                          : <MessageSquare size={14} />)
+                      : renderAvatar(target.id, target.name, target.avatarIcon || null, { width: '100%', height: '100%', borderRadius: '50%' })}
+                  </span>
+                  <span className="forward-contact-details">
+                    <span className="forward-contact-name">{target.name}</span>
+                    <span className="forward-contact-username">{target.sub}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className={`forward-contact-action ${isSelected || isSending ? 'is-active' : ''}`}
+                    disabled={!isSelected || Boolean(forwardingTo)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSend(target);
+                    }}
+                  >
+                    {isSending ? 'Sending...' : 'Send'}
+                  </button>
+                </div>
+              );
+            })
           )}
         </div>
       </div>

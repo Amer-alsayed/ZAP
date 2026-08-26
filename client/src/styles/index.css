@@ -11071,23 +11071,29 @@ textarea {
   transition: background 0.16s ease, border-color 0.16s ease;
 }
 
-.forward-contact-item:hover:not(:disabled),
+.forward-contact-item:hover:not(.is-sending),
 .forward-contact-item:focus-visible {
   background: rgba(255, 255, 255, 0.05);
+}
+
+/* Row click = selection only; sending happens via the Send pill */
+.forward-contact-item.is-selected {
+  background: var(--accent-surface);
+  border-color: var(--accent-border);
 }
 
 .forward-contact-item.is-sending {
   background: var(--accent-surface);
   border-color: var(--accent-border);
-}
-
-.forward-contact-item:not(:disabled):active {
-  transform: scale(0.98);
-}
-
-.forward-contact-item:disabled {
   cursor: default;
-  opacity: 0.7;
+}
+
+.forward-contact-item:focus-visible {
+  outline: none;
+}
+
+.forward-contact-item:not(.is-sending):active {
+  transform: scale(0.98);
 }
 
 .forward-contact-avatar {
@@ -11135,20 +11141,37 @@ textarea {
   border-radius: 9999px;
   font-size: 12.5px;
   font-weight: 600;
+  font-family: inherit;
   color: var(--accent-text);
   background: rgba(var(--accent-rgb), 0.18);
   border: 1px solid rgba(var(--accent-rgb), 0.35);
-  opacity: 0;
+  opacity: 0.45;
   transform: scale(0.96);
+  cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
 }
 
+.forward-contact-action.is-active,
 .forward-contact-item:hover .forward-contact-action,
 .forward-contact-item:focus-visible .forward-contact-action,
 .forward-contact-item.is-sending .forward-contact-action {
   opacity: 1;
   transform: scale(1);
+}
+
+.forward-contact-action:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.28);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  color: #ffffff;
+}
+
+.forward-contact-action:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.forward-contact-action:disabled {
+  cursor: default;
 }
 
 .forward-empty-state {
