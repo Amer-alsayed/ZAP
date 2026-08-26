@@ -566,8 +566,21 @@ const prepareFileForSending = async (rawFile) => {
     if (!rawBuffer || rawBuffer.byteLength === 0) {
       try { rawBuffer = await new Response(rawFile).arrayBuffer(); } catch (e) {}
     }
-    if (!rawBuffer || rawBuffer.byteLength === 0 && typeof FileReader !== 'undefined') {
-      // Final same-tick fallback: direct synchronous-kickoff FileReader read
+    if (!rawBuffer || rawBuffer.byteLength === 0) {
+      // Object-URL + fetch fallback: uses a different browser code path that
+      // often succeeds for content:// grants where arrayBuffer/FileReader fail
+      try {
+        const objUrl = URL.createObjectURL(rawFile);
+        try {
+          const resp = await fetch(objUrl);
+          const buf = await resp.arrayBuffer();
+          if (buf && buf.byteLength > 0) rawBuffer = buf;
+        } finally {
+          URL.revokeObjectURL(objUrl);
+        }
+      } catch (e) {}
+    }
+    if ((!rawBuffer || rawBuffer.byteLength === 0) && typeof FileReader !== 'undefined') {
       rawBuffer = await new Promise((resolve) => {
         try {
           const reader = new FileReader();
@@ -580,21 +593,108 @@ const prepareFileForSending = async (rawFile) => {
       });
     }
   }
-  if (!rawBuffer || rawBuffer.byteLength === 0) {
-    throw new Error(`Could not read data for "${rawFile.name}". Please try selecting the file again.`);
+
+  // If the file is an image and the raw read still failed, try a canvas
+  // re-encode fallback: decoding via <img> + canvas often works even when
+  // ArrayBuffer/FileReader are blocked for cloud-backed picker files.
+  let canvasFallbackFile = null;
+  let canvasFallbackBuffer = null;
+  if ((!rawBuffer || rawBuffer.byteLength === 0)) {
+    const maybeImage = inferMimeType(rawFile.name || '', rawFile.type || '');
+    if (maybeImage.startsWith('image/') && maybeImage !== 'image/gif') {
+      try {
+        const reencoded = await new Promise((resolve) => {
+          let objUrl = null;
+          try {
+            objUrl = URL.createObjectURL(rawFile);
+            const img = new window.Image();
+            // Some Android pickers need crossOrigin unset; keep default
+            img.onload = () => {
+              try {
+                const maxDim = 2560;
+                let { naturalWidth: w, naturalHeight: h } = img;
+                if (!w || !h) { if (objUrl) URL.revokeObjectURL(objUrl); return resolve(null); }
+                if (w > maxDim || h > maxDim) {
+                  if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+                  else { w = Math.round((w * maxDim) / h); h = maxDim; }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { if (objUrl) URL.revokeObjectURL(objUrl); return resolve(null); }
+                ctx.drawImage(img, 0, 0, w, h);
+                URL.revokeObjectURL(objUrl); objUrl = null;
+                canvas.toBlob((blob) => {
+                  if (blob && blob.size > 0) {
+                    const name = (rawFile.name || 'photo.jpg').replace(/\.[^/.]+$/, '') + '.jpg';
+                    const f = new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() });
+                    resolve(f);
+                  } else resolve(null);
+                }, 'image/jpeg', 0.88);
+              } catch (e) { if (objUrl) URL.revokeObjectURL(objUrl); resolve(null); }
+            };
+            img.onerror = () => { if (objUrl) URL.revokeObjectURL(objUrl); resolve(null); };
+            img.src = objUrl;
+          } catch (e) { if (objUrl) URL.revokeObjectURL(objUrl); resolve(null); }
+        });
+        if (reencoded) {
+          try {
+            const buf = await reencoded.arrayBuffer();
+            if (buf && buf.byteLength > 0) {
+              canvasFallbackFile = reencoded;
+              canvasFallbackBuffer = buf;
+              rawBuffer = buf; // treat as success so we don't throw below
+            }
+          } catch (e) {}
+          if (!canvasFallbackBuffer) {
+            try {
+              const url2 = URL.createObjectURL(reencoded);
+              try {
+                const r2 = await fetch(url2);
+                const b2 = await r2.arrayBuffer();
+                if (b2 && b2.byteLength > 0) {
+                  canvasFallbackFile = reencoded;
+                  canvasFallbackBuffer = b2;
+                  rawBuffer = b2;
+                }
+              } finally { URL.revokeObjectURL(url2); }
+            } catch (e) {}
+          }
+        }
+      } catch (e) {}
+    }
   }
 
-  // Now normalize/optimize the image (bytes are already safely in memory)
-  const file = await optimizeImageForSending(rawFile);
+  if (!rawBuffer || rawBuffer.byteLength === 0) {
+    console.error('prepareFileForSending: all read tiers failed', { name: rawFile.name, size: rawFile.size, type: rawFile.type });
+    throw new Error(`Could not read data for "${rawFile.name}". This image may be stored in the cloud or in a restricted folder. Try selecting it via Documents, or move it to Downloads and try again.`);
+  }
 
-  // If optimization re-encoded the image, its bytes come from an in-memory
-  // canvas blob and are always readable; otherwise reuse the captured bytes.
+  // Now normalize/optimize the image (bytes are already safely in memory).
+  // If we already succeeded via canvas fallback, reuse that re-encoded file.
+  let file = rawFile;
   let fileBuffer = rawBuffer;
-  if (file !== rawFile) {
-    try {
-      const optimizedBuffer = await file.arrayBuffer();
-      if (optimizedBuffer && optimizedBuffer.byteLength > 0) fileBuffer = optimizedBuffer;
-    } catch (e) {}
+  if (canvasFallbackFile && canvasFallbackBuffer) {
+    file = canvasFallbackFile;
+    fileBuffer = canvasFallbackBuffer;
+  } else {
+    const optimized = await optimizeImageForSending(rawFile);
+    file = optimized;
+    if (file !== rawFile) {
+      // Optimized output is an in-memory canvas blob — prefer its readable bytes
+      let gotOptimized = false;
+      try {
+        const optimizedBuffer = await file.arrayBuffer();
+        if (optimizedBuffer && optimizedBuffer.byteLength > 0) { fileBuffer = optimizedBuffer; gotOptimized = true; }
+      } catch (e) {}
+      if (!gotOptimized) {
+        try {
+          const u = URL.createObjectURL(file);
+          try { const rr = await fetch(u); const bb = await rr.arrayBuffer(); if (bb && bb.byteLength > 0) fileBuffer = bb; }
+          finally { URL.revokeObjectURL(u); }
+        } catch (e) {}
+      }
+    }
   }
 
   // Pre-encrypt with a fresh per-file AES-GCM session key
@@ -4721,6 +4821,21 @@ const createThumbnailBlob = (blob, maxDimension = 480) => {
 // In-memory instant media URL cache (URL -> { fullUrl, thumbUrl })
 const globalMediaSessionCache = new Map();
 
+// Deterministic shimmer aspect — reserves layout before decrypt so message never pops/shifts
+// Produces a stable ratio per URL (Twitter/X style: no layout jump, shimmer occupies final area).
+const getSkeletonAspect = (url = '', w = null, h = null) => {
+  if (w && h && w > 0 && h > 0) {
+    const r = w / h;
+    return `${w} / ${h}`;
+  }
+  let hash = 0;
+  const s = String(url);
+  for (let i = 0; i < s.length; i++) hash = ((hash * 31) + s.charCodeAt(i)) >>> 0;
+  // Map hash to pleasant photo ratios: 1:1, 4:3, 3:2, 16:10 — slight variance avoids uniform boring grid
+  const buckets = ['1 / 1', '4 / 3', '3 / 2', '16 / 10', '4 / 3', '3 / 4', '1 / 1'];
+  return buckets[hash % buckets.length];
+};
+
 function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes = false }) {
   const fileUrl = fileMetadata?.url;
   const containerRef = useRef(null);
@@ -4811,27 +4926,31 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
 
   if (error) return <span ref={containerRef} style={{ color: 'var(--text-muted, #a0aec0)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}><AlertTriangle size={14} style={{ color: '#e53e3e' }} /> {error}</span>;
 
+  // Reserve layout immediately — skeleton aspect locks height so chat never jumps (CLS fix)
+  const skeletonAspect = !isFullRes ? getSkeletonAspect(fileUrl, fileMetadata?.width, fileMetadata?.height) : null;
+  const containerStyle = !isFullRes && !isLoaded ? { '--skeleton-aspect': skeletonAspect } : undefined;
+
   return (
-    <div ref={containerRef} className={`image-loader-container ${isLoaded ? 'is-ready' : 'is-decrypting'}`}>
-      {/* Minimalist & Premium Media Decryption Loading Card */}
-      {!isLoaded && (
-        <div className="image-skeleton-loader">
-          <div className="media-decrypt-spinner-badge">
-            <div className="media-decrypt-spinner-ring" />
-            <ZapLogo size={22} variant="accent" glow={false} className="media-decrypt-logo" />
-          </div>
-          {fileMetadata?.size && (
-            <span className="media-decrypt-size-pill">
-              {(fileMetadata.size / 1024).toFixed(0)} KB
-            </span>
-          )}
+    <div ref={containerRef} className={`image-loader-container ${isLoaded ? 'is-ready' : 'is-decrypting'} ${isFullRes ? 'is-fullres' : ''}`} style={containerStyle}>
+      {/* Professional skeleton: occupies final area with Twitter/X-style shimmer wave — prevents layout shift */}
+      <div className="image-skeleton-loader" aria-hidden={isLoaded}>
+        <div className="skeleton-shimmer-bg" />
+        <div className="skeleton-shimmer-wave" />
+        <div className="media-decrypt-spinner-badge">
+          <div className="media-decrypt-spinner-ring" />
+          <ZapLogo size={22} variant="accent" glow={false} className="media-decrypt-logo" />
         </div>
-      )}
+        {fileMetadata?.size && (
+          <span className="media-decrypt-size-pill">
+            {(fileMetadata.size / 1024).toFixed(0)} KB
+          </span>
+        )}
+      </div>
       
-      {/* Image tag with smooth blur-to-sharp cinematic crossfade */}
+      {/* Image tag with smooth blur-to-sharp cinematic crossfade — overlaps skeleton for zero-shift reveal */}
       {imgSrc && (
         <img 
-          className={`message-image ${isLoaded ? 'loaded' : ''}`}
+          className={`message-image ${isLoaded ? 'loaded' : 'is-loading'}`}
           src={imgSrc} 
           alt="" 
           loading="lazy"
@@ -4920,9 +5039,33 @@ function VideoPreviewLoader({ fileMetadata }) {
     };
   }, [fileMetadata, isInView]);
 
+  const skeletonAspect = getSkeletonAspect(fileMetadata?.url);
+  const showSkeleton = !videoSrc;
+
   if (error) return <span ref={containerRef} style={{ color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={14} /> Video Decryption Failed</span>;
-  if (!videoSrc) return <span ref={containerRef} style={{ color: 'var(--text-subtle)' }}>{isInView ? 'Decrypting Video...' : 'Video • tap to load'}</span>;
-  return <video ref={containerRef} className="message-video" src={videoSrc} controls preload="metadata" />;
+
+  return (
+    <div
+      ref={containerRef}
+      className={`video-loader-container ${showSkeleton ? 'is-decrypting' : 'is-ready'}`}
+      style={showSkeleton ? { '--skeleton-aspect': skeletonAspect } : undefined}
+    >
+      {showSkeleton && (
+        <div className="image-skeleton-loader video-skeleton" aria-hidden={false}>
+          <div className="skeleton-shimmer-bg" />
+          <div className="skeleton-shimmer-wave" />
+          <div className="media-decrypt-spinner-badge">
+            <div className="media-decrypt-spinner-ring" />
+            <VideoIcon size={18} style={{ color: 'var(--accent-color)', opacity: 0.95 }} />
+          </div>
+          <span className="media-decrypt-size-pill">{isInView ? 'Decrypting…' : 'Video'}</span>
+        </div>
+      )}
+      {videoSrc && (
+        <video className="message-video loaded" src={videoSrc} controls preload="metadata" playsInline />
+      )}
+    </div>
+  );
 }
 
 // ==========================================
