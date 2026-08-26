@@ -555,20 +555,46 @@ const optimizeImageForSending = async (file) => {
 // (with retries for Android content-locked files) and pre-encrypt with AES-GCM
 // so hitting "send" never has to wait on crypto or a failing file handle.
 const prepareFileForSending = async (rawFile) => {
-  const file = await optimizeImageForSending(rawFile);
-
-  // Read the full plaintext buffer, retrying briefly — Android/Chrome can keep
-  // content:// handles locked for a moment right after selection.
-  let fileBuffer = null;
-  for (let attempt = 0; attempt < 3 && (!fileBuffer || fileBuffer.byteLength === 0); attempt++) {
-    if (attempt > 0) await new Promise(r => setTimeout(r, 250 * attempt));
-    fileBuffer = await readBlobBufferSafely(file);
-    if (!fileBuffer || fileBuffer.byteLength === 0) {
-      try { fileBuffer = await new Response(file).arrayBuffer(); } catch (e) {}
+  // IMPORTANT: capture the raw bytes FIRST, before any slow async work.
+  // Files from the Android photo picker (content:// backed) can have their
+  // transient read grant revoked shortly after the picker closes, so every
+  // millisecond counts here — image optimization must not delay this read.
+  let rawBuffer = null;
+  for (let attempt = 0; attempt < 4 && (!rawBuffer || rawBuffer.byteLength === 0); attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 200 * attempt));
+    rawBuffer = await readBlobBufferSafely(rawFile);
+    if (!rawBuffer || rawBuffer.byteLength === 0) {
+      try { rawBuffer = await new Response(rawFile).arrayBuffer(); } catch (e) {}
+    }
+    if (!rawBuffer || rawBuffer.byteLength === 0 && typeof FileReader !== 'undefined') {
+      // Final same-tick fallback: direct synchronous-kickoff FileReader read
+      rawBuffer = await new Promise((resolve) => {
+        try {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result || null);
+          reader.onerror = () => resolve(null);
+          reader.readAsArrayBuffer(rawFile);
+        } catch (err) {
+          resolve(null);
+        }
+      });
     }
   }
-  if (!fileBuffer || fileBuffer.byteLength === 0) {
-    throw new Error(`Could not read data for "${file.name}". Please try selecting the file again.`);
+  if (!rawBuffer || rawBuffer.byteLength === 0) {
+    throw new Error(`Could not read data for "${rawFile.name}". Please try selecting the file again.`);
+  }
+
+  // Now normalize/optimize the image (bytes are already safely in memory)
+  const file = await optimizeImageForSending(rawFile);
+
+  // If optimization re-encoded the image, its bytes come from an in-memory
+  // canvas blob and are always readable; otherwise reuse the captured bytes.
+  let fileBuffer = rawBuffer;
+  if (file !== rawFile) {
+    try {
+      const optimizedBuffer = await file.arrayBuffer();
+      if (optimizedBuffer && optimizedBuffer.byteLength > 0) fileBuffer = optimizedBuffer;
+    } catch (e) {}
   }
 
   // Pre-encrypt with a fresh per-file AES-GCM session key
@@ -3226,11 +3252,15 @@ const ChatArea = React.memo(function ChatArea({
             updateProgress(15, 'Encrypting...');
 
             // Fallback path: read file as ArrayBuffer safely (supporting Android content URI files)
-            let fallbackBuffer = fileToUpload._preloadedBuffer || await readBlobBufferSafely(fileToUpload);
-            if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
-              try {
-                fallbackBuffer = await new Response(fileToUpload).arrayBuffer();
-              } catch (e) {}
+            let fallbackBuffer = null;
+            for (let attempt = 0; attempt < 4 && (!fallbackBuffer || fallbackBuffer.byteLength === 0); attempt++) {
+              if (attempt > 0) await new Promise(r => setTimeout(r, 200 * attempt));
+              fallbackBuffer = fileToUpload._preloadedBuffer || await readBlobBufferSafely(fileToUpload);
+              if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
+                try {
+                  fallbackBuffer = await new Response(fileToUpload).arrayBuffer();
+                } catch (e) {}
+              }
             }
 
             if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
