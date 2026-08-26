@@ -15,6 +15,7 @@ import { renderAvatar } from './Sidebar';
 import ZapLogo from './ZapLogo';
 import { loadOrFetchDecryptedMedia, setCachedMedia, getMemoryMediaUrl, warmupMediaCache, inferMimeType } from '../services/mediaCache';
 import { soundEngine } from '../services/soundEffects';
+import CustomVideoPlayer from './CustomVideoPlayer';
 
 const getSafetyNumber = (keyA, keyB) => {
   if (!keyA || !keyB) return 'N/A';
@@ -193,6 +194,10 @@ function useLazyInView(ref, rootMargin = '700px') {
       const el = ref.current;
       if (!el) {
         // Element not yet mounted (e.g. inside animating modal) — retry next frame
+        // Also ensure we don't spin forever: fallback forces visible after 900ms
+        if (!fallbackTimer) {
+          fallbackTimer = setTimeout(() => setIsInView(true), 900);
+        }
         rafId = requestAnimationFrame(setupObserver);
         return;
       }
@@ -794,7 +799,10 @@ const AlbumGalleryModal = ({ items, initialIndex = 0, isExiting = false, onClose
       e.target.closest('.album-gallery-filmstrip') ||
       e.target.closest('.message-image') ||
       e.target.closest('.message-video') ||
-      e.target.closest('.gallery-caption-bar')
+      e.target.closest('.gallery-caption-bar') ||
+      e.target.closest('.cvp-root') ||
+      e.target.closest('.cvp-controls') ||
+      e.target.closest('.cvp-btn')
     ) {
       return;
     }
@@ -994,7 +1002,7 @@ const MediaAlbumGrid = React.memo(function MediaAlbumGrid({ albumItems, onImageC
                   onImageLoad={handleImageLoad} 
                 />
               ) : isVideo ? (
-                <VideoPreviewLoader fileMetadata={file} />
+                <VideoPreviewLoader fileMetadata={file} compact={true} />
               ) : null}
 
               {isFourthWithMore && (
@@ -1326,7 +1334,7 @@ const MessageList = React.memo(({
 
   const handleMessageTouchStart = (msg, isSent, e) => {
     if (window.__isMediaModalOpen || selectionMode) return;
-    if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .album-gallery-modal-overlay, .system-call-log-card')) {
+    if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .album-gallery-modal-overlay, .system-call-log-card, .cvp-root, .cvp-controls, .cvp-btn, .cvp-progress-wrap, .cvp-volume-slider')) {
       return;
     }
     
@@ -1654,7 +1662,7 @@ const MessageList = React.memo(({
               onTouchStart={(e) => handleMessageTouchStart(msg, isSent, e)}
               onMouseDown={(e) => {
                 if (window.__isMediaModalOpen || selectionMode || e.button !== 0) return;
-                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container')) {
+                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .cvp-root, .cvp-controls, .cvp-btn, .cvp-progress-wrap, .cvp-volume-slider')) {
                   return;
                 }
                 startLongPress(msg);
@@ -5017,8 +5025,9 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
 
 // ==========================================
 // Helper component: Decrypted video loader — lazy
+// Uses CustomVideoPlayer for themed, fully-controlled playback
 // ==========================================
-function VideoPreviewLoader({ fileMetadata }) {
+function VideoPreviewLoader({ fileMetadata, compact = false }) {
   const [videoSrc, setVideoSrc] = useState(null);
   const [error, setError] = useState(false);
   const objectUrlRef = useRef(null);
@@ -5072,6 +5081,50 @@ function VideoPreviewLoader({ fileMetadata }) {
 
   if (error) return <span ref={containerRef} style={{ color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={14} /> Video Decryption Failed</span>;
 
+  // Compact album thumbnail — lightweight preview that opens full gallery modal
+  if (compact) {
+    return (
+      <div
+        ref={containerRef}
+        className={`video-loader-container ${showSkeleton ? 'is-decrypting' : 'is-ready'} cvp-compact-host`}
+        style={showSkeleton ? { '--skeleton-aspect': skeletonAspect } : undefined}
+      >
+        {showSkeleton && (
+          <div className="image-skeleton-loader video-skeleton" aria-hidden={false}>
+            <div className="skeleton-shimmer-bg" />
+            <div className="skeleton-shimmer-wave" />
+            <div className="media-decrypt-spinner-badge">
+              <div className="media-decrypt-spinner-ring" />
+              <VideoIcon size={18} style={{ color: 'var(--accent-color)', opacity: 0.95 }} />
+            </div>
+            <span className="media-decrypt-size-pill">{isInView ? 'Decrypting…' : 'Video'}</span>
+          </div>
+        )}
+        {videoSrc && (
+          <div className="cvp-compact-thumb">
+            <video
+              src={videoSrc}
+              muted
+              playsInline
+              preload="metadata"
+              className="cvp-compact-video"
+              onLoadedMetadata={(e) => {
+                try { e.currentTarget.currentTime = 0.1; } catch (_) {}
+              }}
+            />
+            <div className="cvp-compact-play-badge" aria-hidden="true">
+              <Play size={14} fill="white" style={{ marginLeft: '1px' }} />
+            </div>
+            <div className="cvp-compact-duration">
+              <VideoIcon size={10} />
+              <span>Video</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
@@ -5090,7 +5143,14 @@ function VideoPreviewLoader({ fileMetadata }) {
         </div>
       )}
       {videoSrc && (
-        <video className="message-video loaded" src={videoSrc} controls preload="metadata" playsInline />
+        <div
+          className="cvp-host"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          <CustomVideoPlayer src={videoSrc} fileMetadata={fileMetadata} compact={false} />
+        </div>
       )}
     </div>
   );

@@ -3507,8 +3507,6 @@ button {
   background: transparent !important;
   margin: 0 auto;
   contain: layout paint;
-  content-visibility: auto;
-  contain-intrinsic-size: 280px 210px;
 }
 
 .single-image-bubble .image-loader-container {
@@ -3539,8 +3537,6 @@ button {
   background: #111315 !important;
   aspect-ratio: var(--skeleton-aspect, 16 / 10);
   contain: layout paint;
-  content-visibility: auto;
-  contain-intrinsic-size: 280px 180px;
   transition: aspect-ratio 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
