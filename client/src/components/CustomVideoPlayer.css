@@ -424,9 +424,17 @@
 .cvp-root.is-ended .cvp-controls,
 .cvp-root.has-error .cvp-controls {
   opacity: 1 !important;
-  transform: translateY(0) !important;
   visibility: visible !important;
   pointer-events: auto !important;
+  transform: translateY(0) scale(1) !important;
+}
+.cvp-root.is-fullscreen.is-paused .cvp-controls,
+.cvp-root.is-fullscreen.is-ended .cvp-controls,
+.cvp-root.is-fullscreen.has-error .cvp-controls,
+.album-gallery-stage .cvp-root.is-paused .cvp-controls,
+.album-gallery-stage .cvp-root.is-ended .cvp-controls,
+.album-gallery-stage .cvp-root.has-error .cvp-controls {
+  transform: translateX(-50%) translateY(0) scale(1) !important;
 }
 
 /* Progress bar */
