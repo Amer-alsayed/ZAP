@@ -2081,6 +2081,17 @@ button {
   overflow: hidden !important;
 }
 
+.file-preview-pill.is-preparing {
+  color: var(--accent, #4fd1c5);
+  border-color: rgba(79, 209, 197, 0.35);
+  background: rgba(79, 209, 197, 0.08);
+}
+
+.send-btn.preparing-attachments {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 @keyframes filePillPopIn {
   0% {
     opacity: 0;

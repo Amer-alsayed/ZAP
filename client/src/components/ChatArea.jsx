@@ -551,6 +551,56 @@ const optimizeImageForSending = async (file) => {
   });
 };
 
+// Eagerly prepare a file for sending at selection time: normalize, read bytes
+// (with retries for Android content-locked files) and pre-encrypt with AES-GCM
+// so hitting "send" never has to wait on crypto or a failing file handle.
+const prepareFileForSending = async (rawFile) => {
+  const file = await optimizeImageForSending(rawFile);
+
+  // Read the full plaintext buffer, retrying briefly — Android/Chrome can keep
+  // content:// handles locked for a moment right after selection.
+  let fileBuffer = null;
+  for (let attempt = 0; attempt < 3 && (!fileBuffer || fileBuffer.byteLength === 0); attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 250 * attempt));
+    fileBuffer = await readBlobBufferSafely(file);
+    if (!fileBuffer || fileBuffer.byteLength === 0) {
+      try { fileBuffer = await new Response(file).arrayBuffer(); } catch (e) {}
+    }
+  }
+  if (!fileBuffer || fileBuffer.byteLength === 0) {
+    throw new Error(`Could not read data for "${file.name}". Please try selecting the file again.`);
+  }
+
+  // Pre-encrypt with a fresh per-file AES-GCM session key
+  const fileSessionKey = await window.crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const encryptedFileBuffer = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    fileSessionKey,
+    fileBuffer
+  );
+  const keyJwk = await window.crypto.subtle.exportKey('jwk', fileSessionKey);
+
+  const inferredMime = inferMimeType(file.name, file.type);
+  const localBlob = (file.type === inferredMime)
+    ? file
+    : new Blob([fileBuffer], { type: inferredMime });
+
+  return {
+    file,
+    fileBuffer,
+    inferredMime,
+    localBlob,
+    encryptedBase64: bufferToBase64(encryptedFileBuffer),
+    keyJwk,
+    ivBase64: bufferToBase64(iv)
+  };
+};
+
 // Fullscreen Interactive Album Gallery Modal
 const AlbumGalleryModal = ({ items, initialIndex = 0, isExiting = false, onClose }) => {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
@@ -1687,6 +1737,7 @@ const ChatArea = React.memo(function ChatArea({
   const [isSendingVoice, setIsSendingVoice] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [preparingFilesCount, setPreparingFilesCount] = useState(0);
   const [isClearingFiles, setIsClearingFiles] = useState(false);
   const [removingFileIndex, setRemovingFileIndex] = useState(null);
   const [isClosingReply, setIsClosingReply] = useState(false);
@@ -1723,6 +1774,10 @@ const ChatArea = React.memo(function ChatArea({
   useEffect(() => {
     selectedFilesRef.current = selectedFiles;
   }, [selectedFiles]);
+  const preparingFilesCountRef = useRef(0);
+  useEffect(() => {
+    preparingFilesCountRef.current = preparingFilesCount;
+  }, [preparingFilesCount]);
   const isClearingFilesRef = useRef(false);
 
   // Fullscreen interactive Album Gallery Modal state (Group of images)
@@ -3072,6 +3127,11 @@ const ChatArea = React.memo(function ChatArea({
   };
 
   const handleSendMessage = async () => {
+    // Block sending while attachments are still being encrypted on-device
+    if (preparingFilesCountRef.current > 0) {
+      notify('Attachments are still encrypting. Please wait a moment.', 'info', 'Encrypting...');
+      return;
+    }
     // If there's neither text nor attached files, do nothing
     if (!inputText.trim() && selectedFiles.length === 0) return;
 
@@ -3147,42 +3207,59 @@ const ChatArea = React.memo(function ChatArea({
 
           updateProgress(5, 'Preparing file...');
 
-          // Normalize mobile photos (HEIC/high-MP) to fast web-ready high-res format
-          let fileToUpload = await optimizeImageForSending(rawFile);
+          // Attachments are pre-encrypted at selection time; reuse the ready
+          // payload so sending is instant and cannot race the crypto.
+          const preEncrypted = rawFile._encryptedPayload || null;
+          let fileToUpload = preEncrypted ? rawFile : await optimizeImageForSending(rawFile);
 
-          updateProgress(15, 'Encrypting...');
+          let fileBuffer = null;
+          let encryptedBase64 = null;
+          let fileSessionKeyJwk = null;
+          let ivBase64 = null;
 
-          // 1. Read file as ArrayBuffer safely (supporting Android content URI files)
-          let fileBuffer = fileToUpload._preloadedBuffer || await readBlobBufferSafely(fileToUpload);
-          if (!fileBuffer || fileBuffer.byteLength === 0) {
-            try {
-              fileBuffer = await new Response(fileToUpload).arrayBuffer();
-            } catch (e) {}
+          if (preEncrypted) {
+            updateProgress(30, 'Uploading...');
+            encryptedBase64 = preEncrypted.encryptedBase64;
+            fileSessionKeyJwk = preEncrypted.keyJwk;
+            ivBase64 = preEncrypted.ivBase64;
+          } else {
+            updateProgress(15, 'Encrypting...');
+
+            // Fallback path: read file as ArrayBuffer safely (supporting Android content URI files)
+            let fallbackBuffer = fileToUpload._preloadedBuffer || await readBlobBufferSafely(fileToUpload);
+            if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
+              try {
+                fallbackBuffer = await new Response(fileToUpload).arrayBuffer();
+              } catch (e) {}
+            }
+
+            if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
+              throw new Error(`Could not read data for "${fileToUpload.name}". Please try selecting the file again.`);
+            }
+            fileBuffer = fallbackBuffer;
+
+            updateProgress(25, 'Encrypting...');
+
+            // Generate AES-GCM session key
+            const fileSessionKey = await window.crypto.subtle.generateKey(
+              { name: 'AES-GCM', length: 256 },
+              true,
+              ['encrypt', 'decrypt']
+            );
+
+            // Encrypt file buffer
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            const encryptedFileBuffer = await window.crypto.subtle.encrypt(
+              { name: 'AES-GCM', iv },
+              fileSessionKey,
+              fileBuffer
+            );
+
+            // Base64 convert
+            encryptedBase64 = bufferToBase64(encryptedFileBuffer);
+            fileSessionKeyJwk = await window.crypto.subtle.exportKey('jwk', fileSessionKey);
+            ivBase64 = bufferToBase64(iv);
           }
-
-          if (!fileBuffer || fileBuffer.byteLength === 0) {
-            throw new Error(`Could not read data for "${fileToUpload.name}". Please try selecting the file again.`);
-          }
-
-          updateProgress(25, 'Encrypting...');
-
-          // 2. Generate AES-GCM session key
-          const fileSessionKey = await window.crypto.subtle.generateKey(
-            { name: 'AES-GCM', length: 256 },
-            true,
-            ['encrypt', 'decrypt']
-          );
-
-          // 3. Encrypt file buffer
-          const iv = window.crypto.getRandomValues(new Uint8Array(12));
-          const encryptedFileBuffer = await window.crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv },
-            fileSessionKey,
-            fileBuffer
-          );
-
-          // 4. Base64 convert
-          const encryptedBase64 = bufferToBase64(encryptedFileBuffer);
 
           updateProgress(35, 'Uploading...');
 
@@ -3233,16 +3310,17 @@ const ChatArea = React.memo(function ChatArea({
 
           updateProgress(98, 'Sending...');
 
-          const inferredMime = inferMimeType(fileToUpload.name, fileToUpload.type);
-          const localBlob = (fileToUpload.type === inferredMime)
-            ? fileToUpload
-            : new Blob([fileBuffer], { type: inferredMime });
+          const inferredMime = preEncrypted
+            ? preEncrypted.mimeType
+            : inferMimeType(fileToUpload.name, fileToUpload.type);
+          const localBlob = preEncrypted
+            ? preEncrypted.localBlob
+            : (fileToUpload.type === inferredMime)
+              ? fileToUpload
+              : new Blob([fileBuffer], { type: inferredMime });
 
           // Save local copy in IndexedDB and memory cache
           setCachedMedia(fileUrl, localBlob, inferredMime);
-
-          // 6. Export JWK session key
-          const fileSessionKeyJwk = await window.crypto.subtle.exportKey('jwk', fileSessionKey);
 
           // Attach caption only to the first file in a multi-file batch
           const fileCaption = (idx === 0) ? (captionText || null) : null;
@@ -3257,7 +3335,7 @@ const ChatArea = React.memo(function ChatArea({
               size: fileToUpload.size,
               mimeType: inferredMime,
               keyJwk: fileSessionKeyJwk,
-              iv: bufferToBase64(iv)
+              iv: ivBase64
             },
             replyTo: idx === 0 ? replyContext : null
           });
@@ -3288,6 +3366,7 @@ const ChatArea = React.memo(function ChatArea({
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (preparingFilesCount > 0) return;
       if ((inputText && inputText.trim().length > 0) || selectedFiles.length > 0) {
         handleSendMessage();
       }
@@ -3306,7 +3385,7 @@ const ChatArea = React.memo(function ChatArea({
       }
     }
     if (pastedFiles.length > 0) {
-      setSelectedFiles(prev => [...prev, ...pastedFiles]);
+      addFilesToSelection(pastedFiles);
       e.preventDefault();
     }
   };
@@ -3314,38 +3393,55 @@ const ChatArea = React.memo(function ChatArea({
   // ==========================================
   // File Attachment Handling & E2EE Upload
   // ==========================================
-  const handleFileSelect = async (e) => {
-    const files = Array.from(e.target.files || []);
+  // Shared pipeline: normalize -> read -> PRE-ENCRYPT at selection time.
+  // A file only becomes sendable once its encrypted payload is fully ready
+  // on-device, so hitting send immediately can never race the crypto.
+  const addFilesToSelection = async (incomingFiles) => {
+    const files = Array.from(incomingFiles || []);
     if (!files.length) return;
-    
+
     const validFiles = [];
-    for (const f of files) {
-      if (f.size > 50 * 1024 * 1024) {
-        notify(`"${f.name}" exceeds the maximum file size of 50MB.`, 'error', 'File Too Large');
-        continue;
-      }
-      try {
-        const optimized = await optimizeImageForSending(f);
-        const buffer = await readBlobBufferSafely(optimized);
-        if (buffer && buffer.byteLength > 0) {
-          const safeFile = new File([buffer], optimized.name, {
-            type: optimized.type || 'application/octet-stream',
-            lastModified: optimized.lastModified || Date.now()
-          });
-          safeFile._preloadedBuffer = buffer;
-          validFiles.push(safeFile);
-        } else {
-          validFiles.push(optimized);
+    setPreparingFilesCount(prev => prev + files.length);
+    try {
+      for (const f of files) {
+        if (f.size > 50 * 1024 * 1024) {
+          notify(`"${f.name}" exceeds the maximum file size of 50MB.`, 'error', 'File Too Large');
+          continue;
         }
-      } catch (readErr) {
-        console.warn('File selection buffer fallback:', readErr);
-        validFiles.push(f);
+        try {
+          const prepared = await prepareFileForSending(f);
+          const safeFile = new File([prepared.fileBuffer], prepared.file.name, {
+            type: prepared.file.type || prepared.inferredMime || 'application/octet-stream',
+            lastModified: prepared.file.lastModified || Date.now()
+          });
+          safeFile._encryptedPayload = {
+            encryptedBase64: prepared.encryptedBase64,
+            keyJwk: prepared.keyJwk,
+            ivBase64: prepared.ivBase64,
+            name: prepared.file.name,
+            size: prepared.file.size,
+            mimeType: prepared.inferredMime,
+            localBlob: prepared.localBlob
+          };
+          validFiles.push(safeFile);
+        } catch (prepErr) {
+          console.error('File preparation failed:', prepErr);
+          notify(prepErr.message || `Could not process "${f.name}".`, 'error', 'Upload Error');
+        }
       }
+    } finally {
+      setPreparingFilesCount(prev => Math.max(0, prev - files.length));
     }
 
     if (validFiles.length > 0) {
       setSelectedFiles(prev => [...prev, ...validFiles]);
     }
+  };
+
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    addFilesToSelection(files);
     e.target.value = '';
   };
 
@@ -4260,8 +4356,8 @@ const ChatArea = React.memo(function ChatArea({
         )}
 
         {/* Floating Attachment Preview Pill */}
-        <div className={`attachment-preview-bar ${(selectedFiles.length > 0 || isClearingFiles) ? 'glass visible' : ''} ${isClearingFiles ? 'is-exiting' : ''}`}>
-          {(selectedFiles.length > 0 || isClearingFiles) && (
+        <div className={`attachment-preview-bar ${(selectedFiles.length > 0 || isClearingFiles || preparingFilesCount > 0) ? 'glass visible' : ''} ${isClearingFiles ? 'is-exiting' : ''}`}>
+          {(selectedFiles.length > 0 || isClearingFiles || preparingFilesCount > 0) && (
             <div className="attachment-preview-inner">
               <div 
                 className="multi-file-preview-container"
@@ -4271,6 +4367,14 @@ const ChatArea = React.memo(function ChatArea({
                   }
                 }}
               >
+                {preparingFilesCount > 0 && (
+                  <div className="file-preview-pill is-preparing" title="Encrypting on this device before sending...">
+                    <Loader2 size={13} className="spinner-rotating" />
+                    <span className="file-pill-name">
+                      Encrypting {preparingFilesCount} file{preparingFilesCount > 1 ? 's' : ''}...
+                    </span>
+                  </div>
+                )}
                 {selectedFiles.map((file, idx) => (
                   <div key={`${file.name}-${idx}`} className={`file-preview-pill ${removingFileIndex === idx ? 'is-removing' : ''}`}>
                     {file.type?.startsWith('image/') ? <Image size={13} /> : <FileText size={13} />}
@@ -4482,7 +4586,7 @@ const ChatArea = React.memo(function ChatArea({
               </button>
             ) : (inputText.trim() || selectedFiles.length > 0) ? (
               <button 
-                className="input-circle-btn send-btn send-active" 
+                className={`input-circle-btn send-btn send-active ${preparingFilesCount > 0 ? 'preparing-attachments' : ''}`} 
                 onPointerDown={(e) => {
                   // Prevent focus transfer away from textarea to keep keyboard up
                   e.preventDefault();
@@ -4490,11 +4594,13 @@ const ChatArea = React.memo(function ChatArea({
                 onClick={() => {
                   handleSendMessage();
                 }} 
-                disabled={(!inputText.trim() && selectedFiles.length === 0) || uploading}
-                title="Send Encrypted Message"
-                aria-label="Send Encrypted Message"
+                disabled={(!inputText.trim() && selectedFiles.length === 0) || uploading || preparingFilesCount > 0}
+                title={preparingFilesCount > 0 ? 'Encrypting attachments...' : 'Send Encrypted Message'}
+                aria-label={preparingFilesCount > 0 ? 'Encrypting attachments...' : 'Send Encrypted Message'}
               >
-                <ArrowUp size={18} strokeWidth={2.8} />
+                {preparingFilesCount > 0
+                  ? <Loader2 size={18} className="spinner-rotating" />
+                  : <ArrowUp size={18} strokeWidth={2.8} />}
               </button>
             ) : (
               <button 
