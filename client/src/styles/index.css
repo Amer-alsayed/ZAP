@@ -633,8 +633,9 @@ button {
   border-top-right-radius: 20px !important;
   border-bottom-right-radius: 20px !important;
   border-top-left-radius: 0 !important;
-  background: #000000 !important;
-  background-color: #000000 !important;
+  border-bottom-left-radius: 0 !important;
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.11) 0%, rgba(var(--accent-rgb), 0.03) 36%, transparent 72%), #0a0b0e !important;
+  border: none !important;
   border-right: none !important;
   box-shadow: none !important;
   overflow: hidden;
