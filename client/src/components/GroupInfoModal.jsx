@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Search, Crown, ShieldCheck, UserMinus, UserPlus, Pencil, LogOut, Trash2, ChevronLeft, Users, Camera } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 import { searchUser } from '../services/api';
+import { useElasticBounce } from '../hooks/useElasticBounce';
 
 // Same center-crop + compression pipeline as the profile avatar in Settings
 const processGroupImage = (file) => {
@@ -119,6 +120,10 @@ const GroupInfoModal = ({
   const [pendingAdd, setPendingAdd] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const searchReqIdRef = useRef(0);
+  const bodyContainerRef = useRef(null);
+  const bounceWrapperRef = useRef(null);
+
+  useElasticBounce(bodyContainerRef, bounceWrapperRef);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -388,10 +393,11 @@ const GroupInfoModal = ({
           )}
         </div>
 
-        <div className="group-info-body">
-          {error && <div className="create-group-error">{error}</div>}
+        <div className="group-info-body" ref={bodyContainerRef}>
+          <div className="group-info-bounce-wrapper" ref={bounceWrapperRef}>
+            {error && <div className="create-group-error">{error}</div>}
 
-          <div key={view} className={`group-info-view ${navDir} ${viewLeaving ? 'leaving' : ''}`}>
+            <div key={view} className={`group-info-view ${navDir} ${viewLeaving ? 'leaving' : ''}`}>
             {view === 'main' && (
               <>
                 <div className="group-info-hero">
@@ -568,6 +574,7 @@ const GroupInfoModal = ({
                 </button>
               </>
             )}
+          </div>
           </div>
         </div>
 

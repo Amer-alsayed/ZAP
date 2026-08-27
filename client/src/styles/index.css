@@ -9144,6 +9144,24 @@ textarea {
   will-change: transform;
 }
 
+.emoji-bounce-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  transform: translate3d(0px, 0px, 0px);
+  will-change: transform;
+}
+
+.create-group-bounce-wrapper,
+.group-info-bounce-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  transform: translate3d(0px, 0px, 0px);
+  will-change: transform;
+}
+
 @media (max-width: 768px), (pointer: coarse) {
   .contacts-list-container {
     overscroll-behavior-y: contain;

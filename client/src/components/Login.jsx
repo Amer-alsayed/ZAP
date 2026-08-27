@@ -3,6 +3,7 @@ import { Shield, User, Lock, KeyRound, AlertTriangle } from 'lucide-react';
 import ZapLogo from './ZapLogo';
 import { deriveKeysFromPassword, generateKeyPairs, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys } from '../services/crypto';
 import { registerUser, loginUser } from '../services/api';
+import { useElasticBounce } from '../hooks/useElasticBounce';
 
 export default function Login({ onAuthSuccess }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -15,6 +16,10 @@ export default function Login({ onAuthSuccess }) {
   const [isFocused, setIsFocused] = useState(false);
   const focusTimeout = useRef(null);
   const isKeyboardOpen = useRef(false);
+  const authContainerRef = useRef(null);
+  const authCardRef = useRef(null);
+
+  useElasticBounce(authContainerRef, authCardRef);
 
   const handleFocus = () => {
     if (focusTimeout.current) {
@@ -175,8 +180,8 @@ export default function Login({ onAuthSuccess }) {
   };
 
   return (
-    <div className="auth-wrapper">
-      <div className={`auth-card glass ${isFocused ? 'inputs-focused' : ''}`}>
+    <div className="auth-wrapper" ref={authContainerRef}>
+      <div className={`auth-card glass ${isFocused ? 'inputs-focused' : ''}`} ref={authCardRef}>
         <div className="auth-logo">
           <ZapLogo size={64} glow />
           <h1>ZAP</h1>

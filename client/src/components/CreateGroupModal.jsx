@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Search, Users, Check, ShieldCheck, Camera, Trash2 } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 import { searchUser } from '../services/api';
+import { useElasticBounce } from '../hooks/useElasticBounce';
 
 // Same center-crop + compression pipeline as the profile avatar in Settings
 const processGroupImage = (file) => {
@@ -56,6 +57,10 @@ const CreateGroupModal = ({ contacts = [], currentUser, blockedUsers = [], onClo
   const searchReqIdRef = useRef(0);
   const pendingProfilesRef = useRef(new Map());
   const fileInputRef = useRef(null);
+  const bodyContainerRef = useRef(null);
+  const bounceWrapperRef = useRef(null);
+
+  useElasticBounce(bodyContainerRef, bounceWrapperRef);
 
   // App-consistent exit: fade + scale out before unmounting (same 0.22s curve
   // as the contact action modals), then hand control back to the parent
@@ -246,111 +251,113 @@ const CreateGroupModal = ({ contacts = [], currentUser, blockedUsers = [], onClo
           </button>
         </div>
 
-        <div className="create-group-body">
-          <div className="create-group-identity-row">
-            <div className="group-avatar-upload">
-              {renderAvatar(groupName.trim() || 'G', null, avatarImage ? JSON.stringify({ image: avatarImage }) : null, { width: '64px', height: '64px', fontSize: '24px' })}
-              <button
-                type="button"
-                className="group-avatar-cam-btn"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isCreating}
-                title={avatarImage ? 'Change photo' : 'Add photo'}
-                aria-label="Add group photo"
-              >
-                <Camera size={13} />
-              </button>
-            </div>
-            <input
-              type="text"
-              className="create-group-name-input"
-              placeholder="Group name"
-              value={groupName}
-              maxLength={32}
-              onChange={(e) => setGroupName(e.target.value)}
-              autoFocus={!isTouchDevice}
-              disabled={isCreating}
-            />
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, .png, .jpg, .jpeg, .webp, .gif"
-            style={{ display: 'none' }}
-            onChange={handleAvatarFileChange}
-          />
-
-          {avatarImage && (
-            <button type="button" className="group-avatar-remove-btn" onClick={handleRemoveAvatar} disabled={isCreating}>
-              <Trash2 size={13} /> Remove photo
-            </button>
-          )}
-
-          <div className="create-group-members-label-row">
-            <span className="create-group-picker-label">Members</span>
-            <span className="create-group-member-count">{selectedMembers.size} selected</span>
-          </div>
-
-          <div className="create-group-search-wrap">
-            <Search size={14} className="create-group-search-icon" />
-            <input
-              type="text"
-              className="create-group-search-input"
-              placeholder="Find by exact username..."
-              value={searchQuery}
-              onChange={handleSearchInputChange}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearch(); } }}
-              disabled={isCreating}
-            />
-            {isSearching && <span className="create-group-search-spinner" />}
-          </div>
-
-          {error && <div className="create-group-error">{error}</div>}
-
-          {searchedUser && (
-            <div className="create-group-search-result">
-              {renderAvatar(searchedUser.username, searchedUser.displayName, searchedUser.avatarIcon, { width: '34px', height: '34px', fontSize: '13px' })}
-              <div className="create-group-search-result-info">
-                <span className="create-group-result-name">{searchedUser.displayName || searchedUser.username}</span>
-                <span className="create-group-result-username">@{searchedUser.username}</span>
+        <div className="create-group-body" ref={bodyContainerRef}>
+          <div className="create-group-bounce-wrapper" ref={bounceWrapperRef}>
+            <div className="create-group-identity-row">
+              <div className="group-avatar-upload">
+                {renderAvatar(groupName.trim() || 'G', null, avatarImage ? JSON.stringify({ image: avatarImage }) : null, { width: '64px', height: '64px', fontSize: '24px' })}
+                <button
+                  type="button"
+                  className="group-avatar-cam-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isCreating}
+                  title={avatarImage ? 'Change photo' : 'Add photo'}
+                  aria-label="Add group photo"
+                >
+                  <Camera size={13} />
+                </button>
               </div>
-              <button type="button" className="create-group-add-user-btn" onClick={handleAddSearchedUser}>Add</button>
+              <input
+                type="text"
+                className="create-group-name-input"
+                placeholder="Group name"
+                value={groupName}
+                maxLength={32}
+                onChange={(e) => setGroupName(e.target.value)}
+                autoFocus={!isTouchDevice}
+                disabled={isCreating}
+              />
             </div>
-          )}
 
-          <div className="create-group-contact-list">
-            {filteredContactsForList.length === 0 ? (
-              <div className="create-group-empty">No contacts available. Search a username above to add people directly.</div>
-            ) : (
-              filteredContactsForList.map((contact) => {
-                const lower = contact.username.toLowerCase();
-                const isSelected = selectedMembers.has(lower);
-                return (
-                  <button
-                    key={contact.username}
-                    type="button"
-                    className={`create-group-contact-item ${isSelected ? 'is-selected' : ''}`}
-                    onClick={() => toggleMember(lower)}
-                    disabled={isCreating}
-                  >
-                    {renderAvatar(contact.username, contact.customName || contact.displayName, contact.avatarIcon, { width: '36px', height: '36px', fontSize: '14px' })}
-                    <div className="create-group-contact-info">
-                      <span className="create-group-contact-name">{contact.customName || contact.displayName || contact.username}</span>
-                      <span className="create-group-contact-username">@{contact.username}</span>
-                    </div>
-                    <span className={`create-group-check ${isSelected ? 'checked' : ''}`}>
-                      {isSelected && <Check size={13} strokeWidth={3} />}
-                    </span>
-                  </button>
-                );
-              })
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, .png, .jpg, .jpeg, .webp, .gif"
+              style={{ display: 'none' }}
+              onChange={handleAvatarFileChange}
+            />
+
+            {avatarImage && (
+              <button type="button" className="group-avatar-remove-btn" onClick={handleRemoveAvatar} disabled={isCreating}>
+                <Trash2 size={13} /> Remove photo
+              </button>
             )}
-          </div>
 
-          <div className="create-group-e2ee-note">
-            <ShieldCheck size={13} />
-            <span>A fresh end-to-end encryption key will be generated on this device and sealed separately for every member.</span>
+            <div className="create-group-members-label-row">
+              <span className="create-group-picker-label">Members</span>
+              <span className="create-group-member-count">{selectedMembers.size} selected</span>
+            </div>
+
+            <div className="create-group-search-wrap">
+              <Search size={14} className="create-group-search-icon" />
+              <input
+                type="text"
+                className="create-group-search-input"
+                placeholder="Find by exact username..."
+                value={searchQuery}
+                onChange={handleSearchInputChange}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearch(); } }}
+                disabled={isCreating}
+              />
+              {isSearching && <span className="create-group-search-spinner" />}
+            </div>
+
+            {error && <div className="create-group-error">{error}</div>}
+
+            {searchedUser && (
+              <div className="create-group-search-result">
+                {renderAvatar(searchedUser.username, searchedUser.displayName, searchedUser.avatarIcon, { width: '34px', height: '34px', fontSize: '13px' })}
+                <div className="create-group-search-result-info">
+                  <span className="create-group-result-name">{searchedUser.displayName || searchedUser.username}</span>
+                  <span className="create-group-result-username">@{searchedUser.username}</span>
+                </div>
+                <button type="button" className="create-group-add-user-btn" onClick={handleAddSearchedUser}>Add</button>
+              </div>
+            )}
+
+            <div className="create-group-contact-list">
+              {filteredContactsForList.length === 0 ? (
+                <div className="create-group-empty">No contacts available. Search a username above to add people directly.</div>
+              ) : (
+                filteredContactsForList.map((contact) => {
+                  const lower = contact.username.toLowerCase();
+                  const isSelected = selectedMembers.has(lower);
+                  return (
+                    <button
+                      key={contact.username}
+                      type="button"
+                      className={`create-group-contact-item ${isSelected ? 'is-selected' : ''}`}
+                      onClick={() => toggleMember(lower)}
+                      disabled={isCreating}
+                    >
+                      {renderAvatar(contact.username, contact.customName || contact.displayName, contact.avatarIcon, { width: '36px', height: '36px', fontSize: '14px' })}
+                      <div className="create-group-contact-info">
+                        <span className="create-group-contact-name">{contact.customName || contact.displayName || contact.username}</span>
+                        <span className="create-group-contact-username">@{contact.username}</span>
+                      </div>
+                      <span className={`create-group-check ${isSelected ? 'checked' : ''}`}>
+                        {isSelected && <Check size={13} strokeWidth={3} />}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="create-group-e2ee-note">
+              <ShieldCheck size={13} />
+              <span>A fresh end-to-end encryption key will be generated on this device and sealed separately for every member.</span>
+            </div>
           </div>
         </div>
 

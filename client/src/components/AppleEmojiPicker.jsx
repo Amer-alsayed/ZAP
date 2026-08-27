@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
 import { Search, X, Delete, Smile } from 'lucide-react';
+import { useElasticBounce } from '../hooks/useElasticBounce';
 
 const RECENT_EMOJIS_KEY = 'chatra_frequent_emojis';
 const MAX_RECENT_EMOJIS = 14; // Exactly 2 clean rows of 7 emojis (Apple iOS standard)
@@ -241,9 +242,12 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
   // over the next few frames while the pop-in animation runs.
   const [renderedCategoryCount, setRenderedCategoryCount] = useState(1);
   const scrollContainerRef = useRef(null);
+  const emojiBounceWrapperRef = useRef(null);
   const searchInputRef = useRef(null);
   const isScrollingRef = useRef(false);
   const rafIdRef = useRef(null);
+
+  useElasticBounce(scrollContainerRef, emojiBounceWrapperRef);
 
   // Full list of categories including Frequently Used at top
   const allCategoriesWithRecents = useMemo(() => {
@@ -429,20 +433,22 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
         ref={scrollContainerRef}
         onScroll={handleScroll}
       >
-        {filteredCategories.length === 0 ? (
-          <div className="apple-emoji-empty-state">
-            <Smile size={32} style={{ opacity: 0.25, marginBottom: '8px' }} />
-            <p>No Results Found</p>
-          </div>
-        ) : (
-          filteredCategories.map((category) => (
-            <EmojiCategorySection
-              key={category.id}
-              category={category}
-              onSelectEmoji={handleSelectEmojiWithTracking}
-            />
-          ))
-        )}
+        <div className="emoji-bounce-wrapper" ref={emojiBounceWrapperRef}>
+          {filteredCategories.length === 0 ? (
+            <div className="apple-emoji-empty-state">
+              <Smile size={32} style={{ opacity: 0.25, marginBottom: '8px' }} />
+              <p>No Results Found</p>
+            </div>
+          ) : (
+            filteredCategories.map((category) => (
+              <EmojiCategorySection
+                key={category.id}
+                category={category}
+                onSelectEmoji={handleSelectEmojiWithTracking}
+              />
+            ))
+          )}
+        </div>
       </div>
 
       {/* Bottom Docked Apple Category Navigation Bar with Recents */}
