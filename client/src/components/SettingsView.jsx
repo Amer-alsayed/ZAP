@@ -10,25 +10,21 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
   const settingsContainerRef = useRef(null);
   const settingsBounceWrapperRef = useRef(null);
   const getInitialAvatar = () => {
-    if (currentUser.avatarIcon) {
+    if (currentUser?.avatarIcon) {
       try {
         const parsed = JSON.parse(currentUser.avatarIcon);
         return {
-          color: parsed.color || 'blue',
-          emoji: parsed.emoji || '',
           image: parsed.image || ''
         };
       } catch (e) {
         // Fallback
       }
     }
-    return { color: 'blue', emoji: '', image: '' };
+    return { image: '' };
   };
 
   const initialAvatar = getInitialAvatar();
   const [displayName, setDisplayName] = useState(currentUser.displayName || '');
-  const [selectedColor, setSelectedColor] = useState(initialAvatar.color);
-  const [selectedEmoji, setSelectedEmoji] = useState(initialAvatar.emoji);
   const [selectedImage, setSelectedImage] = useState(initialAvatar.image || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -92,16 +88,6 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
 
   const fileInputRef = useRef(null);
 
-  const colors = [
-    { name: 'blue', value: '#007acc' },
-    { name: 'purple', value: '#bf5af2' },
-    { name: 'emerald', value: '#30d158' },
-    { name: 'orange', value: '#ff9f0a' },
-    { name: 'rose', value: '#ff375f' }
-  ];
-
-  const uniqueEmojis = ['None', '🦊', '🐨', '🐼', '🦁', '🐯', '🚀', '💻', '👻', '🔒', '🛡️', '💎', '🔑'];
-
   // Centering, cropping and JPEG compression pipeline
   const processProfileImage = (file) => {
     return new Promise((resolve, reject) => {
@@ -149,8 +135,6 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
     try {
       const compressedBase64 = await processProfileImage(file);
       setSelectedImage(compressedBase64);
-      // Clear emoji when custom photo is active
-      setSelectedEmoji('');
     } catch (err) {
       console.error(err);
       setError('Failed to process image');
@@ -159,21 +143,9 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
 
   const handleRemoveImage = () => {
     setSelectedImage('');
-    setSelectedColor('blue');
-    setSelectedEmoji('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  };
-
-  const selectColorAndClearImage = (colorName) => {
-    setSelectedColor(colorName);
-    setSelectedImage('');
-  };
-
-  const selectEmojiAndClearImage = (emojiName) => {
-    setSelectedEmoji(emojiName);
-    setSelectedImage('');
   };
 
   const handleSave = async () => {
@@ -182,17 +154,9 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
     setSuccess(false);
 
     try {
-      let avatarIconString;
-      if (selectedImage) {
-        avatarIconString = JSON.stringify({
-          image: selectedImage
-        });
-      } else {
-        avatarIconString = JSON.stringify({
-          color: selectedColor,
-          emoji: selectedEmoji === 'None' ? '' : selectedEmoji
-        });
-      }
+      const avatarIconString = selectedImage 
+        ? JSON.stringify({ image: selectedImage })
+        : null;
       
       const cleanedDisplayName = displayName.trim();
       // Also save the current theme color to server so it syncs across devices
@@ -220,10 +184,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
   // Build live preview avatar details
   const previewAvatarIcon = selectedImage 
     ? JSON.stringify({ image: selectedImage })
-    : JSON.stringify({
-        color: selectedColor,
-        emoji: selectedEmoji === 'None' ? '' : selectedEmoji
-      });
+    : null;
 
   return (
     <div className={`settings-view ${isNavigatingBack ? 'navigating-back' : ''}`}>
@@ -372,59 +333,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
               </div>
             </div>
 
-            {/* Colors */}
-            <div className={`form-group avatar-options-group ${selectedImage ? 'is-disabled' : ''}`}>
-              <label>
-                Avatar Color
-                {selectedImage && (
-                  <span className="photo-active-chip">Photo Active</span>
-                )}
-              </label>
-              <div className="color-selector-row">
-                {colors.map((c) => {
-                  const isColorSelected = !selectedImage && selectedColor === c.name;
-                  return (
-                    <button
-                      key={c.name}
-                      type="button"
-                      className={`color-dot ${isColorSelected ? 'active' : ''}`}
-                      style={{ backgroundColor: c.value }}
-                      onClick={() => selectColorAndClearImage(c.name)}
-                      disabled={saving || !!selectedImage}
-                      title={`Select ${c.name} background`}
-                    >
-                      {isColorSelected && <Check size={14} color="#ffffff" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
-            {/* Emojis */}
-            <div className={`form-group avatar-options-group ${selectedImage ? 'is-disabled' : ''}`}>
-              <label>
-                Avatar Symbol (Emoji)
-                {selectedImage && (
-                  <span className="photo-active-chip">Photo Active</span>
-                )}
-              </label>
-              <div className="avatar-emoji-grid">
-                {uniqueEmojis.map((emoji) => {
-                  const isEmojiSelected = !selectedImage && ((emoji === 'None' && !selectedEmoji) || selectedEmoji === emoji);
-                  return (
-                    <button
-                      key={emoji}
-                      type="button"
-                      className={`avatar-emoji-btn ${isEmojiSelected ? 'active' : ''}`}
-                      onClick={() => selectEmojiAndClearImage(emoji === 'None' ? '' : emoji)}
-                      disabled={saving || !!selectedImage}
-                    >
-                      {emoji}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
             {/* Call Quality Profile Settings (Unified List Group) */}
             <div className="form-group">
@@ -506,7 +415,8 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                         width: '18px',
                         left: soundEffectsEnabled ? '22px' : '3px',
                         bottom: '3px',
-                        backgroundColor: 'white',
+                        backgroundColor: soundEffectsEnabled ? 'var(--switch-thumb-color, #ffffff)' : '#ffffff',
+                        boxShadow: '0 2px 5px rgba(0, 0, 0, 0.45)',
                         transition: '.2s',
                         borderRadius: '50%'
                       }} />
@@ -608,7 +518,8 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                                       width: '14px',
                                       left: (individualSounds && individualSounds[item.key]) ? '19px' : '3px',
                                       bottom: '3px',
-                                      backgroundColor: 'white',
+                                      backgroundColor: (individualSounds && individualSounds[item.key]) ? 'var(--switch-thumb-color, #ffffff)' : '#ffffff',
+                                      boxShadow: '0 1px 4px rgba(0, 0, 0, 0.45)',
                                       transition: '.2s',
                                       borderRadius: '50%'
                                     }} />

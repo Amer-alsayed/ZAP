@@ -13,6 +13,30 @@ const formatSidebarTime = (timestamp) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+export const isColorLight = (colorStr) => {
+  if (!colorStr) return false;
+  if (colorStr === 'white' || colorStr === '#ffffff' || colorStr === '#fff') return true;
+  if (colorStr.startsWith('#')) {
+    let c = colorStr.replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    const num = parseInt(c, 16);
+    if (!isNaN(num)) {
+      const r = (num >> 16) & 255;
+      const g = (num >> 8) & 255;
+      const b = num & 255;
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.65;
+    }
+  }
+  if (colorStr.startsWith('rgb')) {
+    const match = colorStr.match(/\d+/g);
+    if (match && match.length >= 3) {
+      const [r, g, b] = match.map(Number);
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.65;
+    }
+  }
+  return false;
+};
+
 export const renderAvatar = (username, displayName, avatarIcon, customSizeStyle = {}) => {
   const displayInitials = (displayName || username || 'U').substring(0, 2).toUpperCase();
   
@@ -55,6 +79,9 @@ export const renderAvatar = (username, displayName, avatarIcon, customSizeStyle 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          border: 'none',
+          outline: 'none',
+          boxShadow: 'none',
           ...customSizeStyle 
         }}
       >
@@ -64,23 +91,33 @@ export const renderAvatar = (username, displayName, avatarIcon, customSizeStyle 
           style={{ 
             width: '100%', 
             height: '100%', 
-            objectFit: 'cover' 
+            objectFit: 'cover',
+            borderRadius: '50%'
           }} 
         />
       </div>
     );
   }
 
+  const isDefaultThemeColor = avatarColor === 'var(--accent-color)' || !avatarColor;
+  const isLight = !isDefaultThemeColor && isColorLight(avatarColor);
+  const bgColor = isDefaultThemeColor ? 'var(--avatar-bg-color, var(--accent-color))' : avatarColor;
+  const textColor = isDefaultThemeColor ? 'var(--avatar-text-color, #ffffff)' : (isLight ? '#09090b' : '#ffffff');
+
   return (
     <div 
       className="avatar" 
       style={{ 
-        backgroundColor: avatarColor, 
+        backgroundColor: bgColor, 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontWeight: '600',
-        color: '#ffffff',
+        fontWeight: '700',
+        color: textColor,
+        border: 'none',
+        outline: 'none',
+        boxShadow: 'none',
+        boxSizing: 'border-box',
         ...customSizeStyle 
       }}
     >

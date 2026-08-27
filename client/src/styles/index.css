@@ -731,15 +731,19 @@ button {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--accent-color);
+  background: var(--avatar-bg-color, var(--accent-color));
   display: flex;
   justify-content: center;
   align-items: center;
-  font-weight: 600;
-  color: white;
+  font-weight: 700;
+  color: var(--avatar-text-color, #ffffff);
   text-transform: uppercase;
   font-size: 18px;
   flex-shrink: 0;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
 }
 
 .username-display {
@@ -8119,8 +8123,9 @@ textarea {
 }
 
 .preview-avatar-wrapper .avatar {
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  box-shadow: none;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .preview-info h3 {
@@ -8387,7 +8392,7 @@ textarea {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #000000;
+  background: var(--accent-btn-text, #000000);
 }
 
 /* Modern Glassy Primary CTA Button with Dynamic Accent & State Feedback */
