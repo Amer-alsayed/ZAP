@@ -3,13 +3,14 @@ import { useEffect } from 'react';
 /**
  * Hook for elastic overscroll bounce (rubber-banding) across all scrollable containers.
  * Uses exact spring physics (tension=0.08, damping=0.48) with visual clamp and requestAnimationFrame.
- * Fully supports desktop mousewheel/trackpad and mobile touch gestures.
+ * Fully supports desktop mousewheel/trackpad and mobile touch gestures without interfering with normal scrolling.
  * 
  * @param {React.RefObject<HTMLElement>} containerRef - The scrollable container element (overflow-y: auto)
  * @param {React.RefObject<HTMLElement>} wrapperRef - The inner content wrapper element that transforms
  * @param {boolean} [enabled=true] - Whether the bounce physics is active
+ * @param {Array} [deps=[]] - Optional dependencies to re-bind when switching views/conversations
  */
-export function useElasticBounce(containerRef, wrapperRef, enabled = true) {
+export function useElasticBounce(containerRef, wrapperRef, enabled = true, deps = []) {
   useEffect(() => {
     if (!enabled) return;
     const container = containerRef?.current;
@@ -18,6 +19,7 @@ export function useElasticBounce(containerRef, wrapperRef, enabled = true) {
 
     let startY = 0;
     let isDragging = false;
+    let isOverscrolling = false;
 
     // Physics engine state variables
     let position = 0;
@@ -66,6 +68,7 @@ export function useElasticBounce(containerRef, wrapperRef, enabled = true) {
       }
       startY = e.touches[0].clientY;
       isDragging = true;
+      isOverscrolling = false;
     };
 
     const handleTouchMove = (e) => {
@@ -81,26 +84,34 @@ export function useElasticBounce(containerRef, wrapperRef, enabled = true) {
       const atTop = scrollTop <= 0;
       const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
 
+      // Only engage rubber band when pulling past the boundaries
       if (atTop && deltaY > 0) {
+        isOverscrolling = true;
         if (e.cancelable) e.preventDefault();
         position = Math.sign(deltaY) * Math.pow(Math.abs(deltaY), 0.75);
         wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
       } else if (atBottom && deltaY < 0) {
+        isOverscrolling = true;
         if (e.cancelable) e.preventDefault();
         position = Math.sign(deltaY) * Math.pow(Math.abs(deltaY), 0.75);
         wrapper.style.transform = `translate3d(0px, ${position}px, 0px)`;
       } else {
+        // Normal scroll inside content — allow native scrolling to run freely!
+        if (isOverscrolling) {
+          isOverscrolling = false;
+          position = 0;
+          wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
+        }
         startY = currentY;
-        position = 0;
-        wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
       }
     };
 
     const handleTouchEnd = () => {
       if (!isDragging) return;
       isDragging = false;
+      isOverscrolling = false;
       velocity = 0;
-      if (!rafId) {
+      if (position !== 0 && !rafId) {
         rafId = requestAnimationFrame(updatePhysics);
       }
     };
@@ -113,13 +124,23 @@ export function useElasticBounce(containerRef, wrapperRef, enabled = true) {
       const atTop = scrollTop <= 0;
       const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
 
-      if ((atTop && e.deltaY < 0) || (atBottom && e.deltaY > 0)) {
+      // Only intercept when wheeling past the edges!
+      if (atTop && e.deltaY < 0) {
+        // Scrolling up past top edge
+        if (e.cancelable) e.preventDefault();
+        velocity -= e.deltaY * 0.045;
+        if (!rafId) {
+          rafId = requestAnimationFrame(updatePhysics);
+        }
+      } else if (atBottom && e.deltaY > 0) {
+        // Scrolling down past bottom edge
         if (e.cancelable) e.preventDefault();
         velocity -= e.deltaY * 0.045;
         if (!rafId) {
           rafId = requestAnimationFrame(updatePhysics);
         }
       }
+      // If not at edge, do NOT preventDefault — let browser scroll normally!
     };
 
     container.addEventListener('touchstart', handleTouchStart, { passive: true });
@@ -129,12 +150,17 @@ export function useElasticBounce(containerRef, wrapperRef, enabled = true) {
     container.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
-      if (rafId) cancelAnimationFrame(rafId);
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      wrapper.style.transform = 'translate3d(0px, 0px, 0px)';
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [containerRef, wrapperRef, enabled]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [containerRef, wrapperRef, enabled, ...deps]);
 }

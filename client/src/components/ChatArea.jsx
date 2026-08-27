@@ -2838,8 +2838,8 @@ const ChatArea = React.memo(function ChatArea({
   const messagesContainerRef = useRef(null);
   const messagesBounceWrapperRef = useRef(null);
 
-  // Hook for elastic overscroll bounce (rubber-banding) in chat messages
-  useElasticBounce(messagesContainerRef, messagesBounceWrapperRef);
+  // Hook for elastic overscroll bounce (rubber-banding) in chat messages (re-binds cleanly on conversation switch)
+  useElasticBounce(messagesContainerRef, messagesBounceWrapperRef, true, [activeContact?.username]);
 
   const scrollToBottomInstant = useCallback(() => {
     if (messagesContainerRef.current) {
