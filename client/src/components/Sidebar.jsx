@@ -755,7 +755,7 @@ const Sidebar = React.memo(function Sidebar({
       {/* App Branding Header */}
       <div className="sidebar-header">
         <div className="app-branding">
-          <ZapLogo size={32} glow />
+          <ZapLogo size={32} />
           <span className="app-name">ZAP</span>
         </div>
         {!isMinimized && (

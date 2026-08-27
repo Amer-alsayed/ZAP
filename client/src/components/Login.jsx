@@ -183,7 +183,7 @@ export default function Login({ onAuthSuccess }) {
     <div className="auth-wrapper" ref={authContainerRef}>
       <div className={`auth-card glass ${isFocused ? 'inputs-focused' : ''}`} ref={authCardRef}>
         <div className="auth-logo">
-          <ZapLogo size={64} glow />
+          <ZapLogo size={64} />
           <h1>ZAP</h1>
           <p>Anonymous End-to-End Encrypted Chat</p>
         </div>
