@@ -300,14 +300,11 @@ const Sidebar = React.memo(function Sidebar({
   const contactsContainerRef = useRef(null);
   const contactsBounceWrapperRef = useRef(null);
 
-  // Hook for elastic overscroll bounce (rubber-banding) on the contacts list (mobile only)
+  // Hook for elastic overscroll bounce (rubber-banding) on the contacts list
   useEffect(() => {
     const container = contactsContainerRef.current;
     const wrapper = contactsBounceWrapperRef.current;
     if (!container || !wrapper) return;
-
-    const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-    if (!isMobile) return;
 
     let startY = 0;
     let isDragging = false;
@@ -398,10 +395,28 @@ const Sidebar = React.memo(function Sidebar({
       }
     };
 
+    const handleWheel = (e) => {
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+
+      const atTop = scrollTop <= 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
+
+      if ((atTop && e.deltaY < 0) || (atBottom && e.deltaY > 0)) {
+        if (e.cancelable) e.preventDefault();
+        velocity -= e.deltaY * 0.045;
+        if (!rafId) {
+          rafId = requestAnimationFrame(updatePhysics);
+        }
+      }
+    };
+
     container.addEventListener('touchstart', handleTouchStart, { passive: true });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd, { passive: true });
     container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    container.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
@@ -409,6 +424,7 @@ const Sidebar = React.memo(function Sidebar({
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
+      container.removeEventListener('wheel', handleWheel);
     };
   }, []);
 
