@@ -214,7 +214,7 @@ export default function App() {
       setTimeout(() => {
         setRestoringSession(false);
         setIsPreloaderFading(false);
-      }, 400);
+      }, 350);
     };
 
     restoreSession();
@@ -4831,7 +4831,7 @@ export default function App() {
       {restoringSession ? (
         <div className={`app-preloader ${isPreloaderFading ? 'fading-out' : ''}`}>
           <div className="preloader-logo-container">
-            <ZapLogo size={64} className="preloader-logo" />
+            <ZapLogo size={56} className="preloader-logo" />
           </div>
           <div className="preloader-bar-bg">
             <div className="preloader-bar"></div>

@@ -214,30 +214,21 @@ button {
 
 .preloader-logo-container {
   position: relative;
-  width: 76px;
-  height: 76px;
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 24px;
 }
 
-.preloader-glow {
-  position: absolute;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.3) 0%, rgba(var(--accent-rgb), 0) 70%);
-  animation: preloaderGlowPulse 2.4s ease-in-out infinite alternate;
-}
-
 .preloader-logo {
   position: relative;
   width: 56px;
   height: 56px;
+  color: var(--accent-color);
   filter: none;
   z-index: 2;
-  animation: preloaderLogoBreathe 2.4s ease-in-out infinite alternate;
 }
 
 .preloader-bar-bg {
@@ -253,7 +244,7 @@ button {
 .preloader-bar {
   position: absolute;
   top: 0;
-  left: -60px;
+  left: 0;
   width: 60px;
   height: 100%;
   background: linear-gradient(90deg, transparent 0%, var(--accent-color) 50%, transparent 100%);
@@ -267,37 +258,17 @@ button {
   color: rgba(255, 255, 255, 0.4);
   letter-spacing: 0.8px;
   text-transform: uppercase;
-  animation: preloaderTextPulse 2.4s ease-in-out infinite alternate;
-}
-
-@keyframes preloaderGlowPulse {
-  0% {
-    transform: scale(0.92);
-    opacity: 0.35;
-  }
-  100% {
-    transform: scale(1.15);
-    opacity: 0.75;
-  }
-}
-
-@keyframes preloaderLogoBreathe {
-  0% {
-    transform: scale(0.98);
-    opacity: 0.92;
-  }
-  100% {
-    transform: scale(1.02);
-    opacity: 1;
-  }
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
 }
 
 @keyframes preloaderBeamSlide {
   0% {
-    transform: translateX(-100%);
+    transform: translateX(-60px);
   }
   100% {
-    transform: translateX(350%);
+    transform: translateX(140px);
   }
 }
 
@@ -4772,7 +4743,7 @@ button {
 /* Incoming Call Pill Notification Banner */
 .incoming-call-pill-container {
   position: fixed;
-  top: 20px;
+  top: calc(16px + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 10000;
@@ -6015,8 +5986,20 @@ textarea {
     display: flex !important; /* Show calls shortcut on mobile */
   }
 
+  .sidebar-header {
+    height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    max-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    box-sizing: border-box !important;
+  }
+
   .sidebar-footer {
-    height: 72px !important; /* Exact same height as sidebar-header on mobile for perfect top-bottom symmetry */
+    height: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    box-sizing: border-box !important;
   }
 
   /* 0. Mobile keyboard awareness — --kb is driven by visualViewport (ChatArea).
@@ -6259,9 +6242,13 @@ textarea {
 
   /* 3. Mobile Chat Header & Selection Mode Header */
   .chat-header {
-    height: 72px !important;
-    min-height: 72px !important;
-    padding: 0 14px !important;
+    height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    max-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-left: calc(14px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(14px + env(safe-area-inset-right, 0px)) !important;
+    box-sizing: border-box !important;
   }
 
   .chat-header-info {
@@ -10941,7 +10928,7 @@ textarea {
    ========================================== */
 .app-toast-container {
   position: fixed;
-  top: 20px;
+  top: calc(16px + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 100000;
@@ -11247,11 +11234,15 @@ textarea {
 @media (max-width: 768px) {
   /* ---- Chat header: consistent with the app's 72px headers ---- */
   .chat-header {
-    height: 72px !important;
-    min-height: 72px !important;
-    max-height: 72px !important;
-    padding: 0 14px !important;
+    height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    max-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-left: calc(14px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(14px + env(safe-area-inset-right, 0px)) !important;
+    padding-bottom: 0 !important;
     gap: 10px !important;
+    box-sizing: border-box !important;
   }
   .chat-header-info {
     gap: 12px !important;
@@ -13010,5 +13001,73 @@ textarea {
     border-radius: 20px 20px 0 0;
   }
 }
+
+/* Settings Header Mobile & Safe Area Rules */
+@media (max-width: 768px) {
+  .settings-header {
+    height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    max-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-left: calc(14px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(14px + env(safe-area-inset-right, 0px)) !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* ==========================================================================
+   STANDALONE DISPLAY MODE (PWA / CHROME HOME SCREEN SHORTCUT)
+   Seamless edge-to-edge system bar blending (Status Bar & Navigation Bar)
+   ========================================================================== */
+@media (display-mode: standalone) {
+  html,
+  body,
+  #root,
+  .app-container,
+  .dashboard-container,
+  .sidebar,
+  .main-content-pane,
+  .chat-area,
+  .auth-wrapper {
+    background-color: #000000 !important;
+  }
+
+  .sidebar-header {
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    max-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    box-sizing: border-box !important;
+  }
+
+  .chat-header {
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    max-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    padding-left: calc(14px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(14px + env(safe-area-inset-right, 0px)) !important;
+    box-sizing: border-box !important;
+  }
+
+  .settings-header {
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    max-height: calc(72px + env(safe-area-inset-top, 0px)) !important;
+    padding-left: calc(14px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(14px + env(safe-area-inset-right, 0px)) !important;
+    box-sizing: border-box !important;
+  }
+
+  .sidebar-footer {
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    height: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    box-sizing: border-box !important;
+  }
+}
+
 
 

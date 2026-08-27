@@ -1,0 +1,27 @@
+﻿{
+  "name": "ZAP",
+  "short_name": "ZAP",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "description": "ZAP is a completely anonymous, secure, and end-to-end encrypted real-time chat application supporting text, calling, and file sharing.",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/zap.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

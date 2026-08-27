@@ -5,7 +5,7 @@ export default function ZapLogo({
   className = '', 
   style = {}, 
   glow = false,
-  color = 'var(--accent-color, #007acc)',
+  color = 'var(--accent-color)',
   variant = 'accent', // 'accent' (matches active theme), 'white' (original silver/white), or 'custom'
   accent = true,
   ...props 
@@ -15,7 +15,7 @@ export default function ZapLogo({
   if (variant === 'white' || accent === false) {
     fillColor = '#EDEEF1';
   } else if (variant === 'accent' || accent === true) {
-    fillColor = 'var(--accent-color, #007acc)';
+    fillColor = 'var(--accent-color)';
   }
 
   return (
@@ -27,8 +27,7 @@ export default function ZapLogo({
       style={{
         display: 'inline-block',
         verticalAlign: 'middle',
-        filter: glow ? 'drop-shadow(0 0 18px rgba(var(--accent-rgb, 0, 122, 204), 0.55))' : undefined,
-        transition: 'filter 0.3s ease, color 0.3s ease',
+        filter: glow ? 'drop-shadow(0 0 18px rgba(var(--accent-rgb), 0.55))' : undefined,
         ...style
       }}
       xmlns="http://www.w3.org/2000/svg"
