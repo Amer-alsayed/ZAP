@@ -648,12 +648,11 @@ button {
   border-bottom-right-radius: 20px !important;
   border-top-left-radius: 0 !important;
   border-bottom-left-radius: 0 !important;
-  background: color-mix(in srgb, var(--accent-main) 5%, #0d1012) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  overflow: hidden;
-  box-shadow: none !important;
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.11) 0%, rgba(var(--accent-rgb), 0.03) 36%, transparent 72%), #0a0b0e !important;
   border: none !important;
+  border-right: none !important;
+  box-shadow: none !important;
+  overflow: hidden;
   transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), min-width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), max-width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: width, min-width, max-width, border-radius;
   transform: translateZ(0);
@@ -5911,7 +5910,7 @@ textarea {
     min-width: 100% !important;
     flex-shrink: 0 !important;
     display: flex !important;
-    background: #000000 !important;
+    background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.10) 0%, rgba(var(--accent-rgb), 0.03) 32%, transparent 68%), #08090b !important;
     border: none !important;
     border-right: none !important;
     border-bottom: none !important;
