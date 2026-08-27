@@ -505,17 +505,20 @@ const readBlobBufferSafely = async (blob) => {
 
 // Automatically normalize and optimize mobile camera photos (e.g. 48MP/108MP HEIC or large JPEGs)
 // down to high-definition 2560px Web/Mobile friendly JPEG for instant encryption and reliable transmission
-const optimizeImageForSending = async (file) => {
-  if (!file) return file;
-  const inferredMime = inferMimeType(file.name || '', file.type || '');
+const optimizeImageForSending = async (fileOrBlob, preloadedBuffer = null) => {
+  if (!fileOrBlob) return fileOrBlob;
+  const inferredMime = inferMimeType(fileOrBlob.name || '', fileOrBlob.type || '');
   if (!inferredMime.startsWith('image/') || inferredMime === 'image/gif') {
-    return file;
+    return fileOrBlob;
   }
 
   return new Promise((resolve) => {
     let objectUrl = null;
     try {
-      objectUrl = URL.createObjectURL(file);
+      const sourceBlob = (preloadedBuffer && preloadedBuffer.byteLength > 0)
+        ? new Blob([preloadedBuffer], { type: inferredMime })
+        : fileOrBlob;
+      objectUrl = URL.createObjectURL(sourceBlob);
       const img = new window.Image();
 
       img.onload = () => {
@@ -525,7 +528,7 @@ const optimizeImageForSending = async (file) => {
 
           if (!width || !height) {
             if (objectUrl) URL.revokeObjectURL(objectUrl);
-            return resolve(file);
+            return resolve(fileOrBlob);
           }
 
           if (width > maxDim || height > maxDim) {
@@ -544,22 +547,22 @@ const optimizeImageForSending = async (file) => {
           const ctx = canvas.getContext('2d');
           if (!ctx) {
             if (objectUrl) URL.revokeObjectURL(objectUrl);
-            return resolve(file);
+            return resolve(fileOrBlob);
           }
 
           ctx.drawImage(img, 0, 0, width, height);
           canvas.toBlob(
             (blob) => {
               if (objectUrl) URL.revokeObjectURL(objectUrl);
-              if (blob && blob.size > 0 && (blob.size < file.size || file.size > 2 * 1024 * 1024)) {
-                const cleanName = (file.name || 'photo.jpg').replace(/\.[^/.]+$/, '') + '.jpg';
+              if (blob && blob.size > 0 && (blob.size < fileOrBlob.size || fileOrBlob.size > 2 * 1024 * 1024)) {
+                const cleanName = (fileOrBlob.name || 'photo.jpg').replace(/\.[^/.]+$/, '') + '.jpg';
                 const optimizedFile = new File([blob], cleanName, {
                   type: 'image/jpeg',
                   lastModified: Date.now()
                 });
                 resolve(optimizedFile);
               } else {
-                resolve(file);
+                resolve(fileOrBlob);
               }
             },
             'image/jpeg',
@@ -567,19 +570,19 @@ const optimizeImageForSending = async (file) => {
           );
         } catch (err) {
           if (objectUrl) URL.revokeObjectURL(objectUrl);
-          resolve(file);
+          resolve(fileOrBlob);
         }
       };
 
       img.onerror = () => {
         if (objectUrl) URL.revokeObjectURL(objectUrl);
-        resolve(file);
+        resolve(fileOrBlob);
       };
 
       img.src = objectUrl;
     } catch (e) {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
-      resolve(file);
+      resolve(fileOrBlob);
     }
   });
 };
@@ -592,38 +595,40 @@ const prepareFileForSending = async (rawFile) => {
   // Files from the Android photo picker (content:// backed) can have their
   // transient read grant revoked shortly after the picker closes, so every
   // millisecond counts here — image optimization must not delay this read.
-  let rawBuffer = null;
-  for (let attempt = 0; attempt < 4 && (!rawBuffer || rawBuffer.byteLength === 0); attempt++) {
-    if (attempt > 0) await new Promise(r => setTimeout(r, 200 * attempt));
-    rawBuffer = await readBlobBufferSafely(rawFile);
-    if (!rawBuffer || rawBuffer.byteLength === 0) {
-      try { rawBuffer = await new Response(rawFile).arrayBuffer(); } catch (e) {}
-    }
-    if (!rawBuffer || rawBuffer.byteLength === 0) {
-      // Object-URL + fetch fallback: uses a different browser code path that
-      // often succeeds for content:// grants where arrayBuffer/FileReader fail
-      try {
-        const objUrl = URL.createObjectURL(rawFile);
+  let rawBuffer = rawFile._preloadedBuffer || null;
+  if (!rawBuffer || rawBuffer.byteLength === 0) {
+    for (let attempt = 0; attempt < 4 && (!rawBuffer || rawBuffer.byteLength === 0); attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 150 * attempt));
+      rawBuffer = await readBlobBufferSafely(rawFile);
+      if (!rawBuffer || rawBuffer.byteLength === 0) {
+        try { rawBuffer = await new Response(rawFile).arrayBuffer(); } catch (e) {}
+      }
+      if (!rawBuffer || rawBuffer.byteLength === 0) {
+        // Object-URL + fetch fallback: uses a different browser code path that
+        // often succeeds for content:// grants where arrayBuffer/FileReader fail
         try {
-          const resp = await fetch(objUrl);
-          const buf = await resp.arrayBuffer();
-          if (buf && buf.byteLength > 0) rawBuffer = buf;
-        } finally {
-          URL.revokeObjectURL(objUrl);
-        }
-      } catch (e) {}
-    }
-    if ((!rawBuffer || rawBuffer.byteLength === 0) && typeof FileReader !== 'undefined') {
-      rawBuffer = await new Promise((resolve) => {
-        try {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result || null);
-          reader.onerror = () => resolve(null);
-          reader.readAsArrayBuffer(rawFile);
-        } catch (err) {
-          resolve(null);
-        }
-      });
+          const objUrl = URL.createObjectURL(rawFile);
+          try {
+            const resp = await fetch(objUrl);
+            const buf = await resp.arrayBuffer();
+            if (buf && buf.byteLength > 0) rawBuffer = buf;
+          } finally {
+            URL.revokeObjectURL(objUrl);
+          }
+        } catch (e) {}
+      }
+      if ((!rawBuffer || rawBuffer.byteLength === 0) && typeof FileReader !== 'undefined') {
+        rawBuffer = await new Promise((resolve) => {
+          try {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result || null);
+            reader.onerror = () => resolve(null);
+            reader.readAsArrayBuffer(rawFile);
+          } catch (err) {
+            resolve(null);
+          }
+        });
+      }
     }
   }
 
@@ -632,7 +637,7 @@ const prepareFileForSending = async (rawFile) => {
   // ArrayBuffer/FileReader are blocked for cloud-backed picker files.
   let canvasFallbackFile = null;
   let canvasFallbackBuffer = null;
-  if ((!rawBuffer || rawBuffer.byteLength === 0)) {
+  if (!rawBuffer || rawBuffer.byteLength === 0) {
     const maybeImage = inferMimeType(rawFile.name || '', rawFile.type || '');
     if (maybeImage.startsWith('image/') && maybeImage !== 'image/gif') {
       try {
@@ -700,7 +705,7 @@ const prepareFileForSending = async (rawFile) => {
 
   if (!rawBuffer || rawBuffer.byteLength === 0) {
     console.error('prepareFileForSending: all read tiers failed', { name: rawFile.name, size: rawFile.size, type: rawFile.type });
-    throw new Error(`Could not read data for "${rawFile.name}". This image may be stored in the cloud or in a restricted folder. Try selecting it via Documents, or move it to Downloads and try again.`);
+    throw new Error(`Could not read data for "${rawFile.name}". Please try selecting the file again.`);
   }
 
   // Now normalize/optimize the image (bytes are already safely in memory).
@@ -711,7 +716,7 @@ const prepareFileForSending = async (rawFile) => {
     file = canvasFallbackFile;
     fileBuffer = canvasFallbackBuffer;
   } else {
-    const optimized = await optimizeImageForSending(rawFile);
+    const optimized = await optimizeImageForSending(rawFile, rawBuffer);
     file = optimized;
     if (file !== rawFile) {
       // Optimized output is an in-memory canvas blob — prefer its readable bytes
@@ -745,9 +750,9 @@ const prepareFileForSending = async (rawFile) => {
   const keyJwk = await window.crypto.subtle.exportKey('jwk', fileSessionKey);
 
   const inferredMime = inferMimeType(file.name, file.type);
-  const localBlob = (file.type === inferredMime)
-    ? file
-    : new Blob([fileBuffer], { type: inferredMime });
+  // CRITICAL FIX: localBlob MUST be a memory-backed Blob constructed from fileBuffer bytes,
+  // NEVER the native rawFile handle which can be revoked on mobile OSes!
+  const localBlob = new Blob([fileBuffer], { type: inferredMime });
 
   return {
     file,
@@ -3487,13 +3492,11 @@ const ChatArea = React.memo(function ChatArea({
           const inferredMime = preEncrypted
             ? preEncrypted.mimeType
             : inferMimeType(fileToUpload.name, fileToUpload.type);
-          const localBlob = preEncrypted
+          const localBlob = (preEncrypted?.localBlob instanceof Blob && preEncrypted.localBlob.size > 0)
             ? preEncrypted.localBlob
-            : (fileToUpload.type === inferredMime)
-              ? fileToUpload
-              : new Blob([fileBuffer], { type: inferredMime });
+            : new Blob([fileBuffer], { type: inferredMime });
 
-          // Save local copy in IndexedDB and memory cache
+          // Save local copy in IndexedDB and memory cache (guaranteed in-memory Blob)
           setCachedMedia(fileUrl, localBlob, inferredMime);
 
           // Attach caption only to the first file in a multi-file batch
@@ -3577,6 +3580,19 @@ const ChatArea = React.memo(function ChatArea({
     const validFiles = [];
     setPreparingFilesCount(prev => prev + files.length);
     try {
+      // 1. Concurrently read all file ArrayBuffers into memory FIRST while OS file descriptors are guaranteed alive
+      await Promise.all(files.map(async (f) => {
+        if (!f._preloadedBuffer || f._preloadedBuffer.byteLength === 0) {
+          try {
+            const buf = await readBlobBufferSafely(f);
+            if (buf && buf.byteLength > 0) {
+              f._preloadedBuffer = buf;
+            }
+          } catch (e) {}
+        }
+      }));
+
+      // 2. Process, optimize, and pre-encrypt each file
       for (const f of files) {
         if (f.size > 50 * 1024 * 1024) {
           notify(`"${f.name}" exceeds the maximum file size of 50MB.`, 'error', 'File Too Large');
@@ -3613,10 +3629,15 @@ const ChatArea = React.memo(function ChatArea({
   };
 
   const handleFileSelect = (e) => {
-    const files = Array.from(e.target.files || []);
+    const inputElement = e.target;
+    const files = Array.from(inputElement.files || []);
     if (!files.length) return;
+    // Add files to selection (captures bytes into RAM before clearing input value)
     addFilesToSelection(files);
-    e.target.value = '';
+    // Delay clearing input value to avoid killing Android transient content URI grants
+    setTimeout(() => {
+      try { inputElement.value = ''; } catch {}
+    }, 800);
   };
 
 
@@ -5015,7 +5036,8 @@ function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, isFullRes
           onError={() => {
             if (!hasRetriedRef.current && fileMetadata?.url) {
               hasRetriedRef.current = true;
-              loadOrFetchDecryptedMedia(fileMetadata).then((blob) => {
+              // Bypass and purge corrupted memory cache, fetching and decrypting fresh binary from server
+              loadOrFetchDecryptedMedia(fileMetadata, true).then((blob) => {
                 const correctMime = inferMimeType(fileMetadata.name, fileMetadata.mimeType);
                 const fixedBlob = new Blob([blob], { type: correctMime });
                 const newUrl = URL.createObjectURL(fixedBlob);

@@ -317,7 +317,7 @@ export const signData = async (dataString, privateSigningKey) => {
 /**
  * Verify data using their public signing key.
  */
-export const verifyDataSignature = async (dataString, signatureBase64, theirPublicKeyJwk) => {
+export const verifyDataSignature = async (dataString, signatureBase64, theirPublicKeyJwk, fallbackDataString = null) => {
   if (!dataString || !signatureBase64 || !theirPublicKeyJwk) {
     return false;
   }
@@ -342,7 +342,7 @@ export const verifyDataSignature = async (dataString, signatureBase64, theirPubl
       ['verify']
     );
 
-    return await window.crypto.subtle.verify(
+    const isValid = await window.crypto.subtle.verify(
       {
         name: 'ECDSA',
         hash: { name: 'SHA-256' }
@@ -351,6 +351,24 @@ export const verifyDataSignature = async (dataString, signatureBase64, theirPubl
       signatureBuffer,
       dataBuffer
     );
+
+    if (isValid) return true;
+
+    // Fallback: verify against alternate context / raw data string if provided
+    if (fallbackDataString && fallbackDataString !== dataString) {
+      const fallbackBuffer = stringToBuffer(fallbackDataString);
+      return await window.crypto.subtle.verify(
+        {
+          name: 'ECDSA',
+          hash: { name: 'SHA-256' }
+        },
+        theirPublicKey,
+        signatureBuffer,
+        fallbackBuffer
+      );
+    }
+
+    return false;
   } catch (e) {
     console.error('Signature verification error:', e);
     return false;

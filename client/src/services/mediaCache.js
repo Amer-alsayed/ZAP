@@ -192,27 +192,50 @@ export function inferMimeType(filename = '', providedMime = '') {
 }
 
 /**
+ * Purge a specific URL from in-memory cache and revoke its object URLs
+ */
+export function purgeMemoryMedia(url) {
+  if (!url || !memoryBlobCache.has(url)) return;
+  const entry = memoryBlobCache.get(url);
+  try {
+    if (entry?.fullUrl?.startsWith('blob:')) URL.revokeObjectURL(entry.fullUrl);
+    if (entry?.thumbUrl?.startsWith('blob:') && entry.thumbUrl !== entry.fullUrl) URL.revokeObjectURL(entry.thumbUrl);
+  } catch {}
+  memoryBlobCache.delete(url);
+}
+
+/**
  * Load or fetch and decrypt media.
  * Checks Memory first, then IndexedDB. If missing, fetches from server, decrypts, saves to IndexedDB & Memory, and returns Blob.
  * @param {Object} fileMetadata { url, keyJwk, iv, mimeType, name }
+ * @param {boolean} [forceBypassMemory=false] - if true, ignores and clears existing memory cache to force fresh fetch/decrypt
  * @returns {Promise<Blob>}
  */
-export async function loadOrFetchDecryptedMedia(fileMetadata) {
-  const { url, keyJwk, iv, mimeType, name } = fileMetadata;
+export async function loadOrFetchDecryptedMedia(fileMetadata, forceBypassMemory = false) {
+  const { url, keyJwk, iv, mimeType, name } = fileMetadata || {};
   if (!url) throw new Error('Invalid file metadata: missing URL');
 
+  if (forceBypassMemory) {
+    purgeMemoryMedia(url);
+  }
+
   // 1. Check in-memory instant cache (0ms)
-  if (memoryBlobCache.has(url) && memoryBlobCache.get(url).blob) {
-    return memoryBlobCache.get(url).blob;
+  if (!forceBypassMemory && memoryBlobCache.has(url) && memoryBlobCache.get(url).blob) {
+    const memBlob = memoryBlobCache.get(url).blob;
+    if (memBlob && memBlob.size > 0) {
+      return memBlob;
+    }
   }
 
   // 2. Check local IndexedDB cache
-  const cachedBlob = await getCachedMedia(url);
-  if (cachedBlob) {
-    return cachedBlob;
+  if (!forceBypassMemory) {
+    const cachedBlob = await getCachedMedia(url);
+    if (cachedBlob && cachedBlob.size > 0) {
+      return cachedBlob;
+    }
   }
 
-  // 3. Not cached locally — fetch encrypted buffer from server
+  // 3. Not cached locally or forced refresh — fetch encrypted buffer from server
   const response = await fetch(url);
   if (!response.ok) {
     if (response.status === 404) {
