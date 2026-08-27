@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Phone, PhoneOff, Video, VideoOff, Mic, Image, FileText, PanelLeftClose, PanelLeftOpen, Trash2, Ban, X, AlertTriangle, Pencil, Users, LogOut } from 'lucide-react';
+import { Search, UserPlus, MessageSquare, ShieldCheck, ShieldAlert, Settings, Phone, PhoneOff, Video, VideoOff, Mic, Image, FileText, PanelLeftClose, PanelLeftOpen, Trash2, Ban, X, AlertTriangle, Pencil, Users, LogOut, Sparkles, Film } from 'lucide-react';
 import ZapLogo from './ZapLogo';
 import { searchUser } from '../services/api';
 import { emitGetUserStatus } from '../services/socket';
@@ -159,6 +159,13 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
         </span>
       );
     }
+  } else if (lastMsg.mediaType === 'gif') {
+    content = (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+        <Film size={13} style={{ opacity: 0.7 }} />
+        GIF
+      </span>
+    );
   } else if (lastMsg.mediaType === 'voice' || lastMsg.mediaType === 'audio') {
     content = (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
@@ -198,6 +205,14 @@ export const renderLastMessagePreview = (lastMsg, currentUser) => {
 
 export const renderGroupMessageBody = (lastMsg) => {
   if (!lastMsg) return null;
+  if (lastMsg.mediaType === 'gif') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+        <Film size={13} style={{ opacity: 0.7 }} />
+        GIF
+      </span>
+    );
+  }
   if (lastMsg.mediaType === 'voice' || lastMsg.mediaType === 'audio') {
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>

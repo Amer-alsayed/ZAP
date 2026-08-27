@@ -1007,19 +1007,23 @@
 }
 
 /* Single image/video bubble fix when hosting custom player */
-.message-bubble.single-image-bubble:has(.cvp-root),
+.message-bubble.single-video-bubble,
 .message-bubble:has(.cvp-root) {
   padding: 4px !important;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
+  width: fit-content !important;
+  max-width: 280px !important;
+  box-sizing: border-box !important;
+  border-radius: 16px !important;
+  position: relative !important;
 }
 
-.message-wrapper.sent .message-bubble:has(.cvp-root),
-.message-wrapper.received .message-bubble:has(.cvp-root) {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
+/* Ensure selected video message bubble shows active cyan highlight ring */
+.message-wrapper.is-selected .message-bubble.single-video-bubble,
+.message-wrapper.is-selected .message-bubble:has(.cvp-root),
+.message-bubble.single-video-bubble.is-selected,
+.message-bubble:has(.cvp-root).is-selected {
+  border-color: var(--accent-main) !important;
+  box-shadow: 0 0 0 2px var(--accent-main) !important;
 }
 
 /* Gallery stage: when video is inside fullscreen album gallery, make it behave like image */

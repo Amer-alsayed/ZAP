@@ -849,14 +849,6 @@ export default function CustomVideoPlayer({
       <button
         className={`cvp-center-btn ${showCenterPlay ? 'visible' : ''} ${showBigPlayPulse ? 'pulse' : ''}`}
         onClick={togglePlay}
-        onPointerDown={(e) => {
-          const sel = document.querySelector('.message-row.row-selected') || document.querySelector('.selection-mode-message');
-          if (!sel) e.stopPropagation();
-        }}
-        onTouchStart={(e) => {
-          const sel = document.querySelector('.message-row.row-selected') || document.querySelector('.selection-mode-message');
-          if (!sel) e.stopPropagation();
-        }}
         onContextMenu={(e) => e.preventDefault()}
         aria-label={isEnded ? 'Replay' : isPlaying ? 'Pause' : 'Play'}
         tabIndex={-1}

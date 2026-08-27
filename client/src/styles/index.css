@@ -2731,25 +2731,107 @@ button {
 }
 
 .apple-emoji-picker-container {
-  width: 365px;
-  height: 410px;
+  width: 375px;
+  height: 430px;
   display: flex;
   flex-direction: column;
-  background: rgba(20, 20, 24, 0.9) !important;
+  background: rgba(18, 18, 22, 0.94) !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 22px !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 48px rgba(0, 0, 0, 0.7) !important;
-  backdrop-filter: blur(24px) !important;
-  -webkit-backdrop-filter: blur(24px) !important;
+  border-radius: 24px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 20px 50px rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(28px) !important;
+  -webkit-backdrop-filter: blur(28px) !important;
   overflow: hidden;
   box-sizing: border-box;
 }
 
+/* 1. Expression Tabs Segmented Switcher (Exact same as All / Missed Calls) */
+.expression-picker-tabs-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px 6px 14px;
+  background: rgba(12, 12, 16, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.expression-segmented-control {
+  position: relative;
+  display: flex;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 3px;
+  border-radius: 12px;
+  height: 34px;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.expression-segmented-slider {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  height: calc(100% - 6px);
+  border-radius: 9px;
+  background: rgba(var(--accent-rgb), 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.38);
+  box-shadow: none !important;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.expression-control-btn {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  background: transparent !important;
+  border: none;
+  border-radius: 9px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  height: 100%;
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  outline: none;
+  gap: 6px;
+  box-shadow: none !important;
+}
+
+.expression-control-btn:hover {
+  color: var(--text-primary);
+}
+
+.expression-control-btn:active {
+  transform: scale(0.96);
+}
+
+.expression-control-btn.active {
+  color: var(--accent-text) !important;
+  font-weight: 600;
+}
+
+.expression-control-btn.active svg {
+  color: var(--accent-text);
+}
+
+/* 2. Search & Action Bar */
 .apple-emoji-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px 10px 14px;
+  padding: 10px 12px 8px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
@@ -2783,7 +2865,7 @@ button {
   border: none;
   outline: none;
   color: var(--text-primary);
-  font-size: 13.5px;
+  font-size: 13px;
   min-width: 0;
 }
 
@@ -2809,8 +2891,8 @@ button {
 
 .apple-backspace-btn,
 .apple-close-btn {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -2834,6 +2916,7 @@ button {
   transform: scale(0.92);
 }
 
+/* 3. Scroll Body */
 .apple-emoji-scroll-body {
   flex: 1;
   overflow-y: auto;
@@ -2855,6 +2938,7 @@ button {
   border-radius: 4px;
 }
 
+/* 4. Emoji Section & Grid */
 .apple-emoji-section {
   margin-bottom: 16px;
   background: transparent !important;
@@ -2871,7 +2955,7 @@ button {
   margin-bottom: 8px;
   position: sticky;
   top: -10px;
-  background: rgba(20, 20, 24, 0.96);
+  background: rgba(18, 18, 22, 0.96);
   padding: 5px 2px;
   z-index: 5;
 }
@@ -2916,11 +3000,120 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 180px;
   height: 100%;
   color: var(--text-muted);
   font-size: 13.5px;
+  text-align: center;
 }
 
+/* 5. GIFS WRAPPER & MASONRY */
+.apple-gifs-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.gif-pills-scroll-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.gif-pills-scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
+.gif-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gif-pill-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.gif-pill-btn.is-active {
+  color: #ffffff;
+  background: rgba(var(--accent-rgb), 0.25);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  font-weight: 600;
+}
+
+.gifs-scroll-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.gifs-masonry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.gif-grid-item {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0;
+  cursor: pointer;
+  aspect-ratio: 16 / 11;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.gif-grid-item:hover {
+  transform: scale(1.03);
+  border-color: rgba(var(--accent-rgb), 0.6);
+  z-index: 5;
+}
+
+.gif-grid-item:active {
+  transform: scale(0.97);
+}
+
+.gif-grid-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gifs-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* 6. DOCK BAR */
 .apple-emoji-dock-bar {
   display: flex;
   align-items: center;
@@ -2965,6 +3158,132 @@ button {
 .apple-dock-icon {
   font-size: 17px;
   line-height: 1;
+}
+
+/* 7. PROFESSIONAL GIF CHAT BUBBLE (Shrink-Wrapped & Floating Meta Overlay) */
+.message-bubble.gif-bubble,
+.message-wrapper.sent .message-bubble.gif-bubble,
+.message-wrapper.received .message-bubble.gif-bubble {
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 18px !important;
+  overflow: visible !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  width: fit-content !important;
+  max-width: 280px !important;
+  display: inline-block !important;
+  position: relative !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+/* When selected, highlight the inner GIF wrapper with accent glow */
+.message-bubble.gif-bubble.is-selected .gif-message-wrapper,
+.message-wrapper.is-selected .message-bubble.gif-bubble .gif-message-wrapper {
+  box-shadow: 0 0 0 2.5px var(--accent-main), 0 8px 24px rgba(0, 0, 0, 0.65) !important;
+  border-color: var(--accent-main) !important;
+}
+
+.message-bubble.gif-bubble .message-bubble-body {
+  display: block !important;
+  width: fit-content !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.message-bubble.gif-bubble .message-text-content {
+  display: block !important;
+  width: fit-content !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.gif-message-wrapper {
+  position: relative;
+  display: inline-block;
+  width: fit-content;
+  max-width: 280px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0d0f12;
+  line-height: 0;
+  contain: layout paint;
+  transition: box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+.gif-message-img {
+  display: block;
+  width: auto;
+  max-width: 280px;
+  max-height: 280px;
+  min-width: 160px;
+  min-height: 120px;
+  object-fit: cover;
+  border-radius: 18px;
+  transition: transform 0.2s ease;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-drag: none !important;
+}
+
+.gif-meta-overlay {
+  position: absolute;
+  bottom: 7px;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 2.5px 7px 2.5px 8px;
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+  z-index: 3;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gif-meta-time {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.gif-meta-ticks {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95);
+  margin-left: 1px;
+}
+
+.gif-meta-ticks .tick-single {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.gif-meta-ticks .tick-delivered {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.gif-meta-ticks .tick-read {
+  color: #53bdeb;
 }
 
 /* ==========================================
@@ -3467,7 +3786,8 @@ button {
 }
 
 .message-bubble.album-bubble,
-.message-bubble.single-image-bubble {
+.message-bubble.single-image-bubble,
+.message-bubble.single-video-bubble {
   width: fit-content !important;
   max-width: 280px !important;
   box-sizing: border-box !important;
@@ -3476,7 +3796,8 @@ button {
 }
 
 .message-bubble.album-bubble:has(.message-reply-context),
-.message-bubble.single-image-bubble:has(.message-reply-context) {
+.message-bubble.single-image-bubble:has(.message-reply-context),
+.message-bubble.single-video-bubble:has(.message-reply-context) {
   padding: 6px 6px 4px 6px !important;
 }
 
@@ -5827,6 +6148,16 @@ textarea {
     height: 44px !important;
   }
 
+  .gifs-masonry-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .gif-message-img {
+    max-width: 240px !important;
+    max-height: 240px !important;
+  }
+
   /* 2. Floating Reply & Attachment Banners on Mobile */
   .reply-preview-bar {
     border-radius: 18px !important;
@@ -6549,9 +6880,9 @@ textarea {
   .scroll-to-bottom-btn.visible:hover,
   .scroll-to-bottom-btn.visible:focus,
   .scroll-to-bottom-btn.visible:active {
-    background: rgba(18, 18, 18, 0.85) !important;
-    border-color: rgba(255, 255, 255, 0.12) !important;
-    color: var(--text-muted) !important;
+    background: #181b20 !important;
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    color: #e2e8f0 !important;
     transform: translateX(-50%) translateY(0) scale(1) !important;
   }
 
@@ -7118,14 +7449,12 @@ textarea {
   position: absolute;
   bottom: calc(100% + 12px); /* Sits right above the input container */
   left: 50%;
-  background: rgba(18, 18, 18, 0.85) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  color: var(--text-muted) !important;
+  background: #181b20 !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #e2e8f0 !important;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
   z-index: 100;
-  backdrop-filter: blur(24px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   
   /* Initial hidden state layout */
   height: 40px !important;
@@ -7165,14 +7494,15 @@ textarea {
 }
 
 .scroll-to-bottom-btn.visible:hover {
-  background: rgba(28, 28, 28, 0.95) !important;
-  border-color: rgba(255, 255, 255, 0.18) !important;
-  color: var(--text-primary) !important;
+  background: #22262e !important;
+  border-color: rgba(255, 255, 255, 0.24) !important;
+  color: #ffffff !important;
   transform: translateX(-50%) translateY(0) scale(1.06);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
 }
 
 .scroll-to-bottom-btn.visible:active {
+  background: #14161a !important;
   transform: translateX(-50%) translateY(0) scale(0.94);
 }
 

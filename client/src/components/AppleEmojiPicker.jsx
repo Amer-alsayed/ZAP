@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
-import { Search, X, Delete, Smile } from 'lucide-react';
+import { Search, X, Delete, Smile, Film, Loader2 } from 'lucide-react';
 import { useElasticBounce } from '../hooks/useElasticBounce';
+import { GIF_REACTION_PILLS, RECENT_GIFS_KEY, MAX_RECENT_GIFS, fetchGifs } from '../data/gifsData';
 
 const RECENT_EMOJIS_KEY = 'chatra_frequent_emojis';
 const MAX_RECENT_EMOJIS = 14; // Exactly 2 clean rows of 7 emojis (Apple iOS standard)
@@ -100,10 +101,11 @@ export const EMOJI_CATEGORIES = [
       '🚝', '🚄', '🚅', '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '✈️', 
       '🛫', '🛬', '🛩️', '💺', '🛰️', '🚀', '🛸', '🚁', '🛶', '⛵️', 
       '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓️', '🛟', '⛽️', '🚧', '🚦', 
-      '🚥', '🚏', '🗺️', '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡', 
-      '🎢', '🎠', '⛲️', '⛱️', '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', 
-      '🗻', '🏕️', '⛺️', '🛖', '🏠', '🏡', '🏘️', '🏚️', '🏗️', '🏭', 
-      '🏢', '🏬', '🏣', '🏤', '🏥', '🏦', '🏨', '🏪', '🏫', '🏩'
+      '🚥', '🗺️', '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡', '🎢', 
+      '🎠', '⛲️', '⛱️', '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', '🗻', 
+      '🏕️', '⛺️', '🛖', '🏠', '🏡', '🏘️', '🏚️', '🏗️', '🏭', '🏢', 
+      '🏬', '🏣', '🏤', '🏥', '🏦', '🏨', '🏪', '🏫', '🏩', '💒', 
+      '🏛️', '⛪️', '🕌', '🛕', '🕍', '⛩️', '🕋'
     ]
   },
   {
@@ -111,26 +113,23 @@ export const EMOJI_CATEGORIES = [
     name: 'Objects',
     icon: '💡',
     emojis: [
-      '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🕹️', '💽', '💾', 
-      '💿', '📀', '📼', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', 
-      '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️', '⏱️', '⏲️', 
-      '⏰', '🕰️', '⌛️', '⏳', '📡', '🔋', '🪫', '🔌', '💡', '🔦', 
-      '🕯️', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', 
-      '💳', '💎', '⚖️', '🪜', '🧰', '🔧', '🔨', '⚒️', '🛠️', '⛏️', 
-      '🪚', '🔩', '⚙️', '🧱', '⛓️', '🧲', '🔫', '💣', '🧨', '🪓', 
-      '🔪', '🗡️', '⚔️', '🛡️', '🚬', '⚰️', '🪦', '🏺', '🔮', '💈', 
-      '🔭', '🔬', '🩹', '🩺', '💊', '💉', '🩸', '🧬', '🧪', '🌡️', 
-      '🧹', '🧺', '🧻', '🚽', '🚿', '🛁', '🧼', '🪥', '🪒', '🔑', 
-      '🗝️', '🚪', '🪑', '🛋️', '🛏️', '🖼️', '🪞', '🪟', '🛍️', '🛒', 
-      '🎁', '🎈', '🎉', '🎊', '✉️', '📩', '📨', '📧', '💌', '📦', 
-      '🏷️', '📜', '📃', '📄', '📑', '🧾', '📊', '📈', '📉', '🗒️', 
-      '🗓️', '📅', '📆', '📇', '🗃️', '🗳️', '🗄️', '📋', '📁', '📂'
+      '⌚️', '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', 
+      '🗜️', '💽', '💾', '💿', '📀', '📼', '📷', '📸', '📹', '🎥', 
+      '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', 
+      '🎛️', '🧭', '⏱️', '⏲️', '⏰', '🕰️', '⌛️', '⏳', '📡', '🔋', 
+      '🪫', '🔌', '💡', '🔦', '🕯️', '🪔', '🧯', '🛢️', '💸', '💵', 
+      '💴', '💶', '💷', '🪙', '💰', '💳', '💎', '⚖️', '🪜', '🧰', 
+      '🪛', '🔧', '🔨', '⚒️', '🛠️', '⛏️', '🪚', '🔩', '⚙️', '🪤', 
+      '🧱', '⛓️', '🧲', '🔫', '💣', '🧨', '🪓', '🔪', '🗡️', '⚔️', 
+      '🛡️', '🚬', '⚰️', '🪦', '⚱️', '🏺', '🔮', '📿', '🧿', '💈', 
+      '⚗️', '🔭', '🔬', '🕳️', '🩹', '🩺', '🩻', '🩼', '💊', '💉', 
+      '🩸', '🧬', '🦠', '🧫', '🧪', '🌡️', '🧹', '🪠', '🧺', '🧻'
     ]
   },
   {
     id: 'symbols',
     name: 'Symbols',
-    icon: '❤️',
+    icon: '🔣',
     emojis: [
       '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', 
       '❤️‍🔥', '❤️‍🩹', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', 
@@ -144,6 +143,8 @@ export const EMOJI_CATEGORIES = [
       '❕', '❓', '❔', '‼️', '⁉️', '🔅', '🔆', '〽️', '⚠️', '🚸', 
       '🔱', '⚜️', '🔰', '♻️', '✅', '🈯️', '💹', '❇️', '✳️', '❎', 
       '🌐', '💠', 'Ⓜ️', '🌀', '💤', '🏧', '🚾', '♿️', '🅿️', '🈳', 
+      '🈂️', '🛂', '🛃', '🛄', '🛅', '🚹', '🚺', '🚼', '⚧️', '🚻', 
+      '🚮', '🎦', '📶', '🈁', '🆖', '🆗', '🆙', '🆒', '🆕', '🆓', 
       '0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', 
       '🔟', '🔢', '#️⃣', '*️⃣', '⏏️', '▶️', '⏸️', '⏯️', '⏹️', '⏺️', 
       '⏭️', '⏮️', '⏩', '⏪', '⏫', '⏬', '◀️', '🔼', '🔽', '➡️', 
@@ -153,7 +154,7 @@ export const EMOJI_CATEGORIES = [
   }
 ];
 
-// Memoized Category Section Component with delegated event handling
+// Memoized Category Section Component for Emojis
 const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSelectEmoji }) {
   const handleGridClick = useCallback((e) => {
     const btn = e.target.closest('[data-emoji]');
@@ -164,8 +165,6 @@ const EmojiCategorySection = memo(function EmojiCategorySection({ category, onSe
     }
   }, [onSelectEmoji]);
 
-  // Prevent taps on emoji cells from stealing focus from the message input,
-  // otherwise the mobile keyboard dismisses and immediately reopens on every pick.
   const handleGridPointerDown = useCallback((e) => {
     e.preventDefault();
   }, []);
@@ -221,7 +220,35 @@ const AppleEmojiDock = memo(function AppleEmojiDock({ categories, activeCategory
   );
 });
 
-const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelete, onClose }) {
+const AppleEmojiPicker = memo(function AppleEmojiPicker({ 
+  onSelectEmoji, 
+  onSelectGif, 
+  onDelete, 
+  onClose 
+}) {
+  // Mode Switcher: 'emojis' | 'gifs'
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const saved = localStorage.getItem('chatra_picker_tab');
+      return saved === 'gifs' ? 'gifs' : 'emojis';
+    } catch {
+      return 'emojis';
+    }
+  });
+
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    setSearchQuery('');
+    try {
+      localStorage.setItem('chatra_picker_tab', newTab);
+    } catch {}
+  };
+
+  // Search input state
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef(null);
+
+  // --- EMOJIS STATE ---
   const [recentEmojis, setRecentEmojis] = useState(() => {
     try {
       const saved = localStorage.getItem(RECENT_EMOJIS_KEY);
@@ -231,25 +258,48 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
           return parsed.slice(0, MAX_RECENT_EMOJIS);
         }
       }
-    } catch (e) {}
+    } catch {}
     return DEFAULT_RECENT_EMOJIS.slice(0, MAX_RECENT_EMOJIS);
   });
 
   const [activeCategory, setActiveCategory] = useState('recents');
-  const [searchQuery, setSearchQuery] = useState('');
-  // Start with only Frequently Used (14 cells) so the first commit after the button
-  // click is tiny and the popover appears instantly; remaining categories ramp in
-  // over the next few frames while the pop-in animation runs.
   const [renderedCategoryCount, setRenderedCategoryCount] = useState(1);
-  const scrollContainerRef = useRef(null);
-  const emojiBounceWrapperRef = useRef(null);
-  const searchInputRef = useRef(null);
+  const emojiScrollRef = useRef(null);
+  const emojiBounceRef = useRef(null);
   const isScrollingRef = useRef(false);
-  const rafIdRef = useRef(null);
+  const emojiRafRef = useRef(null);
 
-  useElasticBounce(scrollContainerRef, emojiBounceWrapperRef);
+  useElasticBounce(emojiScrollRef, emojiBounceRef, activeTab === 'emojis');
 
-  // Full list of categories including Frequently Used at top
+  // --- GIFS STATE ---
+  const [activeGifPill, setActiveGifPill] = useState('trending');
+  const [gifsList, setGifsList] = useState([]);
+  const [isLoadingGifs, setIsLoadingGifs] = useState(false);
+  const gifScrollRef = useRef(null);
+  const gifBounceRef = useRef(null);
+
+  useElasticBounce(gifScrollRef, gifBounceRef, activeTab === 'gifs');
+
+  // Fetch GIFs on query or pill change
+  useEffect(() => {
+    if (activeTab !== 'gifs') return;
+    let active = true;
+    setIsLoadingGifs(true);
+
+    const queryToFetch = searchQuery.trim() || activeGifPill;
+    fetchGifs(queryToFetch).then((results) => {
+      if (active) {
+        setGifsList(results);
+        setIsLoadingGifs(false);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [activeTab, searchQuery, activeGifPill]);
+
+  // Full list of emoji categories including Frequently Used
   const allCategoriesWithRecents = useMemo(() => {
     const list = [];
     if (recentEmojis.length > 0) {
@@ -263,17 +313,15 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
     return [...list, ...EMOJI_CATEGORIES];
   }, [recentEmojis]);
 
-  // Ramp remaining categories in across frames (small chunks keep the open animation
-  // smooth while making the full grid scrollable within a few frames)
+  // Ramp remaining emoji categories
   useEffect(() => {
-    if (renderedCategoryCount >= allCategoriesWithRecents.length) return;
+    if (activeTab !== 'emojis' || renderedCategoryCount >= allCategoriesWithRecents.length) return;
     const frame = requestAnimationFrame(() => {
       setRenderedCategoryCount(prev => Math.min(prev + 2, allCategoriesWithRecents.length));
     });
     return () => cancelAnimationFrame(frame);
-  }, [renderedCategoryCount, allCategoriesWithRecents.length]);
+  }, [activeTab, renderedCategoryCount, allCategoriesWithRecents.length]);
 
-  // Dock items
   const dockCategories = useMemo(() => {
     return allCategoriesWithRecents.map(c => ({
       id: c.id,
@@ -282,7 +330,6 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
     }));
   }, [allCategoriesWithRecents]);
 
-  // Search filter across categories
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) {
       return allCategoriesWithRecents.slice(0, renderedCategoryCount);
@@ -299,11 +346,7 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
     }).filter(cat => cat.emojis.length > 0);
   }, [searchQuery, allCategoriesWithRecents, renderedCategoryCount]);
 
-  // Record emoji selection into history / frequently used (capped at MAX_RECENT_EMOJIS).
-  // Persist to localStorage right away, but do NOT reorder the visible "Frequently
-  // Used" row mid-session — the fresh order is picked up the next time the picker
-  // is opened (matches native iOS keyboard behavior and avoids rows jumping around
-  // while the user is still tapping).
+  // Emoji selection handler
   const handleSelectEmojiWithTracking = useCallback((emoji) => {
     try {
       const saved = localStorage.getItem(RECENT_EMOJIS_KEY);
@@ -314,17 +357,35 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
       }
       const updated = [emoji, ...prev.filter(e => e !== emoji)].slice(0, MAX_RECENT_EMOJIS);
       localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(updated));
-    } catch (e) {}
-    onSelectEmoji(emoji);
+    } catch {}
+    if (onSelectEmoji) onSelectEmoji(emoji);
   }, [onSelectEmoji, recentEmojis]);
 
-  // Smooth gliding to target category section
-  const handleCategoryClick = useCallback((categoryId) => {
+  // GIF selection handler
+  const handleSelectGifWithTracking = useCallback((gif) => {
+    try {
+      const saved = localStorage.getItem(RECENT_GIFS_KEY);
+      let prev = [];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) prev = parsed;
+      }
+      const updated = [gif, ...prev.filter(g => g.id !== gif.id)].slice(0, MAX_RECENT_GIFS);
+      localStorage.setItem(RECENT_GIFS_KEY, JSON.stringify(updated));
+    } catch {}
+
+    if (onSelectGif) {
+      onSelectGif(gif);
+    }
+  }, [onSelectGif]);
+
+  // Category navigation click (Emojis)
+  const handleEmojiCategoryClick = useCallback((categoryId) => {
     setActiveCategory(categoryId);
     setRenderedCategoryCount(allCategoriesWithRecents.length);
     if (searchQuery) setSearchQuery('');
     
-    const container = scrollContainerRef.current;
+    const container = emojiScrollRef.current;
     const targetElement = document.getElementById(`apple-emoji-cat-${categoryId}`);
     if (targetElement && container) {
       isScrollingRef.current = true;
@@ -339,14 +400,14 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
     }
   }, [searchQuery, allCategoriesWithRecents.length]);
 
-  // High-performance RAF scroll watcher
-  const handleScroll = useCallback(() => {
+  // Scroll watcher for active category in Emojis
+  const handleEmojiScroll = useCallback(() => {
     if (isScrollingRef.current || searchQuery) return;
-    if (rafIdRef.current) return;
+    if (emojiRafRef.current) return;
 
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = null;
-      const container = scrollContainerRef.current;
+    emojiRafRef.current = requestAnimationFrame(() => {
+      emojiRafRef.current = null;
+      const container = emojiScrollRef.current;
       if (!container) return;
 
       const scrollTop = container.scrollTop;
@@ -365,15 +426,49 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
 
   useEffect(() => {
     return () => {
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
+      if (emojiRafRef.current) {
+        cancelAnimationFrame(emojiRafRef.current);
       }
     };
   }, []);
 
+  const searchPlaceholder = useMemo(() => {
+    if (activeTab === 'gifs') return 'Search GIFs on Tenor…';
+    return 'Search Emoji';
+  }, [activeTab]);
+
   return (
     <div className="apple-emoji-picker-container glass" onClick={(e) => e.stopPropagation()}>
-      {/* Top Header: iOS Search Bar & Actions */}
+      {/* 1. Top Mode Switcher Tabs (Exact Same Sliding Spring Pill as Calls All / Missed) */}
+      <div className="expression-picker-tabs-container">
+        <div className="expression-segmented-control">
+          <div 
+            className="expression-segmented-slider" 
+            style={{ 
+              transform: activeTab === 'gifs' ? 'translateX(100%)' : 'translateX(0)' 
+            }} 
+          />
+          <button
+            type="button"
+            className={`expression-control-btn ${activeTab === 'emojis' ? 'active' : ''}`}
+            onClick={() => handleTabChange('emojis')}
+          >
+            <Smile size={15} />
+            <span>Emojis</span>
+          </button>
+
+          <button
+            type="button"
+            className={`expression-control-btn ${activeTab === 'gifs' ? 'active' : ''}`}
+            onClick={() => handleTabChange('gifs')}
+          >
+            <Film size={15} />
+            <span>GIFs</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Top Header: Search Bar & Actions */}
       <div className="apple-emoji-header">
         <div className="apple-emoji-search-bar">
           <Search size={15} className="apple-search-icon" />
@@ -381,7 +476,7 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
             ref={searchInputRef}
             type="text"
             className="apple-search-input"
-            placeholder="Search Emoji"
+            placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -400,7 +495,7 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
           )}
         </div>
 
-        {onDelete && (
+        {onDelete && activeTab === 'emojis' && (
           <button 
             className="apple-backspace-btn" 
             onPointerDown={(e) => e.preventDefault()}
@@ -420,44 +515,107 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({ onSelectEmoji, onDelet
             className="apple-close-btn" 
             onClick={onClose}
             title="Close"
-            aria-label="Close emoji picker"
+            aria-label="Close picker"
           >
             <X size={16} />
           </button>
         )}
       </div>
 
-      {/* Unified Single Smooth Scrollable List */}
-      <div 
-        className="apple-emoji-scroll-body" 
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-      >
-        <div className="emoji-bounce-wrapper" ref={emojiBounceWrapperRef}>
-          {filteredCategories.length === 0 ? (
-            <div className="apple-emoji-empty-state">
-              <Smile size={32} style={{ opacity: 0.25, marginBottom: '8px' }} />
-              <p>No Results Found</p>
+      {/* 3. TAB CONTENT: EMOJIS */}
+      {activeTab === 'emojis' && (
+        <>
+          <div 
+            className="apple-emoji-scroll-body" 
+            ref={emojiScrollRef}
+            onScroll={handleEmojiScroll}
+          >
+            <div className="emoji-bounce-wrapper" ref={emojiBounceRef}>
+              {filteredCategories.length === 0 ? (
+                <div className="apple-emoji-empty-state">
+                  <Smile size={32} style={{ opacity: 0.25, marginBottom: '8px' }} />
+                  <p>No Results Found</p>
+                </div>
+              ) : (
+                filteredCategories.map((category) => (
+                  <EmojiCategorySection
+                    key={category.id}
+                    category={category}
+                    onSelectEmoji={handleSelectEmojiWithTracking}
+                  />
+                ))
+              )}
             </div>
-          ) : (
-            filteredCategories.map((category) => (
-              <EmojiCategorySection
-                key={category.id}
-                category={category}
-                onSelectEmoji={handleSelectEmojiWithTracking}
-              />
-            ))
-          )}
-        </div>
-      </div>
+          </div>
 
-      {/* Bottom Docked Apple Category Navigation Bar with Recents */}
-      <AppleEmojiDock
-        categories={dockCategories}
-        activeCategory={activeCategory}
-        onCategoryClick={handleCategoryClick}
-        isSearching={Boolean(searchQuery)}
-      />
+          <AppleEmojiDock
+            categories={dockCategories}
+            activeCategory={activeCategory}
+            onCategoryClick={handleEmojiCategoryClick}
+            isSearching={Boolean(searchQuery)}
+          />
+        </>
+      )}
+
+      {/* 4. TAB CONTENT: GIFS */}
+      {activeTab === 'gifs' && (
+        <div className="apple-gifs-wrapper">
+          {/* Reaction Quick Filter Pills */}
+          <div className="gif-pills-scroll-row">
+            {GIF_REACTION_PILLS.map((pill) => (
+              <button
+                key={pill.id}
+                type="button"
+                className={`gif-pill-btn ${activeGifPill === pill.query && !searchQuery ? 'is-active' : ''}`}
+                onClick={() => {
+                  setSearchQuery('');
+                  setActiveGifPill(pill.query);
+                }}
+              >
+                <span>{pill.emoji}</span>
+                <span>{pill.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* GIF Masonry Grid */}
+          <div className="apple-emoji-scroll-body gifs-scroll-body" ref={gifScrollRef}>
+            <div className="emoji-bounce-wrapper" ref={gifBounceRef}>
+              {isLoadingGifs ? (
+                <div className="gifs-loading-state">
+                  <Loader2 size={24} className="spinner-rotating" />
+                  <span>Loading animated GIFs…</span>
+                </div>
+              ) : gifsList.length === 0 ? (
+                <div className="apple-emoji-empty-state">
+                  <Film size={32} style={{ opacity: 0.25, marginBottom: '8px' }} />
+                  <p>No GIFs Found</p>
+                </div>
+              ) : (
+                <div className="gifs-masonry-grid">
+                  {gifsList.map((gif) => (
+                    <button
+                      key={gif.id}
+                      type="button"
+                      className="gif-grid-item"
+                      onClick={() => handleSelectGifWithTracking(gif)}
+                      title={gif.title}
+                      aria-label={`Send GIF: ${gif.title}`}
+                    >
+                      <img 
+                        src={gif.thumb || gif.url} 
+                        alt={gif.title} 
+                        className="gif-grid-img" 
+                        loading="lazy" 
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

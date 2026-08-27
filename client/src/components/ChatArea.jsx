@@ -1261,7 +1261,7 @@ const MessageList = React.memo(({
           const selId = selectedIds[0];
           const target = messages.find(m => m.id === selId) || groupedMessages.find(m => m.id === selId || (m.allIds && m.allIds.includes(selId)));
           const baseMsg = target ? (target.isAlbum ? target.albumItems[0] : target.isMultiFile ? target.fileItems[0] : target) : null;
-          const txt = target ? (target.isAlbum ? `[${target.albumItems.length} Photos]` : target.isMultiFile ? `[${target.fileItems.length} Files]` : (target.mediaType ? `[${target.mediaType}]` : target.text)) : '';
+          const txt = target ? (target.isAlbum ? `[${target.albumItems.length} Photos]` : target.isMultiFile ? `[${target.fileItems.length} Files]` : (target.mediaType === 'gif' ? 'GIF' : (target.mediaType ? `[${target.mediaType}]` : target.text))) : '';
           if (baseMsg || target) {
             const replyTarget = baseMsg || target;
             setIsClosingReply?.(false);
@@ -1340,9 +1340,8 @@ const MessageList = React.memo(({
 
   const handleMessageTouchStart = (msg, isSent, e) => {
     if (window.__isMediaModalOpen || selectionMode) return;
-    // Only block swipe/long-press when touching actual controls, not the video surface itself
-    // This allows swipe-to-reply and hold-to-select on the video like images do
-    if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .album-gallery-modal-overlay, .system-call-log-card, .cvp-controls, .cvp-btn, .cvp-progress-wrap, .cvp-volume-slider, .cvp-center-btn')) {
+    // Only block swipe/long-press when interacting with drag sliders or specific control buttons (not the video surface or play button)
+    if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], .msg-action-btn, .message-actions-container, .album-gallery-modal-overlay, .system-call-log-card, .cvp-bottom-bar, .cvp-progress-wrap, .cvp-volume-slider, .file-download-btn, a')) {
       return;
     }
     
@@ -1462,7 +1461,7 @@ const MessageList = React.memo(({
         setReplyingTo({
           id: targetMsg.id,
           sender: targetMsg.sender,
-          text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+          text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (targetMsg.mediaType === 'gif' ? 'GIF' : (targetMsg.mediaType ? `[${targetMsg.mediaType}]` : msg.text)),
           mediaType: targetMsg.mediaType || null,
           fileMetadata: targetMsg.fileMetadata || null
         });
@@ -1670,7 +1669,7 @@ const MessageList = React.memo(({
               onTouchStart={(e) => handleMessageTouchStart(msg, isSent, e)}
               onMouseDown={(e) => {
                 if (window.__isMediaModalOpen || selectionMode || e.button !== 0) return;
-                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], button, a, .msg-action-btn, .message-actions-container, .cvp-controls, .cvp-btn, .cvp-progress-wrap, .cvp-volume-slider, .cvp-center-btn')) {
+                if (e.target.closest('.voice-slider, .voice-slider-container, input[type="range"], .msg-action-btn, .message-actions-container, .album-gallery-modal-overlay, .system-call-log-card, .cvp-bottom-bar, .cvp-progress-wrap, .cvp-volume-slider, .file-download-btn, a')) {
                   return;
                 }
                 startLongPress(msg);
@@ -1729,7 +1728,7 @@ const MessageList = React.memo(({
                         )}
                       </div>
                     )}
-                      <div className={`message-bubble ${isSelectedMsg ? 'is-selected' : ''} ${msg.isAlbum ? 'album-bubble' : ''} ${msg.isMultiFile ? 'multifile-bubble' : ''} ${isOnlyEmojiMsg ? `emoji-only-bubble count-${emojiCount}` : ''} ${msg.mediaType === 'file' && msg.fileMetadata?.mimeType?.startsWith('image/') ? 'single-image-bubble' : ''}`}>
+                      <div className={`message-bubble ${isSelectedMsg ? 'is-selected' : ''} ${msg.isAlbum ? 'album-bubble' : ''} ${msg.isMultiFile ? 'multifile-bubble' : ''} ${isOnlyEmojiMsg ? `emoji-only-bubble count-${emojiCount}` : ''} ${msg.mediaType === 'gif' ? 'gif-bubble' : ''} ${msg.mediaType === 'file' && msg.fileMetadata?.mimeType?.startsWith('image/') ? 'single-image-bubble' : ''} ${msg.mediaType === 'file' && msg.fileMetadata?.mimeType?.startsWith('video/') ? 'single-video-bubble' : ''}`}>
                         {isSelectedMsg && (
                           <div className="selection-indicator-badge" aria-hidden="true">
                             <Check size={12} strokeWidth={2.8} />
@@ -1755,7 +1754,7 @@ const MessageList = React.memo(({
                                 setReplyingTo({
                                   id: targetMsg.id,
                                   sender: targetMsg.sender,
-                                  text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (msg.mediaType ? `[${msg.mediaType}]` : msg.text),
+                                  text: msg.isAlbum ? `[${msg.albumItems.length} Photos]` : msg.isMultiFile ? `[${msg.fileItems.length} Files]` : (targetMsg.mediaType === 'gif' ? 'GIF' : (targetMsg.mediaType ? `[${targetMsg.mediaType}]` : msg.text)),
                                   mediaType: targetMsg.mediaType || null,
                                   fileMetadata: targetMsg.fileMetadata || null
                                 });
@@ -1784,13 +1783,19 @@ const MessageList = React.memo(({
                               <div className="reply-video-thumbnail">
                                 <VideoIcon size={14} style={{ color: 'var(--accent-color)' }} />
                               </div>
+                            ) : msg.replyTo.mediaType === 'gif' ? (
+                              <div className="reply-image-thumbnail">
+                                <img src={msg.replyTo.fileMetadata?.thumb || msg.replyTo.fileMetadata?.url || msg.replyTo.text} alt="GIF" style={{ width: '22px', height: '22px', objectFit: 'cover', borderRadius: '4px' }} />
+                              </div>
                             ) : null}
                             <p className="reply-context-text">
                               {msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('image/')
                                 ? 'Photo'
                                 : msg.replyTo.mediaType === 'file' && msg.replyTo.fileMetadata?.mimeType?.startsWith('video/')
                                   ? 'Video'
-                                  : msg.replyTo.text
+                                  : msg.replyTo.mediaType === 'gif'
+                                    ? 'GIF'
+                                    : msg.replyTo.text
                               }
                             </p>
                           </div>
@@ -1800,7 +1805,7 @@ const MessageList = React.memo(({
                         <div className="message-text-content">
                           {renderMessageContent(msg, index === groupedMessages.length - 1)}
                         </div>
-                        {msg.mediaType !== 'voice' && (
+                        {msg.mediaType !== 'voice' && msg.mediaType !== 'gif' && (
                           <span className="inline-message-meta">
                             <span className="inline-meta-time">
                               {formatMessageTime(msg.timestamp)}
@@ -3411,6 +3416,36 @@ const ChatArea = React.memo(function ChatArea({
     }
   };
 
+  const handleSendGif = useCallback((gif) => {
+    if (!gif) return;
+    const replyContext = replyingTo ? { 
+      id: replyingTo.id, 
+      sender: replyingTo.sender, 
+      text: replyingTo.text,
+      mediaType: replyingTo.mediaType || null,
+      fileMetadata: replyingTo.fileMetadata || null
+    } : null;
+
+    clearReplyContext();
+    onSendMessage({
+      type: 'gif',
+      text: gif.title || 'GIF',
+      mediaType: 'gif',
+      fileMetadata: {
+        url: gif.url,
+        thumb: gif.thumb || gif.url,
+        name: gif.title || 'GIF'
+      },
+      replyTo: replyContext
+    });
+    soundEngine.playMessageSent();
+
+    const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    if (isMobile) {
+      closeEmojiPicker(false);
+    }
+  }, [replyingTo, clearReplyContext, onSendMessage, closeEmojiPicker]);
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -3954,6 +3989,31 @@ const ChatArea = React.memo(function ChatArea({
       );
     }
 
+    if (msg.mediaType === 'gif') {
+      const gifUrl = msg.fileMetadata?.url || msg.fileMetadata?.thumb || msg.text;
+      return (
+        <div className="gif-message-wrapper">
+          <img 
+            src={gifUrl} 
+            alt={msg.text || 'GIF'} 
+            className="gif-message-img" 
+            loading="lazy"
+            onLoad={handleImageLoad}
+          />
+          <div className="gif-meta-overlay">
+            <span className="gif-meta-time">{formatMessageTime(msg.timestamp)}</span>
+            {isSent && (
+              <span className="gif-meta-ticks" title={msg.status === 2 ? "Read" : msg.status === 1 ? "Delivered" : "Sent"}>
+                {msg.status === 0 && <span className="tick-single">✓</span>}
+                {msg.status === 1 && <span className="tick-delivered">✓✓</span>}
+                {msg.status === 2 && <span className="tick-read">✓✓</span>}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     if (msg.mediaType === 'file') {
       const file = msg.fileMetadata || {};
       const inferredMime = inferMimeType(file.name || file.fileName || file.filename || '', file.mimeType || '');
@@ -4317,7 +4377,7 @@ const ChatArea = React.memo(function ChatArea({
       <div className="chat-input-wrapper">
         {/* Floating Scroll-to-Bottom Button / Typing Indicator */}
         <button 
-          className={`scroll-to-bottom-btn glass ${(isScrolledUp && !isInlineTypingVisible) ? 'visible' : ''} ${((isGroupMode ? (activeContact.groupTypingNames || []).length > 0 : activeContact.isTyping) && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
+          className={`scroll-to-bottom-btn ${(isScrolledUp && !isInlineTypingVisible) ? 'visible' : ''} ${((isGroupMode ? (activeContact.groupTypingNames || []).length > 0 : activeContact.isTyping) && !isInlineTypingVisible) ? 'typing-active' : ''}`} 
           onClick={scrollToBottom} 
           title="Scroll to bottom"
           aria-label="Scroll to bottom"
@@ -4357,6 +4417,14 @@ const ChatArea = React.memo(function ChatArea({
                   <div className="reply-video-thumbnail">
                     <VideoIcon size={14} style={{ color: 'var(--accent-color)' }} />
                   </div>
+                ) : activeReplyInfo.mediaType === 'sticker' ? (
+                  <div className="reply-sticker-thumbnail">
+                    <img src={activeReplyInfo.fileMetadata?.url || activeReplyInfo.text} alt="Sticker" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+                  </div>
+                ) : activeReplyInfo.mediaType === 'gif' ? (
+                  <div className="reply-image-thumbnail">
+                    <img src={activeReplyInfo.fileMetadata?.thumb || activeReplyInfo.fileMetadata?.url || activeReplyInfo.text} alt="GIF" style={{ width: '24px', height: '24px', objectFit: 'cover', borderRadius: '4px' }} />
+                  </div>
                 ) : null}
                 <div className="reply-preview-text-block">
                   <div className="reply-preview-badge-row">
@@ -4368,7 +4436,11 @@ const ChatArea = React.memo(function ChatArea({
                       ? 'Photo'
                       : activeReplyInfo.mediaType === 'file' && activeReplyInfo.fileMetadata?.mimeType?.startsWith('video/')
                         ? 'Video'
-                        : activeReplyInfo.text
+                        : activeReplyInfo.mediaType === 'sticker'
+                          ? 'Sticker'
+                          : activeReplyInfo.mediaType === 'gif'
+                            ? 'GIF'
+                            : activeReplyInfo.text
                     }
                   </span>
                 </div>
@@ -4621,6 +4693,7 @@ const ChatArea = React.memo(function ChatArea({
                 <AppleEmojiPicker 
                   key={emojiPickerSession}
                   onSelectEmoji={handleInsertEmoji} 
+                  onSelectGif={handleSendGif}
                   onDelete={handleDeleteChar}
                   onClose={closeEmojiPicker}
                 />
