@@ -633,9 +633,8 @@ button {
   border-top-right-radius: 20px !important;
   border-bottom-right-radius: 20px !important;
   border-top-left-radius: 0 !important;
-  border-bottom-left-radius: 0 !important;
-  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.11) 0%, rgba(var(--accent-rgb), 0.03) 36%, transparent 72%), #0a0b0e !important;
-  border: none !important;
+  background: #000000 !important;
+  background-color: #000000 !important;
   border-right: none !important;
   box-shadow: none !important;
   overflow: hidden;
@@ -5915,10 +5914,8 @@ textarea {
   .sidebar {
     width: 100% !important;
     min-width: 100% !important;
-    flex-shrink: 0 !important;
-    display: flex !important;
-    background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.10) 0%, rgba(var(--accent-rgb), 0.03) 32%, transparent 68%), #08090b !important;
-    border: none !important;
+    background: #000000 !important;
+    background-color: #000000 !important;
     border-right: none !important;
     border-bottom: none !important;
     outline: none !important;
