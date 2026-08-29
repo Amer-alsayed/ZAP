@@ -1,4 +1,4 @@
-// Chatra - Anonymous Secure E2EE Messaging Platform (Production Release)
+// ZAP - Anonymous Secure E2EE Messaging Platform (Production Release)
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -165,7 +165,7 @@ if (config.isProd) {
   });
 } else {
   app.get('/', (req, res) => {
-    res.send('Chatra E2EE Server is running...');
+    res.send('ZAP E2EE Server is running...');
   });
 }
 

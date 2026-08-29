@@ -17,14 +17,14 @@ let jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) {
   if (IS_PROD) {
     // In production, a missing JWT_SECRET means every server restart invalidates all user tokens.
-    // This causes a permanent "Connecting to Chatra Server..." loop for all logged-in users.
+    // This causes a permanent "Connecting to ZAP Server..." loop for all logged-in users.
     // CRITICAL: Set JWT_SECRET as an environment variable on your hosting platform (e.g. Render).
     console.error('❌ FATAL: JWT_SECRET environment variable is not set in production!');
     console.error('   Every server restart will invalidate all user sessions.');
     console.error('   Set JWT_SECRET in your Render environment variables and restart the server.');
     process.exit(1);
   } else {
-    jwtSecret = 'super-secure-chatra-secret-key-12345';
+    jwtSecret = 'super-secure-zap-secret-key-12345';
   }
 }
 
@@ -46,7 +46,7 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   allowedOrigins,
   dbUrl: process.env.DATABASE_URL || null,
-  dbPath: process.env.DATABASE_PATH || path.resolve(__dirname, '../../chatra.db'),
+  dbPath: process.env.DATABASE_PATH || path.resolve(__dirname, '../../zap.db'),
   uploadsDir: path.resolve(__dirname, '../uploads'),
   mediaTtlHours: parseInt(process.env.MEDIA_TTL_HOURS || '168', 10)
 };

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: chatra-messenger
+    name: zap-messenger
     env: node
     plan: free
     buildCommand: npm run build

@@ -1,4 +1,4 @@
-# ZAP (Chatra)
+# ZAP
 
 **Zero-knowledge, end-to-end encrypted real-time communications platform.**  
 Built on the native Web Crypto API, WebRTC, Node.js, and React 19.
@@ -45,7 +45,7 @@ ZAP was built around three fundamental architectural decisions:
    +-----------------------------------------------------------------------------------------+
    | Client-Side Master Key Derivation                                                       |
    |                                                                                         |
-   |  Password + Salt("chatra-salt-{username}")                                              |
+   |  Password + Salt("zap-salt-{username}")                                                 |
    |      |                                                                                  |
    |      v [ PBKDF2-HMAC-SHA256 (600,000 rounds) ]                                          |
    |      |                                                                                  |
@@ -146,7 +146,7 @@ flowchart LR
 ## Project Structure
 
 ```text
-Chatra/
+zap/
 ├── client/                     # Frontend Application (React 19 + Vite)
 │   ├── public/                 # Favicon and static SVGs
 │   ├── src/
@@ -187,8 +187,8 @@ Chatra/
 
 ```bash
 # Clone the repository
-git clone https://github.com/Amer-alsayed/Chatra.git
-cd Chatra
+git clone https://github.com/Amer-alsayed/Chatra.git zap
+cd zap
 
 # Install dependencies for both server and client
 npm run install:all
@@ -227,7 +227,7 @@ Server environment variables can be configured via a `.env` file in `server/` or
 | `JWT_SECRET` | `string` | — | **Required in production.** Secret key used for signing JWT session tokens. |
 | `JWT_EXPIRES_IN` | `string` | `7d` | Session expiration timeframe (e.g., `24h`, `7d`). |
 | `DATABASE_URL` | `string` | `null` | PostgreSQL connection URI (e.g. Neon, Supabase, AWS RDS). Defaults to SQLite when omitted. |
-| `DATABASE_PATH` | `string` | `../../chatra.db` | SQLite database file location when running locally. |
+| `DATABASE_PATH` | `string` | `../../zap.db` | SQLite database file location when running locally. |
 | `CLIENT_ORIGIN` | `string` | `null` | Allowed CORS origins for standalone client deployments (comma-separated). |
 | `MEDIA_TTL_HOURS` | `number` | `168` | Lifetime of encrypted media files on disk before automated deletion (default: 7 days). |
 
@@ -302,8 +302,8 @@ CMD ["npm", "start"]
 
 Build and run:
 ```bash
-docker build -t zap-chatra .
-docker run -p 5000:5000 -e JWT_SECRET="your-secure-secret" -e NODE_ENV=production zap-chatra
+docker build -t zap .
+docker run -p 5000:5000 -e JWT_SECRET="your-secure-secret" -e NODE_ENV=production zap
 ```
 
 ### 3. VPS Deployment (Nginx + PM2)
