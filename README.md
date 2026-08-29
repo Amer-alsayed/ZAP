@@ -1,39 +1,59 @@
 # ZAP
 
-**Zero-knowledge, end-to-end encrypted real-time communications platform.**  
-Built on the native Web Crypto API, WebRTC, Node.js, and React 19.
+**Open-source, zero-knowledge, end-to-end encrypted real-time communications platform.**  
+Featuring encrypted messaging, WebRTC P2P voice/video calling, voice notes, and media sharing.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg?style=flat-square)](LICENSE)
+[![Free Tier: $0/mo](https://img.shields.io/badge/Hosting-100%25_Free_Tier-success.svg?style=flat-square)](#-deployment)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![React](https://img.shields.io/badge/React-19.x-61DAFB.svg?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![Web Crypto API](https://img.shields.io/badge/Cryptography-Web_Crypto_API-8A2BE2.svg?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
-[![Neon](https://img.shields.io/badge/Database-Neon_PostgreSQL-00E599.svg?style=flat-square&logo=postgresql&logoColor=white)](https://neon.tech)
-[![Render](https://img.shields.io/badge/Deploy-Render-46E3B7.svg?style=flat-square&logo=render&logoColor=white)](https://render.com)
+[![WebRTC](https://img.shields.io/badge/Voice_&_Video-WebRTC_P2P-333333.svg?style=flat-square&logo=webrtc&logoColor=white)](https://webrtc.org)
+[![PostgreSQL / SQLite](https://img.shields.io/badge/Database-PostgreSQL_%7C_SQLite-4169E1.svg?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org)
 
 ---
 
-## Design Philosophy
+## Why ZAP?
 
-Most "secure" web messengers either rely on closed-source third-party servers, bloated non-standard JavaScript cryptography bundles, or store private keys insecurely. 
+ZAP was designed from the ground up to solve two major problems in modern communication software: **data surveillance** and **expensive server infrastructure**.
 
-ZAP was built around three fundamental architectural decisions:
+Most messaging platforms require personal identifiers (phone numbers, emails), log metadata on centralized servers, or require expensive cloud servers to relay media streams.
 
-1. **Zero-Knowledge by Design**: The backend is an untrusted relay. It never receives plaintext messages, unencrypted attachments, or raw user passwords. It has no mechanism to decrypt stored or in-transit payloads.
-2. **Native Standard Cryptography**: All cryptographic primitives run directly inside the browser's hardware-accelerated `window.crypto.subtle` (Web Crypto API) engine—eliminating unvetted third-party crypto dependencies and side-channel vulnerabilities.
-3. **Self-Contained & Deployable Anywhere**: Dual-engine storage (zero-configuration SQLite WAL for local development; managed PostgreSQL with pooling for production) allows deployment on a single VPS, Docker container, or cloud PaaS in minutes.
+ZAP provides a complete, hardened communications suite that is **100% free to host forever**—with **zero compromises on cryptographic security**:
+
+- **Zero Surveillance**: No phone numbers, no email addresses, no third-party trackers, and no telemetry. Registration requires only a username and password.
+- **True Zero-Knowledge Server**: The backend acts as a blind routing gateway. It holds no private keys, cannot decrypt message payloads, cannot view media files, and cannot see user passwords.
+- **Cost-Free P2P Voice & Video**: Calls stream directly between peers over WebRTC. Because audio and video do not route through centralized media relays, high-quality calls cost **$0 in server bandwidth**.
+- **100% Free Cloud Deployment ($0/month)**: Can be deployed in minutes on free cloud tiers (Render + Neon + Keep-Alive) with permanent database storage and zero cold-starts, or self-hosted on any private VPS/Docker instance.
 
 ---
 
-## Threat Model & Security Guarantees
+## Core Capabilities
 
-| Attack Surface | Threat Vector | Mitigation Strategy |
-| :--- | :--- | :--- |
-| **Compromised Server / Rogue Admin** | Reading message history or eavesdropping calls | The server stores only AES-256-GCM ciphertexts, public keys, and bcrypt hashes of client-derived tokens. It has no access to private keys. |
-| **Credential Interception / Sniffing** | Capturing raw passwords in transit | Passwords are key-stretched client-side via **PBKDF2-SHA256 (600,000 iterations)**. Only a cryptographic derivation hash is transmitted, which is subsequently hashed with Bcrypt (10 rounds) before storage. |
-| **Man-in-the-Middle (MITM)** | Tampering with in-transit messages | Every payload is signed with the sender's **ECDSA P-256** private key. The recipient validates the signature against the sender's public key before decrypting. |
-| **Identity Impersonation** | Modifying public keys on the server | Out-of-band **Safety Numbers** (deterministic 20-digit cryptographic fingerprints) allow peers to verify public key consistency. |
-| **File Storage Exposure** | Leaking uploaded attachments | Media files and voice notes are encrypted locally with AES-256-GCM prior to upload. Uploaded files are served with sandboxed CSP headers and automatically purged by an hourly TTL background worker. |
-| **Brute-Force & Denial of Service** | Flooding auth, uploads, or sockets | Multi-tier rate limiting (Express Rate Limit) isolates authentication attempts (30/15m), uploads (300/15m), and general API traffic. |
+### 1. End-to-End Encrypted Messaging
+- Real-time message exchange over persistent WebSockets with sub-10ms delivery.
+- Authenticated AES-256-GCM symmetric encryption with unique 12-byte initialization vectors per message.
+- Cryptographic digital signing (ECDSA P-256) on every transmission to prevent tampering, injection, and spoofing.
+- Message status lifecycle tracking: Sent (`✓`), Delivered (`✓✓`), and Read (`✓✓` blue).
+- In-place message editing and dual deletion modes (*Delete for me* or *Delete for everyone*).
+- Offline message queuing and automatic synchronization upon reconnection.
+
+### 2. P2P Voice & Video Calling
+- Direct browser-to-browser WebRTC media streams with STUN/TURN fallback.
+- In-call HUD with camera toggles, microphone mute, live audio visualizer, and session duration counter.
+- Stateful offer/answer signaling and automated session cleanup on network disconnection.
+
+### 3. Encrypted Voice Notes & Media Vault
+- In-browser voice note recorder with dynamic waveform generation and client-side encryption before transmission.
+- Encrypted file and image sharing (up to 50MB) with chunked client-side AES-GCM encryption.
+- Encrypted media caching (IndexedDB) for fast local decryption and playback without repeated server fetching.
+- Sandboxed server-side asset isolation (`X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`).
+- Automated background worker that purges expired media uploads to prevent server disk bloat.
+
+### 4. Privacy & Identity Verification
+- **Out-of-Band Safety Numbers**: 20-digit deterministic cryptographic fingerprints (`XXXXX XXXXX XXXXX XXXXX`) allow peers to visually verify identity keys and prevent Man-in-the-Middle (MITM) attacks.
+- **Client-Side Key Stretching**: Passwords are key-stretched in the browser using **PBKDF2-SHA256 with 600,000 rounds** before transmission. Raw passwords never touch the wire or database.
+- **Full Presence & Blocklist Isolation**: Blocked users are completely isolated—they cannot observe typing status, presence, or deliver messages.
 
 ---
 
@@ -83,11 +103,27 @@ ZAP was built around three fundamental architectural decisions:
 
 ### Primitives Summary
 
-- **Key Derivation Function**: PBKDF2-HMAC-SHA256 with 600,000 iterations and 512-bit output.
-- **Key Agreement**: Diffie-Hellman over Elliptic Curves (ECDH) on NIST Curve P-256 (`secp256r1`).
-- **Symmetric Cipher**: AES-GCM (256-bit key length, 96-bit random IV, 128-bit authentication tag).
-- **Asymmetric Signatures**: ECDSA with SHA-256 over NIST Curve P-256.
-- **Safety Number / Fingerprint**: Deterministic hash of sorted public key identity pairs, formatted into 4 blocks of 5 digits: `XXXXX XXXXX XXXXX XXXXX`.
+| Primitive | Standard / Parameters | Purpose |
+| :--- | :--- | :--- |
+| **Key Derivation** | `PBKDF2-HMAC-SHA256` (600,000 iterations, 512-bit output) | Locally stretches raw password into login token & backup key |
+| **Key Agreement** | `ECDH` on NIST Curve `P-256` (`secp256r1`) | Derives 256-bit symmetric shared secret between peers |
+| **Symmetric Encryption** | `AES-GCM` (256-bit key, 96-bit random IV, 128-bit tag) | Authenticated encryption for messages, voice notes, and media |
+| **Digital Signatures** | `ECDSA` with `SHA-256` on Curve `P-256` | Signs ciphertexts to guarantee sender authenticity |
+| **Identity Fingerprints** | Deterministic 20-digit chunked numeric code | Out-of-band MITM key verification |
+| **Server Auth** | `Bcrypt` (10 rounds) + `JWT` (`HS256`) | Server-side token validation and session management |
+
+---
+
+## Threat Model & Security Matrix
+
+| Threat Vector | Attack Scenario | ZAP Mitigation |
+| :--- | :--- | :--- |
+| **Server Compromise** | Rogue admin or compromised hosting database | Database contains only AES-256-GCM ciphertexts, public keys, and bcrypt hashes. Plaintext cannot be recovered without client private keys. |
+| **Network Sniffing** | Intercepting credentials over the wire | Passwords never leave the browser. Only the PBKDF2-stretched derivation hash is transmitted over TLS. |
+| **Man-in-the-Middle (MITM)** | Malicious actor tampering with in-transit messages | All payloads are signed with ECDSA P-256. Altered ciphertexts fail cryptographic verification and are dropped. |
+| **Public Key Substitution** | Server returning modified public keys | Users can verify identities out-of-band using the 20-digit deterministic Safety Number fingerprint. |
+| **Attachment Interception** | Intercepting uploaded images or voice notes | Media files are encrypted in the browser with AES-GCM prior to upload and served with sandboxed CSP isolation. |
+| **DoS & Flooding** | Brute-force guessing and upload flooding | Multi-tiered rate limiters isolate authentication (30 req/15m), uploads (300 req/15m), and general API traffic. |
 
 ---
 
@@ -96,16 +132,16 @@ ZAP was built around three fundamental architectural decisions:
 ```mermaid
 flowchart LR
     subgraph Client["Browser Client (React 19)"]
-        CryptoEngine["Web Crypto API<br/>(SubtleCrypto)"]
+        CryptoEngine["Native Web Crypto API<br/>(Hardware Accelerated)"]
         MediaCache["IndexedDB Media Cache"]
         SocketClient["Socket.IO Client"]
         WebRTC["WebRTC P2P Peer"]
     end
 
-    subgraph Server["Node.js Application Gateway"]
-        AuthMiddleware["JWT & Rate Limiting"]
-        SocketRelay["Socket.IO Event Relay & Signaling"]
-        UploadHandler["Sandboxed Static Vault"]
+    subgraph Server["Node.js Gateway"]
+        AuthMiddleware["JWT Auth & Rate Limiting"]
+        SocketRelay["Socket.IO Relay & WebRTC Signaling"]
+        UploadVault["Sandboxed Media Storage"]
         CleanupTask["Background Media TTL Purge"]
     end
 
@@ -119,193 +155,64 @@ flowchart LR
     end
 
     Client <-->|Encrypted Payloads & Signaling| SocketRelay
-    Client -->|Encrypted Binary Uploads| UploadHandler
+    Client -->|Encrypted Binary Blobs| UploadVault
     SocketRelay <--> DB
-    UploadHandler --> CleanupTask
+    UploadVault --> CleanupTask
     WebRTC <===>|Direct P2P Encrypted Audio / Video| PeerP2P
     SocketClient <-->|Real-time Routing| SocketRelay
 ```
 
 ---
 
-## Features
+## 🚀 Deployment
 
-- **End-to-End Encrypted Text Messaging**: Sub-10ms delivery over persistent WebSockets with offline message synchronization.
-- **WebRTC P2P Voice & Video Calls**: Direct peer-to-peer media streams with ICE/STUN fallback, live audio waveform visualizer, camera flipping, and call timer.
-- **Voice Notes Studio**: Live in-browser audio recording, interactive waveform visualization, and client-side encryption before storage.
-- **Encrypted Media & Document Sharing**: Client-side AES-GCM file chunking and encryption (up to 50MB) with in-memory decryption and IndexedDB caching.
-- **Message Lifecycle Controls**: Real-time message edits, dual deletion modes (*Delete for me* or *Delete for everyone*), and delivery/read receipts (`✓`, `✓✓`, blue `✓✓`).
-- **Emoji Reactions & Apple Emoji Tray**: Instant reaction syncing with integrated emoji picker.
-- **Bi-Directional Gesture Physics**: Native-feeling swipe-to-reply with logarithmic spring damping, micro-haptics, and auto-focusing input bar.
-- **Adaptive Viewport Engine**: Dynamic viewport handling (`dvh` + `interactive-widget=resizes-visual`) preventing virtual keyboard layout shifting on iOS Safari and Android Chrome.
-- **Privacy Controls**: Contact search, user blocking/unblocking with total presence isolation, safety number verification, and auto-purging media files.
-- **Theming & Micro-Interactions**: Dark, Light, and True OLED Black palettes with custom RGB accent picking and synthesized audio cues.
+You can run ZAP **100% free of charge** using cloud free tiers, or self-host it on your own private server / VPS.
 
 ---
 
-## Project Structure
+### Option A: Free 24/7 Cloud Stack ($0/Month Forever)
 
-```text
-zap/
-├── client/                     # Frontend Application (React 19 + Vite)
-│   ├── public/                 # Favicon and static SVGs
-│   ├── src/
-│   │   ├── components/         # UI Modules (ChatArea, Sidebar, CallWindow, etc.)
-│   │   ├── services/           # Crypto engine, Socket.IO client, API wrappers
-│   │   ├── styles/             # Application CSS and design tokens
-│   │   ├── utils/              # Theme management and helper functions
-│   │   ├── App.jsx             # Root state controller
-│   │   └── main.jsx            # React entry point
-│   ├── package.json
-│   └── vite.config.js
-│
-├── server/                     # Backend Application (Node.js + Express)
-│   ├── src/
-│   │   ├── middleware/         # Rate limiting and JWT verification
-│   │   ├── authController.js   # Auth endpoints and user query handlers
-│   │   ├── socketHandler.js    # Socket.IO message routing and WebRTC signaling
-│   │   ├── db.js               # Database abstraction (SQLite WAL & PostgreSQL)
-│   │   ├── config.js           # Environment parser and validator
-│   │   └── logger.js           # Structured logging utility
-│   ├── package.json
-│   └── server.js               # Server bootstrap and graceful shutdown
-│
-├── render.yaml                 # 1-Click Render Blueprint
-├── package.json                # Root monorepo workspace scripts
-└── LICENSE                     # MIT License
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-- **Node.js**: `v18.0.0` or higher
-- **npm**: `v9.0.0` or higher
-
-### 1. Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/Amer-alsayed/ZAP.git
-cd ZAP
-
-# Install dependencies for both server and client
-npm run install:all
-```
-
-### 2. Development Mode
-
-Starts the backend API on port `5000` and Vite HMR frontend on port `5173`:
-
-```bash
-npm run dev
-```
-
-Open `http://localhost:5173` in your browser.
-
-### 3. Production Build & Run
-
-```bash
-# Build the client bundle
-npm run build
-
-# Start the Node.js production server
-npm start
-```
-
----
-
-## Configuration
-
-Server environment variables can be configured via a `.env` file in `server/` or through your hosting provider:
-
-| Variable | Type | Default | Description |
-| :--- | :---: | :---: | :--- |
-| `NODE_ENV` | `string` | `development` | Runtime environment (`development` or `production`). |
-| `PORT` | `number` | `5000` | HTTP and WebSocket listener port. |
-| `JWT_SECRET` | `string` | — | **Required in production.** Secret key used for signing JWT session tokens. |
-| `JWT_EXPIRES_IN` | `string` | `7d` | Session expiration timeframe (e.g., `24h`, `7d`). |
-| `DATABASE_URL` | `string` | `null` | PostgreSQL connection URI (e.g. Neon, Supabase, AWS RDS). Defaults to SQLite when omitted. |
-| `DATABASE_PATH` | `string` | `../../zap.db` | SQLite database file location when running locally. |
-| `CLIENT_ORIGIN` | `string` | `null` | Allowed CORS origins for standalone client deployments (comma-separated). |
-| `MEDIA_TTL_HOURS` | `number` | `168` | Lifetime of encrypted media files on disk before automated deletion (default: 7 days). |
-
----
-
-## API & Signaling Protocol
-
-### REST Endpoints
-
-| Method | Route | Auth | Rate Limit | Purpose |
-| :--- | :--- | :---: | :---: | :--- |
-| `GET` | `/health` | None | General (500/15m) | Liveness probe and database connectivity status. |
-| `POST` | `/api/auth/register` | None | Auth (30/15m) | Registers user, stores public keys and encrypted private key bundle. |
-| `POST` | `/api/auth/login` | None | Auth (30/15m) | Authenticates login hash, returns JWT and user key bundle. |
-| `GET` | `/api/auth/search` | JWT | General (500/15m) | Look up users by username prefix. |
-| `POST` | `/api/upload` | JWT | Upload (300/15m) | Uploads client-encrypted binary payload (max 50MB). |
-| `GET` | `/uploads/:filename` | None | General | Serves encrypted binary blobs with sandboxed headers. |
-
-### Socket.IO Protocol Events
-
-| Channel | Event | Payload Direction | Description |
-| :--- | :--- | :---: | :--- |
-| **Auth** | `connection` | Client $\rightarrow$ Server | Authenticates connection via handshake JWT token. |
-| **Messaging** | `send-message` | Client $\rightarrow$ Server | Dispatches `{ recipient, ciphertext, iv, signature }`. |
-| | `receive-message` | Server $\rightarrow$ Client | Delivers ciphertext envelope to recipient socket. |
-| | `message-delivered` | Server $\rightarrow$ Client | Updates message delivery status (`✓✓`). |
-| | `message-read` | Client $\leftrightarrow$ Server | Signals read receipts and updates blue tick status. |
-| | `message-edit` | Client $\leftrightarrow$ Server | Propagates edited ciphertext to conversation participants. |
-| | `delete-messages` | Client $\leftrightarrow$ Server | Synchronizes single or bidirectional message removal. |
-| **Signaling** | `call-user` | Client $\leftrightarrow$ Server | Relays WebRTC SDP offer to recipient. |
-| | `call-accepted` | Client $\leftrightarrow$ Server | Relays WebRTC SDP answer to caller. |
-| | `ice-candidate` | Client $\leftrightarrow$ Server | Exchanges STUN/TURN network routing candidates. |
-| | `end-call` | Client $\leftrightarrow$ Server | Terminates active call session and resets state. |
-| **Presence** | `typing` / `stop-typing`| Client $\leftrightarrow$ Server | Broadcasts active typing indicators. |
-| | `user-status` | Server $\rightarrow$ Client | Real-time online/offline presence notifications. |
-
----
-
-## Deployment
-
-### Free 24/7 Cloud Architecture (Neon + Render + Cron-Job)
-
-Deploying a fully persistent, 24/7 online instance of ZAP takes under 3 minutes using standard free tiers:
+This setup uses **Neon** (free serverless PostgreSQL), **Render** (free web service hosting), and **cron-job.org** (free keep-alive pings) to run a persistent, zero-cost production instance.
 
 ```
 [ Neon.tech (PostgreSQL) ] <---> [ Render.com (Web Service) ] <--- [ cron-job.org (Keep-Alive Ping) ]
        (Persistence)                 (Node + WebSockets)                    (No Cold Starts)
 ```
 
-#### 1. Provision Free PostgreSQL on Neon
-1. Create a free account at [Neon.tech](https://neon.tech) and create a project.
-2. Copy your connection string from the dashboard (e.g. `postgresql://user:pass@ep-xyz.region.aws.neon.tech/neondb?sslmode=require`).
+#### 1. Create Free Database on Neon
+1. Go to **[Neon.tech](https://neon.tech)** and create a free project.
+2. Select your closest region (e.g. `Europe (Frankfurt) / eu-central-1`).
+3. Copy your PostgreSQL connection URI from the dashboard:
+   ```text
+   postgresql://user:password@ep-xyz.region.aws.neon.tech/neondb?sslmode=require
+   ```
 
 #### 2. Deploy Web Service to Render
-1. Fork or push this repository to GitHub.
-2. In the [Render Dashboard](https://dashboard.render.com), click **New +** $\rightarrow$ **Blueprint** (or **Web Service**).
-3. Connect your repository.
-4. Set the following environment variables:
+1. Fork or push this repository to your GitHub account.
+2. In the **[Render Dashboard](https://dashboard.render.com)**, click **New +** $\rightarrow$ **Blueprint** (or **Web Service**).
+3. Select your repository (**`ZAP`**).
+4. Render will detect the included [`render.yaml`](render.yaml) automatically.
+5. In the **Environment Variables** section, ensure the following are configured:
    - `NODE_ENV`: `production`
    - `JWT_SECRET`: *(A secure 32+ character random string)*
-   - `DATABASE_URL`: *(Paste your Neon PostgreSQL connection URI)*
-5. Click **Apply / Deploy**. Render will build the client, connect to Neon, and initialize all tables and performance indexes automatically.
+   - `DATABASE_URL`: *(Paste your Neon PostgreSQL connection string)*
+6. Click **Apply / Deploy**. Render will automatically build the client bundle, connect to Neon, and run database migrations.
 
-#### 3. Configure 24/7 Keep-Alive via cron-job.org
-Render's free tier spins down instances after 15 minutes of inactivity. To keep your server awake and eliminate cold-start delays:
-1. Create a free account at [cron-job.org](https://cron-job.org).
+#### 3. Prevent Cold Starts with cron-job.org
+Render free-tier web services sleep after 15 minutes of inactivity. To keep your server warm and eliminate wake-up delays:
+1. Create a free account on **[cron-job.org](https://cron-job.org)**.
 2. Click **Create Cronjob**:
    - **Title**: `Keep ZAP Awake`
-   - **URL**: `https://<your-render-app>.onrender.com/health`
+   - **URL**: `https://<your-render-service>.onrender.com/health`
    - **Schedule**: `Every 10 minutes` (or `Every 5 minutes`)
    - **Request Method**: `GET`
-3. Click **Create**. `cron-job.org` will periodically ping the lightweight `/health` probe to keep the service warm 24/7.
+3. Click **Create**. `cron-job.org` will periodically ping the lightweight `/health` probe, ensuring your app responds instantly 24/7.
 
 ---
 
-### Alternative Deployment Options
+### Option B: Self-Hosted on Private VPS (Docker & Nginx)
 
-#### Docker Containerization
+#### Docker Deployment
 
 ```dockerfile
 FROM node:20-alpine
@@ -316,10 +223,10 @@ COPY package*.json ./
 COPY server/package*.json ./server/
 COPY client/package*.json ./client/
 
-# Install all workspace dependencies
+# Install dependencies
 RUN npm run install:all
 
-# Copy source and build static frontend
+# Build static React frontend
 COPY . .
 RUN npm run build
 
@@ -331,10 +238,13 @@ CMD ["npm", "start"]
 Build and run:
 ```bash
 docker build -t zap .
-docker run -p 5000:5000 -e JWT_SECRET="your-secure-secret" -e NODE_ENV=production zap
+docker run -d -p 5000:5000 \
+  -e JWT_SECRET="your-secure-random-secret-key" \
+  -e NODE_ENV=production \
+  --name zap-app zap
 ```
 
-#### Self-Hosted VPS (Nginx Reverse Proxy + PM2)
+#### Nginx Reverse Proxy Configuration
 
 ```nginx
 server {
@@ -356,13 +266,67 @@ server {
 
 ---
 
-## Contributing
+### Option C: Local Development
 
-1. Fork the project.
-2. Create your feature branch (`git checkout -b feature/crypto-improvement`).
-3. Commit your changes (`git commit -m 'feat: optimize key agreement caching'`).
-4. Push to the branch (`git push origin feature/crypto-improvement`).
-5. Open a Pull Request.
+```bash
+# Clone the repository
+git clone https://github.com/Amer-alsayed/ZAP.git
+cd ZAP
+
+# Install dependencies for both server and client
+npm run install:all
+
+# Start backend (port 5000) and frontend (port 5173) concurrently
+npm run dev
+```
+
+---
+
+## Configuration Reference
+
+| Variable | Type | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `NODE_ENV` | `string` | `development` | Runtime environment (`development` or `production`). |
+| `PORT` | `number` | `5000` | HTTP and WebSocket listener port. |
+| `JWT_SECRET` | `string` | — | **Required in production.** Secret key used for signing JWT session tokens. |
+| `JWT_EXPIRES_IN` | `string` | `7d` | Session expiration duration (e.g. `24h`, `7d`). |
+| `DATABASE_URL` | `string` | `null` | PostgreSQL connection URI (e.g. Neon, Supabase). Enables PostgreSQL mode with connection pooling. Defaults to SQLite when omitted. |
+| `DATABASE_PATH` | `string` | `../../zap.db` | SQLite database file location when running locally. |
+| `CLIENT_ORIGIN` | `string` | `null` | Allowed CORS origins for standalone client deployments (comma-separated). |
+| `MEDIA_TTL_HOURS` | `number` | `168` | Lifetime of encrypted media files on disk before automated background purge (default: 7 days). |
+
+---
+
+## API & Signaling Reference
+
+### REST Endpoints
+
+| Method | Route | Auth | Rate Limit | Purpose |
+| :--- | :--- | :---: | :---: | :--- |
+| `GET` | `/health` | None | General (500/15m) | Liveness probe and database connectivity verification. |
+| `POST` | `/api/auth/register` | None | Auth (30/15m) | Registers user with public keys and encrypted key bundle. |
+| `POST` | `/api/auth/login` | None | Auth (30/15m) | Authenticates login hash, returns JWT and user key bundle. |
+| `GET` | `/api/auth/search` | JWT | General (500/15m) | Queries users by username prefix. |
+| `POST` | `/api/upload` | JWT | Upload (300/15m) | Uploads client-encrypted binary payload (max 50MB). |
+| `GET` | `/uploads/:filename` | None | General | Serves encrypted binary blobs with sandboxed headers. |
+
+### Socket.IO Protocol Events
+
+| Channel | Event | Payload Direction | Description |
+| :--- | :--- | :---: | :--- |
+| **Auth** | `connection` | Client $\rightarrow$ Server | Authenticates connection via handshake JWT token. |
+| **Messaging** | `send-message` | Client $\rightarrow$ Server | Dispatches `{ recipient, ciphertext, iv, signature }`. |
+| | `receive-message` | Server $\rightarrow$ Client | Delivers ciphertext envelope to recipient socket. |
+| | `message-delivered` | Server $\rightarrow$ Client | Confirms message delivery receipt (`✓✓`). |
+| | `message-read` | Client $\leftrightarrow$ Server | Signals read receipts and updates blue tick status. |
+| | `message-edit` | Client $\leftrightarrow$ Server | Propagates edited ciphertext to conversation participants. |
+| | `delete-messages` | Client $\leftrightarrow$ Server | Synchronizes single or bidirectional message removal. |
+| **Signaling** | `call-user` | Client $\leftrightarrow$ Server | Relays WebRTC SDP offer to recipient. |
+| | `call-accepted` | Client $\leftrightarrow$ Server | Relays WebRTC SDP answer to caller. |
+| | `ice-candidate` | Client $\leftrightarrow$ Server | Exchanges STUN/TURN network routing candidates. |
+| | `end-call` | Client $\leftrightarrow$ Server | Terminates active call session and resets state. |
+| **Presence** | `typing` / `stop-typing`| Client $\leftrightarrow$ Server | Broadcasts active typing indicators. |
+| | `user-status` | Server $\rightarrow$ Client | Real-time online/offline presence notifications. |
 
 ---
 
