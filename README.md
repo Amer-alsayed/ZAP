@@ -11,6 +11,43 @@ Featuring encrypted messaging, WebRTC P2P voice/video calling, voice notes, and 
 [![WebRTC](https://img.shields.io/badge/Voice_&_Video-WebRTC_P2P-333333.svg?style=flat-square&logo=webrtc&logoColor=white)](https://webrtc.org)
 [![PostgreSQL / SQLite](https://img.shields.io/badge/Database-PostgreSQL_%7C_SQLite-4169E1.svg?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org)
 
+<br />
+
+<div align="center">
+  <img src="docs/screenshots/02-chat-interface.png" alt="ZAP Encrypted Chat Interface" width="100%" />
+</div>
+
+<br />
+
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%" align="center">
+        <img src="docs/screenshots/03-safety-number.png" alt="E2EE Safety Number Verification" />
+        <br />
+        <sub><b>E2EE Safety Number Verification (MITM Protection)</b></sub>
+      </td>
+      <td width="50%" align="center">
+        <img src="docs/screenshots/04-settings-themes.png" alt="Settings & Theming Engine" />
+        <br />
+        <sub><b>Settings, Theming & Stream Controls</b></sub>
+      </td>
+    </tr>
+    <tr>
+      <td width="50%" align="center">
+        <img src="docs/screenshots/01-auth-screen.png" alt="Zero-Knowledge Auth" />
+        <br />
+        <sub><b>Zero-Knowledge Authentication Vault</b></sub>
+      </td>
+      <td width="50%" align="center">
+        <img src="docs/screenshots/05-call-hud.png" alt="WebRTC P2P Calling" />
+        <br />
+        <sub><b>WebRTC Direct P2P Calling ($0 Relay Cost)</b></sub>
+      </td>
+    </tr>
+  </table>
+</div>
+
 ---
 
 ## Why ZAP?

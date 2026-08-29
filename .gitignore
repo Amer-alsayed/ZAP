@@ -1,7 +1,8 @@
 node_modules/
 .env
 chatra.db*
-*.db
+zap.db*
+*.db*
 server/uploads/
 client/dist/
 .DS_Store

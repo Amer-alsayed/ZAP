@@ -4254,6 +4254,14 @@ const ChatArea = React.memo(function ChatArea({
               ) : (
                 <>
                   <button 
+                    className="header-action-btn safety-number-btn" 
+                    onClick={onOpenSafetyModal}
+                    title="E2EE Safety Number Verification"
+                    aria-label="E2EE Safety Number Verification"
+                  >
+                    <ShieldCheck size={19} />
+                  </button>
+                  <button 
                     className="header-action-btn" 
                     onClick={() => onInitiateCall('voice')}
                     title="Secure Voice Call"
