@@ -1,6 +1,7 @@
 services:
   - type: web
     name: zap-messenger
+    region: frankfurt
     env: node
     plan: free
     buildCommand: npm run build
