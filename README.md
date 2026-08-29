@@ -7,8 +7,8 @@ Built on the native Web Crypto API, WebRTC, Node.js, and React 19.
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![React](https://img.shields.io/badge/React-19.x-61DAFB.svg?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![Web Crypto API](https://img.shields.io/badge/Cryptography-Web_Crypto_API-8A2BE2.svg?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
-[![WebRTC](https://img.shields.io/badge/Signaling-WebRTC_P2P-333333.svg?style=flat-square&logo=webrtc&logoColor=white)](https://webrtc.org)
-[![PostgreSQL / SQLite](https://img.shields.io/badge/Database-PostgreSQL_%7C_SQLite-4169E1.svg?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Neon](https://img.shields.io/badge/Database-Neon_PostgreSQL-00E599.svg?style=flat-square&logo=postgresql&logoColor=white)](https://neon.tech)
+[![Render](https://img.shields.io/badge/Deploy-Render-46E3B7.svg?style=flat-square&logo=render&logoColor=white)](https://render.com)
 
 ---
 
@@ -268,16 +268,44 @@ Server environment variables can be configured via a `.env` file in `server/` or
 
 ## Deployment
 
-### 1. One-Click Deploy to Render
+### Free 24/7 Cloud Architecture (Neon + Render + Cron-Job)
 
-This project includes a native [`render.yaml`](render.yaml) blueprint:
+Deploying a fully persistent, 24/7 online instance of ZAP takes under 3 minutes using standard free tiers:
 
-1. Fork this repository on GitHub.
-2. In the [Render Dashboard](https://dashboard.render.com), click **New +** $\rightarrow$ **Blueprint**.
+```
+[ Neon.tech (PostgreSQL) ] <---> [ Render.com (Web Service) ] <--- [ cron-job.org (Keep-Alive Ping) ]
+       (Persistence)                 (Node + WebSockets)                    (No Cold Starts)
+```
+
+#### 1. Provision Free PostgreSQL on Neon
+1. Create a free account at [Neon.tech](https://neon.tech) and create a project.
+2. Copy your connection string from the dashboard (e.g. `postgresql://user:pass@ep-xyz.region.aws.neon.tech/neondb?sslmode=require`).
+
+#### 2. Deploy Web Service to Render
+1. Fork or push this repository to GitHub.
+2. In the [Render Dashboard](https://dashboard.render.com), click **New +** $\rightarrow$ **Blueprint** (or **Web Service**).
 3. Connect your repository.
-4. Supply your `JWT_SECRET` in the environment settings and deploy.
+4. Set the following environment variables:
+   - `NODE_ENV`: `production`
+   - `JWT_SECRET`: *(A secure 32+ character random string)*
+   - `DATABASE_URL`: *(Paste your Neon PostgreSQL connection URI)*
+5. Click **Apply / Deploy**. Render will build the client, connect to Neon, and initialize all tables and performance indexes automatically.
 
-### 2. Docker Deployment
+#### 3. Configure 24/7 Keep-Alive via cron-job.org
+Render's free tier spins down instances after 15 minutes of inactivity. To keep your server awake and eliminate cold-start delays:
+1. Create a free account at [cron-job.org](https://cron-job.org).
+2. Click **Create Cronjob**:
+   - **Title**: `Keep ZAP Awake`
+   - **URL**: `https://<your-render-app>.onrender.com/health`
+   - **Schedule**: `Every 10 minutes` (or `Every 5 minutes`)
+   - **Request Method**: `GET`
+3. Click **Create**. `cron-job.org` will periodically ping the lightweight `/health` probe to keep the service warm 24/7.
+
+---
+
+### Alternative Deployment Options
+
+#### Docker Containerization
 
 ```dockerfile
 FROM node:20-alpine
@@ -306,7 +334,7 @@ docker build -t zap .
 docker run -p 5000:5000 -e JWT_SECRET="your-secure-secret" -e NODE_ENV=production zap
 ```
 
-### 3. VPS Deployment (Nginx + PM2)
+#### Self-Hosted VPS (Nginx Reverse Proxy + PM2)
 
 ```nginx
 server {
