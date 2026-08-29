@@ -187,8 +187,8 @@ zap/
 
 ```bash
 # Clone the repository
-git clone https://github.com/Amer-alsayed/Chatra.git zap
-cd zap
+git clone https://github.com/Amer-alsayed/ZAP.git
+cd ZAP
 
 # Install dependencies for both server and client
 npm run install:all
