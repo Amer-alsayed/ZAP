@@ -1,3 +1,9 @@
+<div align="center">
+  <img src="docs/assets/zap_social_preview.jpg" alt="ZAP - Anonymous End-to-End Encrypted Messaging" width="100%" style="border-radius: 14px; max-width: 960px;" />
+</div>
+
+<br />
+
 # ZAP
 
 **Open-source, zero-knowledge, end-to-end encrypted real-time communications platform.**  
