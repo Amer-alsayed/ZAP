@@ -25,12 +25,16 @@ export const getAuthSalt = async (req, res) => {
 
   try {
     const user = await dbGet('SELECT auth_salt FROM users WHERE LOWER(username) = LOWER(?)', [username]);
-    if (user && user.auth_salt) {
-      return res.status(200).json({ authSalt: user.auth_salt });
+    if (user) {
+      if (user.auth_salt) {
+        return res.status(200).json({ authSalt: user.auth_salt });
+      }
+      // Legacy account registered without custom salt
+      return res.status(200).json({ authSalt: null });
     }
 
     // Anti-Enumeration Oracle Protection:
-    // For non-existent accounts or legacy accounts without a salt, generate a deterministic 16-byte
+    // For non-existent accounts, generate a deterministic 16-byte
     // pseudo-salt derived from HMAC-SHA256(ServerSecret, username).
     // This ensures EVERY username query returns a realistic 16-byte hex string in constant time,
     // making it mathematically impossible for an attacker to enumerate valid registered usernames.
