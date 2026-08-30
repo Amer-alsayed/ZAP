@@ -610,10 +610,24 @@ export function useChatManager({
                 m.sender.toLowerCase() === contact.username.toLowerCase() && m.status < 2
               ).length;
               setContacts(prev => prev.map(c => {
-                if (c.username.toLowerCase() === contact.username.toLowerCase() && (!c.messages || c.messages.length === 0)) {
+                if (c.username.toLowerCase() === contact.username.toLowerCase()) {
+                  const existingMsgs = c.messages || [];
+                  const byKey = new Map();
+                  for (const m of existingMsgs) {
+                    const key = String(m.id || m.timestamp || (m.mediaType + '_' + m.timestamp));
+                    byKey.set(key, m);
+                  }
+                  for (const m of decryptedMessages) {
+                    const key = String(m.id || m.timestamp || (m.mediaType + '_' + m.timestamp));
+                    byKey.set(key, m);
+                  }
+                  const merged = Array.from(byKey.values());
+                  merged.sort((a, b) => (new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) || ((a.id || 0) - (b.id || 0)));
+                  const lastMsg = merged.length > 0 ? merged[merged.length - 1] : (c.lastMessage || null);
+
                   return {
                     ...c,
-                    messages: decryptedMessages,
+                    messages: merged,
                     lastMessage: lastMsg,
                     unreadCount: Math.max(c.unreadCount || 0, unreadFromMsgs)
                   };
@@ -621,10 +635,26 @@ export function useChatManager({
                 return c;
               }));
               if (activeContactRef.current?.username.toLowerCase() === contact.username.toLowerCase()) {
-                setActiveContact(prev => prev && prev.username.toLowerCase() === contact.username.toLowerCase()
-                  ? { ...prev, messages: decryptedMessages, lastMessage: lastMsg }
-                  : prev
-                );
+                setActiveContact(prev => {
+                  if (prev && prev.username.toLowerCase() === contact.username.toLowerCase()) {
+                    const existingMsgs = prev.messages || [];
+                    const byKey = new Map();
+                    for (const m of existingMsgs) {
+                      const key = String(m.id || m.timestamp || (m.mediaType + '_' + m.timestamp));
+                      byKey.set(key, m);
+                    }
+                    for (const m of decryptedMessages) {
+                      const key = String(m.id || m.timestamp || (m.mediaType + '_' + m.timestamp));
+                      byKey.set(key, m);
+                    }
+                    const merged = Array.from(byKey.values());
+                    merged.sort((a, b) => (new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) || ((a.id || 0) - (b.id || 0)));
+                    const lastMsg = merged.length > 0 ? merged[merged.length - 1] : (prev.lastMessage || null);
+
+                    return { ...prev, messages: merged, lastMessage: lastMsg };
+                  }
+                  return prev;
+                });
               }
             }
           } catch (e) {}

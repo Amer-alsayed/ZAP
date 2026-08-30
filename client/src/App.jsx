@@ -756,6 +756,7 @@ export default function App() {
       for (const contact of contactList) {
         try {
           const encryptedHistory = await emitGetChatHistory(contact.username);
+          if (!encryptedHistory || encryptedHistory.length === 0) continue;
           const decryptedMessages = await chatManagerRef.current?.decryptMessagesBatch?.(encryptedHistory, contact) || [];
           const isActive = activeContactRef.current &&
             activeContactRef.current.username.toLowerCase() === contact.username.toLowerCase();
@@ -775,7 +776,28 @@ export default function App() {
 
           setContacts(prev => prev.map(c => {
             if (c.username.toLowerCase() === contact.username.toLowerCase()) {
-              return { ...c, unreadCount, messages: processedMessages };
+              const existingMsgs = c.messages || [];
+              const byKey = new Map();
+              for (const m of existingMsgs) {
+                const key = String(m.id || m.timestamp || (m.mediaType + '_' + m.timestamp));
+                byKey.set(key, m);
+              }
+              for (const m of processedMessages) {
+                const key = String(m.id || m.timestamp || (m.mediaType + '_' + m.timestamp));
+                byKey.set(key, m);
+              }
+              const merged = Array.from(byKey.values());
+              merged.sort((a, b) => (new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) || ((a.id || 0) - (b.id || 0)));
+
+              const lastMsg = merged.length > 0 ? merged[merged.length - 1] : (c.lastMessage || null);
+              const finalUnread = isActive ? 0 : Math.max(c.unreadCount || 0, unreadCount);
+
+              return {
+                ...c,
+                unreadCount: finalUnread,
+                lastMessage: lastMsg,
+                messages: merged
+              };
             }
             return c;
           }));
@@ -785,7 +807,21 @@ export default function App() {
           if (isActive) {
             setActiveContact(prev => {
               if (prev && prev.username.toLowerCase() === contact.username.toLowerCase()) {
-                return { ...prev, messages: processedMessages };
+                const existingMsgs = prev.messages || [];
+                const byKey = new Map();
+                for (const m of existingMsgs) {
+                  const key = String(m.id || m.timestamp || (m.mediaType + '_' + m.timestamp));
+                  byKey.set(key, m);
+                }
+                for (const m of processedMessages) {
+                  const key = String(m.id || m.timestamp || (m.mediaType + '_' + m.timestamp));
+                  byKey.set(key, m);
+                }
+                const merged = Array.from(byKey.values());
+                merged.sort((a, b) => (new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) || ((a.id || 0) - (b.id || 0)));
+                const lastMsg = merged.length > 0 ? merged[merged.length - 1] : (prev.lastMessage || null);
+
+                return { ...prev, messages: merged, lastMessage: lastMsg };
               }
               return prev;
             });
@@ -834,7 +870,7 @@ export default function App() {
                   publicSigningKey: sc.publicSigningKey,
                   status: sc.status || 'offline',
                   messages: [],
-                  unreadCount: 0
+                  unreadCount: sc.unreadCount || 0
                 });
               } else {
                 const c = existing.get(key);
@@ -844,7 +880,8 @@ export default function App() {
                   avatarIcon: sc.avatarIcon ?? c.avatarIcon,
                   status: sc.status || c.status,
                   publicIdentityKey: sc.publicIdentityKey || c.publicIdentityKey,
-                  publicSigningKey: sc.publicSigningKey || c.publicSigningKey
+                  publicSigningKey: sc.publicSigningKey || c.publicSigningKey,
+                  unreadCount: typeof sc.unreadCount === 'number' && sc.unreadCount > 0 ? Math.max(c.unreadCount || 0, sc.unreadCount) : c.unreadCount
                 });
               }
             }
@@ -873,8 +910,9 @@ export default function App() {
         console.warn('Failed to load groups on connect:', e);
       });
 
-      await syncMessagesForContacts(newContacts);
-      await syncMessagesForContacts(contactsRef.current);
+      if (newContacts.length > 0) {
+        await syncMessagesForContacts(newContacts);
+      }
       await groupsPromise;
     };
 
