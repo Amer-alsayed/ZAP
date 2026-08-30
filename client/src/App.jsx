@@ -539,7 +539,7 @@ export default function App() {
     setTimeout(() => {
       setShowSafetyModal(false);
       setIsSafetyModalClosing(false);
-    }, 250);
+    }, 220);
   };
 
   // Keyboard shortcut: Escape smoothly dismisses the safety modal
@@ -5151,11 +5151,11 @@ export default function App() {
           {/* E2EE Safety Number verification modal (Root level to overlap Sidebar) */}
           {(showSafetyModal || isSafetyModalClosing) && activeContact && (
             <div 
-              className={`safety-modal-overlay glass-modal-overlay ${isSafetyModalClosing ? 'closing' : ''}`} 
+              className={`safety-modal-overlay confirmation-modal-overlay ${isSafetyModalClosing ? 'closing' : ''}`} 
               onClick={() => handleCloseSafetyModal()}
             >
               <div 
-                className="safety-modal-card glass" 
+                className={`safety-modal-card confirmation-modal glass ${isSafetyModalClosing ? 'closing' : ''}`} 
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="safety-modal-header">

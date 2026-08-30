@@ -8852,28 +8852,26 @@ textarea {
 }
 
 /* Glassmorphic Safety Verification Modal */
-.glass-modal-overlay {
+.safety-modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100vw;
   height: 100vh;
   height: 100dvh;
   background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  animation: modalOverlayFadeIn 0.25s ease forwards;
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.25s cubic-bezier(0.4, 0, 0.2, 1), -webkit-backdrop-filter 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1050;
+  animation: modalOverlayFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
-.glass-modal-overlay.closing {
-  opacity: 0;
-  backdrop-filter: blur(0px);
-  -webkit-backdrop-filter: blur(0px);
+.safety-modal-overlay.closing {
+  animation: modalOverlayFadeOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   pointer-events: none;
 }
 
@@ -8889,11 +8887,10 @@ textarea {
   -webkit-backdrop-filter: blur(var(--blur-amount, 16px)) !important;
   animation: modalScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   box-sizing: border-box;
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
 }
 
-.glass-modal-overlay.closing .safety-modal-card,
-.safety-modal-overlay.closing .safety-modal-card {
+.safety-modal-overlay.closing .safety-modal-card,
+.safety-modal-card.closing {
   animation: modalScaleOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
