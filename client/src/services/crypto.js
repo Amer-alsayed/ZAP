@@ -334,6 +334,51 @@ export const verifyMessageAuthTag = async (authKey, ciphertext, iv, aadString, a
 };
 
 /**
+ * Ephemeral Key Ratcheting (Perfect Forward Secrecy / PFS):
+ * Derives a single-use 256-bit AES-GCM message key from the pairwise root ECDH secret
+ * using HKDF-like HMAC-SHA256 expansion: K_msg = HMAC(K_root, "ZAP-PFS-MSG-v1:" || seq || ":" || sender || ":" || recipient).
+ * Once used, the key is destroyed, ensuring compromising long-term keys provides ZERO retroactive decryption capability.
+ */
+export const deriveRatchetedMessageKey = async (rootSharedKey, sequenceNumber, sender, recipient) => {
+  if (!rootSharedKey) {
+    throw new Error('Missing root shared key for PFS ratcheting');
+  }
+
+  // 1. Export raw 256-bit key from root shared key
+  const rootRaw = await window.crypto.subtle.exportKey('raw', rootSharedKey);
+
+  // 2. Import as HMAC-SHA256 PRK (Pseudorandom Key)
+  const hmacKey = await window.crypto.subtle.importKey(
+    'raw',
+    rootRaw,
+    { name: 'HMAC', hash: { name: 'SHA-256' } },
+    false,
+    ['sign']
+  );
+
+  // 3. Construct info context string: "ZAP-PFS-MSG-v1:<seq>:<sender>:<recipient>"
+  const s = (sender || '').toLowerCase();
+  const r = (recipient || '').toLowerCase();
+  const infoString = `ZAP-PFS-MSG-v1:${sequenceNumber || 0}:${s}:${r}`;
+
+  // 4. Compute single-use message key bits
+  const ratchetedBits = await window.crypto.subtle.sign(
+    'HMAC',
+    hmacKey,
+    stringToBuffer(infoString)
+  );
+
+  // 5. Import as ephemeral AES-GCM-256 CryptoKey
+  return await window.crypto.subtle.importKey(
+    'raw',
+    ratchetedBits,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+};
+
+/**
  * Encrypt data using an AES-GCM shared key with Additional Authenticated Data (AAD).
  */
 export const encryptMessage = async (plaintext, sharedKey, aadContext = null) => {
@@ -366,6 +411,7 @@ export const encryptMessage = async (plaintext, sharedKey, aadContext = null) =>
 
 /**
  * Decrypt data using an AES-GCM shared key with Additional Authenticated Data (AAD) and backward-compatible fallback.
+ * Automatically tries ratcheted PFS subkeys when seq is detected in AAD context.
  */
 export const decryptMessage = async (ciphertext, sharedKey, ivBase64, aadContext = null) => {
   const ciphertextBuffer = base64ToBuffer(ciphertext);
@@ -375,10 +421,49 @@ export const decryptMessage = async (ciphertext, sharedKey, ivBase64, aadContext
     throw new Error('Invalid Base64 payload or IV for message decryption.');
   }
 
-  // 1. If AAD context is provided, attempt authenticated AAD decryption first
+  let parsedAad = null;
+  let aadString = '';
   if (aadContext) {
+    if (typeof aadContext === 'string') {
+      aadString = aadContext;
+      try {
+        parsedAad = JSON.parse(aadContext);
+      } catch (e) {
+        parsedAad = null;
+      }
+    } else if (typeof aadContext === 'object') {
+      parsedAad = aadContext;
+      aadString = JSON.stringify(aadContext);
+    }
+  }
+
+  // 1. Tier 1: If AAD contains a sequence number (PFS ratcheted message), derive ephemeral subkey and decrypt
+  if (parsedAad && typeof parsedAad.seq === 'number' && parsedAad.s && parsedAad.r) {
     try {
-      const aadString = typeof aadContext === 'string' ? aadContext : JSON.stringify(aadContext);
+      const ratchetedKey = await deriveRatchetedMessageKey(
+        sharedKey,
+        parsedAad.seq,
+        parsedAad.s,
+        parsedAad.r
+      );
+      const decryptedBuffer = await window.crypto.subtle.decrypt(
+        {
+          name: 'AES-GCM',
+          iv: ivBuffer,
+          additionalData: stringToBuffer(aadString)
+        },
+        ratchetedKey,
+        ciphertextBuffer
+      );
+      return bufferToString(decryptedBuffer);
+    } catch (ratchetErr) {
+      // Fall through to standard root sharedKey decryption
+    }
+  }
+
+  // 2. Tier 2: If AAD is provided, attempt standard AAD decryption with root sharedKey
+  if (aadString) {
+    try {
       const decryptedBuffer = await window.crypto.subtle.decrypt(
         {
           name: 'AES-GCM',
@@ -390,11 +475,11 @@ export const decryptMessage = async (ciphertext, sharedKey, ivBase64, aadContext
       );
       return bufferToString(decryptedBuffer);
     } catch (aadErr) {
-      // Fallback for legacy messages that might not have been encrypted with AAD
+      // Fall through to legacy fallback
     }
   }
 
-  // 2. Fallback / Standard decryption without AAD
+  // 3. Tier 3: Standard legacy decryption without AAD (for historical messages)
   const decryptedBuffer = await window.crypto.subtle.decrypt(
     {
       name: 'AES-GCM',

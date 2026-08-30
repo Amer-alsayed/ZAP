@@ -1,0 +1,66 @@
+﻿version: '3.8'
+
+services:
+  zap-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zap-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - JWT_SECRET=zap-production-super-secret-key-replace-in-env
+      - DATABASE_URL=postgresql://zapuser:zappassword@postgres:5432/zapdb
+      - REDIS_URL=redis://redis:6379
+      - TURN_URL=turn:coturn:3478
+      - TURN_USERNAME=zapuser
+      - TURN_CREDENTIAL=zapturnsecret998877
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      coturn:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: zap-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=zapuser
+      - POSTGRES_PASSWORD=zappassword
+      - POSTGRES_DB=zapdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zapuser -d zapdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: zap-redis
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: zap-coturn
+    restart: unless-stopped
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "49160-49200:49160-49200/udp"
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+
+volumes:
+  pgdata:
+  redisdata:

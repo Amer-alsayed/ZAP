@@ -48,7 +48,12 @@ export const config = {
   dbUrl: process.env.DATABASE_URL || null,
   dbPath: process.env.DATABASE_PATH || path.resolve(__dirname, '../../zap.db'),
   uploadsDir: path.resolve(__dirname, '../uploads'),
-  mediaTtlHours: parseInt(process.env.MEDIA_TTL_HOURS || '168', 10)
+  mediaTtlHours: parseInt(process.env.MEDIA_TTL_HOURS || '168', 10),
+  redisUrl: process.env.REDIS_URL || null,
+  turnUrl: process.env.TURN_URL || null,
+  turnUsername: process.env.TURN_USERNAME || null,
+  turnCredential: process.env.TURN_CREDENTIAL || null,
+  stunUrl: process.env.STUN_URL || null
 };
 
 export default config;

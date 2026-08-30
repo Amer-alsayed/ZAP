@@ -41,6 +41,7 @@ import { AppToastContainer, AppConfirmModal } from './components/AppNotification
 import { searchUser } from './services/api';
 import { 
   deriveSharedSecret, 
+  deriveRatchetedMessageKey,
   deriveAuthKey,
   generateMessageAuthTag,
   verifyMessageAuthTag,
@@ -644,34 +645,61 @@ export default function App() {
   const peerConnectionRef = useRef(null);
   const pendingOfferRef = useRef(null);
   const iceCandidatesQueue = useRef([]);
+  const conversationRatchetCounters = useRef(new Map());
+
+  const getNextRatchetSeq = (contactUsername) => {
+    const key = (contactUsername || '').toLowerCase();
+    const current = conversationRatchetCounters.current.get(key) || 0;
+    const next = current + 1;
+    conversationRatchetCounters.current.set(key, next);
+    return next;
+  };
+
+  const defaultIceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:stun.services.mozilla.com:3478' },
+    { urls: 'stun:stun.nextcloud.com:443' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelay',
+      credential: 'openrelay'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelay',
+      credential: 'openrelay'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelay',
+      credential: 'openrelay'
+    }
+  ];
+
+  const [dynamicIceServers, setDynamicIceServers] = useState(defaultIceServers);
+
+  // Dynamic ICE Server Discovery: query server for local Coturn / TURN configuration
+  useEffect(() => {
+    fetch('/api/webrtc/ice-servers')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+          setDynamicIceServers(data.iceServers);
+        }
+      })
+      .catch(() => {
+        // Smoothly fall back to default STUN/TURN list
+      });
+  }, []);
 
   const pcConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-      { urls: 'stun:stun.cloudflare.com:3478' },
-      { urls: 'stun:stun.services.mozilla.com:3478' },
-      { urls: 'stun:stun.nextcloud.com:443' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelay',
-        credential: 'openrelay'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelay',
-        credential: 'openrelay'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelay',
-        credential: 'openrelay'
-      }
-    ]
+    iceServers: dynamicIceServers
   };
 
   // Load contacts list on login & restore active chat state synchronously
@@ -2453,31 +2481,41 @@ export default function App() {
     }
 
     try {
-      // 1. Get E2EE Symmetric shared key
+      // 1. Get E2EE Symmetric root shared key
       const sharedSecret = await getSharedSecret(activeContact);
 
-      // 2. Generate client message ID to prevent chicken-and-egg AAD binding issues
+      // 2. Generate client message ID and increment monotonic ratchet sequence for PFS
       const clientMsgId = window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const timestamp = Date.now();
+      const seq = getNextRatchetSeq(recipient);
       const aadContext = {
         s: currentUser.username,
         r: recipient,
         mid: clientMsgId,
-        t: timestamp
+        t: timestamp,
+        seq
       };
 
-      // 3. Encrypt the payload string with AES-GCM and bind context via AAD
-      const payloadString = JSON.stringify(msgContent);
-      const { ciphertext, iv, aad } = await encryptMessage(payloadString, sharedSecret, aadContext);
+      // 3. Ephemeral Key Ratcheting (PFS): derive single-use 256-bit AES-GCM message key
+      const ephemeralKey = await deriveRatchetedMessageKey(
+        sharedSecret,
+        seq,
+        currentUser.username,
+        recipient
+      );
 
-      // 4. Deniable Authentication: derive symmetric authKey and compute HMAC-SHA256 tag
+      // 4. Encrypt payload string with ephemeral message key and bind context via AAD
+      const payloadString = JSON.stringify(msgContent);
+      const { ciphertext, iv, aad } = await encryptMessage(payloadString, ephemeralKey, aadContext);
+
+      // 5. Deniable Authentication: derive symmetric authKey and compute HMAC-SHA256 tag
       const authKey = await deriveAuthKey(sharedSecret);
       const authTag = await generateMessageAuthTag(authKey, ciphertext, iv, aad);
 
       // Also compute ECDSA digital signature for backward compatibility with legacy clients
       const signature = await signData(ciphertext, currentUser.keys.privateSigningKey);
 
-      // 5. Send encrypted payload via WebSockets
+      // 6. Send encrypted payload via WebSockets
       const ack = await emitSendMessage(recipient, ciphertext, iv, signature, aad, authTag);
 
       // 5. Append locally (instantly decrypt it back or just use the local message object)

@@ -184,6 +184,54 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: message });
 });
 
+// WebRTC Dynamic ICE Servers Discovery endpoint
+app.get('/api/webrtc/ice-servers', (req, res) => {
+  const iceServers = [];
+
+  // 1. If custom STUN is configured
+  if (config.stunUrl) {
+    iceServers.push({ urls: config.stunUrl });
+  } else {
+    iceServers.push(
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    );
+  }
+
+  // 2. If self-hosted Coturn / custom TURN relay is configured
+  if (config.turnUrl && config.turnUsername && config.turnCredential) {
+    iceServers.push({
+      urls: config.turnUrl,
+      username: config.turnUsername,
+      credential: config.turnCredential
+    });
+  } else {
+    // OpenRelay fallback
+    iceServers.push(
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelay',
+        credential: 'openrelay'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelay',
+        credential: 'openrelay'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelay',
+        credential: 'openrelay'
+      }
+    );
+  }
+
+  res.status(200).json({ iceServers });
+});
+
 // Initialize Socket.io
 const io = new Server(httpServer, {
   cors: corsOptions
@@ -195,6 +243,22 @@ socketHandler(io);
 // Initialize DB and start server
 const startServer = async () => {
   await initDb();
+
+  // Attach Redis Pub/Sub cluster adapter if REDIS_URL is configured
+  if (config.redisUrl) {
+    try {
+      const { createClient } = await import('redis');
+      const { createAdapter } = await import('@socket.io/redis-adapter');
+      const pubClient = createClient({ url: config.redisUrl });
+      const subClient = pubClient.duplicate();
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      io.adapter(createAdapter(pubClient, subClient));
+      logger.info('Attached Redis Cluster Pub/Sub Adapter to Socket.IO');
+    } catch (err) {
+      logger.warn(`Redis adapter initialization failed, falling back to standalone in-memory mode: ${err.message}`);
+    }
+  }
+
   httpServer.listen(config.port, () => {
     logger.info(`Server is running in [${config.env}] mode on port ${config.port}`);
   });
