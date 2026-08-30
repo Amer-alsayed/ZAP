@@ -46,7 +46,37 @@ export function useChatManager({
   patchGroup,
   emitDeleteGroupMessages
 }) {
-  const [contacts, setContacts] = useState([]);
+  const [contacts, setContacts] = useState(() => {
+    try {
+      const username = localStorage.getItem('chatra_username');
+      if (username) {
+        const stored = localStorage.getItem(`contacts_${username}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            return parsed.map(c => {
+              const msgs = c.messages || [];
+              const unreadFromMsgs = msgs.filter(m => 
+                m.sender?.toLowerCase() === c.username.toLowerCase() && m.status < 2
+              ).length;
+              const unreadCount = typeof c.unreadCount === 'number' && c.unreadCount > 0
+                ? c.unreadCount
+                : unreadFromMsgs;
+
+              return {
+                ...c,
+                status: 'offline',
+                unreadCount,
+                lastMessage: c.lastMessage || (msgs.length > 0 ? msgs[msgs.length - 1] : null),
+                messages: msgs
+              };
+            });
+          }
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
   const contactsRef = useRef([]);
   useEffect(() => {
     contactsRef.current = contacts;

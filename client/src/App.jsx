@@ -37,6 +37,8 @@ export default function App() {
   const {
     currentUser,
     setCurrentUser,
+    isRestoring,
+    isPreloaderFading,
     clearUserSession
   } = useAuthSession();
 
@@ -146,6 +148,8 @@ export default function App() {
   // Network Connectivity
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const [showConnectingBanner, setShowConnectingBanner] = useState(false);
+  const connectingTimerRef = useRef(null);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -157,6 +161,28 @@ export default function App() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isOnline) {
+      if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
+      setShowConnectingBanner(false);
+      return;
+    }
+
+    if (!isSocketConnected) {
+      // Delay showing the connecting banner by 2.5s so normal page reload handshakes never flash
+      connectingTimerRef.current = setTimeout(() => {
+        setShowConnectingBanner(true);
+      }, 2500);
+    } else {
+      if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
+      setShowConnectingBanner(false);
+    }
+
+    return () => {
+      if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
+    };
+  }, [isOnline, isSocketConnected]);
 
   // Back refs for nested views
   const selectionBackRef = useRef(null);
@@ -943,12 +969,22 @@ export default function App() {
 
   return (
     <>
-      {!currentUser ? (
+      {isRestoring ? (
+        <div className={`app-preloader ${isPreloaderFading ? 'fading-out' : ''}`}>
+          <div className="preloader-logo-container">
+            <ZapLogo size={56} />
+          </div>
+          <div className="preloader-bar-bg">
+            <div className="preloader-bar" />
+          </div>
+          <div className="preloader-text">Restoring Secure Session</div>
+        </div>
+      ) : !currentUser ? (
         <Login onAuthSuccess={setCurrentUser} />
       ) : (
         <div className={`app-container ${((activeContact || activeGroupVm || showSettings || showRecents) && (!isNavigatingBack || keepChatActiveDuringSettingsReturn)) ? 'chat-active' : ''} ${isAppMinimized ? 'sidebar-minimized' : ''} ${isSidebarAnimating ? 'is-sidebar-animating' : ''}`}>
           
-          {(!isOnline || !isSocketConnected) && (
+          {(!isOnline || showConnectingBanner) && (
             <div className={`connectivity-banner ${!isOnline ? 'offline' : 'connecting'}`}>
               {!isOnline ? (
                 <>

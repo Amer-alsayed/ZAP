@@ -39,7 +39,28 @@ export function useGroupManager({
   onBackToMenu,
   onClearActiveContact
 }) {
-  const [groups, setGroups] = useState([]);
+  const [groups, setGroups] = useState(() => {
+    try {
+      const username = localStorage.getItem('chatra_username');
+      if (username) {
+        const stored = localStorage.getItem(`groups_${username}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.v === 1 && Array.isArray(parsed.groups)) {
+            return parsed.groups
+              .filter(g => g && typeof g.id === 'number' && typeof g.name === 'string')
+              .map(g => ({
+                ...g,
+                members: Array.isArray(g.members) ? g.members : [],
+                messages: Array.isArray(g.messages) ? g.messages : [],
+                typingUsers: []
+              }));
+          }
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
   const groupsRef = useRef([]);
   useEffect(() => {
     groupsRef.current = groups;

@@ -4,6 +4,18 @@ import { base64ToBuffer, decryptRestoredPrivateKeys } from '../services/crypto';
 
 export function useAuthSession() {
   const [currentUser, setCurrentUser] = useState(null); // { username, token, keys }
+  const [isRestoring, setIsRestoring] = useState(() => {
+    try {
+      const token = localStorage.getItem('chatra_token');
+      const username = localStorage.getItem('chatra_username');
+      const sessionEncKeyBase64 = localStorage.getItem('session_enc_key');
+      const encPrivateKeysStr = localStorage.getItem('chatra_encrypted_private_keys');
+      return !!(token && username && sessionEncKeyBase64 && encPrivateKeysStr);
+    } catch (e) {
+      return false;
+    }
+  });
+  const [isPreloaderFading, setIsPreloaderFading] = useState(false);
 
   // Restore E2EE session on mount
   useEffect(() => {
@@ -50,11 +62,21 @@ export function useAuthSession() {
               privateSigningKey: decryptedKeys.signingPrivateKey
             }
           });
+          setIsPreloaderFading(true);
+          setTimeout(() => {
+            setIsRestoring(false);
+            setIsPreloaderFading(false);
+          }, 260);
           console.log('E2EE Session restored successfully.');
         } catch (err) {
           console.error('Failed to restore session:', err);
           localStorage.removeItem('chatra_token');
+          setIsRestoring(false);
+          setIsPreloaderFading(false);
         }
+      } else {
+        setIsRestoring(false);
+        setIsPreloaderFading(false);
       }
     };
 
@@ -138,6 +160,8 @@ export function useAuthSession() {
   return {
     currentUser,
     setCurrentUser,
+    isRestoring,
+    isPreloaderFading,
     clearUserSession
   };
 }
