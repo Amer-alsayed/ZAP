@@ -41,7 +41,7 @@ export function useGroupManager({
 }) {
   const [groups, setGroups] = useState(() => {
     try {
-      const username = localStorage.getItem('chatra_username');
+      const username = localStorage.getItem('zap_username') || localStorage.getItem('chatra_username');
       if (username) {
         const stored = localStorage.getItem(`groups_${username}`);
         if (stored) {

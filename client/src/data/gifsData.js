@@ -15,7 +15,7 @@ export const GIF_REACTION_PILLS = [
   { id: 'bye', label: 'Bye', emoji: '👋', query: 'wave goodbye bye see ya' }
 ];
 
-export const RECENT_GIFS_KEY = 'chatra_frequent_gifs';
+export const RECENT_GIFS_KEY = 'zap_frequent_gifs';
 export const MAX_RECENT_GIFS = 14;
 
 // Curated high-availability GIF entries for instant offline fallback

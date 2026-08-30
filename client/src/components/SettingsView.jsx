@@ -30,7 +30,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [callQuality, setCallQuality] = useState(() => {
-    return localStorage.getItem('chatra_call_quality') || 'medium';
+    return localStorage.getItem('zap_call_quality') || localStorage.getItem('chatra_call_quality') || 'medium';
   });
 
   const hexToRgb = (hex) => {
@@ -48,40 +48,44 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
   };
 
   const [appThemeRgb, setAppThemeRgb] = useState(() => {
-    return localStorage.getItem('chatra_theme_rgb') || '0, 122, 204';
+    return localStorage.getItem('zap_theme_rgb') || localStorage.getItem('chatra_theme_rgb') || '0, 122, 204';
   });
 
   const handleThemeChange = (rgbValue) => {
     setAppThemeRgb(rgbValue);
-    localStorage.setItem('chatra_theme_rgb', rgbValue);
+    localStorage.setItem('zap_theme_rgb', rgbValue);
     applyThemeTokens(rgbValue);
   };
 
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(() => {
-    return localStorage.getItem('chatra_sound_effects') !== 'false';
+    const saved = localStorage.getItem('zap_sound_effects') ?? localStorage.getItem('chatra_sound_effects');
+    return saved !== 'false';
   });
   const [soundVolume, setSoundVolume] = useState(() => {
-    const v = parseFloat(localStorage.getItem('chatra_sound_volume'));
+    const v = parseFloat(localStorage.getItem('zap_sound_volume') || localStorage.getItem('chatra_sound_volume'));
     return isNaN(v) ? 0.6 : v;
   });
 
-  const [individualSounds, setIndividualSounds] = useState(() => ({
-    msg_sent: localStorage.getItem('chatra_sound_msg_sent') !== 'false',
-    msg_recv: localStorage.getItem('chatra_sound_msg_recv') !== 'false',
-    voice_rec: localStorage.getItem('chatra_sound_voice_rec') !== 'false',
-    call_dial: localStorage.getItem('chatra_sound_call_dial') !== 'false',
-    call_ring: localStorage.getItem('chatra_sound_call_ring') !== 'false',
-    call_connect: localStorage.getItem('chatra_sound_call_connect') !== 'false',
-    toggle_clicks: localStorage.getItem('chatra_sound_toggle_clicks') !== 'false',
-    user_online: localStorage.getItem('chatra_sound_user_online') !== 'false',
-  }));
+  const [individualSounds, setIndividualSounds] = useState(() => {
+    const getSound = (key) => (localStorage.getItem(`zap_sound_${key}`) ?? localStorage.getItem(`chatra_sound_${key}`)) !== 'false';
+    return {
+      msg_sent: getSound('msg_sent'),
+      msg_recv: getSound('msg_recv'),
+      voice_rec: getSound('voice_rec'),
+      call_dial: getSound('call_dial'),
+      call_ring: getSound('call_ring'),
+      call_connect: getSound('call_connect'),
+      toggle_clicks: getSound('toggle_clicks'),
+      user_online: getSound('user_online'),
+    };
+  });
 
   const [showAdvancedSounds, setShowAdvancedSounds] = useState(false);
 
   const toggleIndividualSound = (key) => {
     setIndividualSounds(prev => {
       const nextVal = !prev[key];
-      localStorage.setItem(`chatra_sound_${key}`, nextVal ? 'true' : 'false');
+      localStorage.setItem(`zap_sound_${key}`, nextVal ? 'true' : 'false');
       return { ...prev, [key]: nextVal };
     });
   };
@@ -352,7 +356,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                       className={`quality-option-row ${isSelected ? 'active' : ''}`}
                       onClick={() => {
                         setCallQuality(q.id);
-                        localStorage.setItem('chatra_call_quality', q.id);
+                        localStorage.setItem('zap_call_quality', q.id);
                       }}
                     >
                       <div className="quality-option-info">
@@ -396,7 +400,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                       onChange={(e) => {
                         const val = e.target.checked;
                         setSoundEffectsEnabled(val);
-                        localStorage.setItem('chatra_sound_effects', val ? 'true' : 'false');
+                        localStorage.setItem('zap_sound_effects', val ? 'true' : 'false');
                       }}
                       style={{ opacity: 0, width: 0, height: 0 }}
                     />
@@ -441,7 +445,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
                         onChange={(e) => {
                           const v = parseFloat(e.target.value);
                           setSoundVolume(v);
-                          localStorage.setItem('chatra_sound_volume', v.toString());
+                          localStorage.setItem('zap_sound_volume', v.toString());
                         }}
                         style={{
                           background: `linear-gradient(to right, var(--accent-main) 0%, var(--accent-main) ${Math.round(soundVolume * 100)}%, rgba(255, 255, 255, 0.1) ${Math.round(soundVolume * 100)}%, rgba(255, 255, 255, 0.1) 100%)`

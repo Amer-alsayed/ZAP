@@ -1,10 +1,10 @@
 /**
- * IndexedDB Media Cache Service for Chatra
+ * IndexedDB Media Cache Service for ZAP
  * Caches decrypted media blobs (images, voice notes, videos, attachments) locally
  * on the client device so they remain accessible indefinitely across server restarts & file purges.
  */
 
-const DB_NAME = 'chatra_media_db';
+const DB_NAME = 'zap_media_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'media_blobs';
 

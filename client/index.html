@@ -34,7 +34,7 @@
   <script>
     (function() {
       try {
-        var savedRgb = localStorage.getItem('chatra_theme_rgb') || localStorage.getItem('zap_theme_rgb') || '0, 122, 204';
+        var savedRgb = localStorage.getItem('zap_theme_rgb') || localStorage.getItem('chatra_theme_rgb') || '0, 122, 204';
         if (savedRgb) {
           var parts = savedRgb.split(',').map(function(n) { return parseInt(n.trim(), 10); });
           if (parts.length === 3 && !parts.some(isNaN)) {

@@ -221,7 +221,7 @@ export const renderFormattedText = (text) => {
           rel="noopener noreferrer"
           className="chat-text-link"
           onClick={(e) => {
-            if (window.__isChatraSelectionMode) {
+            if (window.__isZapSelectionMode || window.__isChatraSelectionMode) {
               e.preventDefault();
             } else {
               e.stopPropagation();

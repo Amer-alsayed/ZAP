@@ -6,9 +6,9 @@ import {
 } from 'lucide-react';
 import './CustomVideoPlayer.css';
 
-const STORAGE_VOLUME = 'chatra_video_volume';
-const STORAGE_MUTED = 'chatra_video_muted';
-const STORAGE_RATE = 'chatra_video_rate';
+const STORAGE_VOLUME = 'zap_video_volume';
+const STORAGE_MUTED = 'zap_video_muted';
+const STORAGE_RATE = 'zap_video_rate';
 
 function formatTime(sec) {
   if (!isFinite(sec) || isNaN(sec) || sec < 0) return '0:00';
@@ -140,8 +140,12 @@ export default function CustomVideoPlayer({
         myVideo.pause();
       }
     };
+    window.addEventListener('zap-video-play', handleGlobalPlay);
     window.addEventListener('chatra-video-play', handleGlobalPlay);
-    return () => window.removeEventListener('chatra-video-play', handleGlobalPlay);
+    return () => {
+      window.removeEventListener('zap-video-play', handleGlobalPlay);
+      window.removeEventListener('chatra-video-play', handleGlobalPlay);
+    };
   }, []);
 
   // Video event wiring
@@ -193,12 +197,12 @@ export default function CustomVideoPlayer({
       setIsEnded(false);
       setHasError(false);
       // Notify other players to pause (single-play policy like voice notes)
-      try { window.dispatchEvent(new CustomEvent('chatra-video-play', { detail: video })); } catch (e) {}
+      try { window.dispatchEvent(new CustomEvent('zap-video-play', { detail: video })); } catch (e) {}
     };
     const onPlay = () => {
       setIsPlaying(true);
       setIsEnded(false);
-      try { window.dispatchEvent(new CustomEvent('chatra-video-play', { detail: video })); } catch (e) {}
+      try { window.dispatchEvent(new CustomEvent('zap-video-play', { detail: video })); } catch (e) {}
     };
     const onPause = () => setIsPlaying(false);
     const onEnded = () => {

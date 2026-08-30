@@ -6,10 +6,10 @@ export function useAuthSession() {
   const [currentUser, setCurrentUser] = useState(null); // { username, token, keys }
   const [isRestoring, setIsRestoring] = useState(() => {
     try {
-      const token = localStorage.getItem('chatra_token');
-      const username = localStorage.getItem('chatra_username');
+      const token = localStorage.getItem('zap_token') || localStorage.getItem('chatra_token');
+      const username = localStorage.getItem('zap_username') || localStorage.getItem('chatra_username');
       const sessionEncKeyBase64 = localStorage.getItem('session_enc_key');
-      const encPrivateKeysStr = localStorage.getItem('chatra_encrypted_private_keys');
+      const encPrivateKeysStr = localStorage.getItem('zap_encrypted_private_keys') || localStorage.getItem('chatra_encrypted_private_keys');
       return !!(token && username && sessionEncKeyBase64 && encPrivateKeysStr);
     } catch (e) {
       return false;
@@ -20,19 +20,19 @@ export function useAuthSession() {
   // Restore E2EE session on mount
   useEffect(() => {
     const restoreSession = async () => {
-      const savedRgb = localStorage.getItem('chatra_theme_rgb');
+      const savedRgb = localStorage.getItem('zap_theme_rgb') || localStorage.getItem('chatra_theme_rgb');
       if (savedRgb) {
         applyThemeTokens(savedRgb);
       }
 
-      const token = localStorage.getItem('chatra_token');
-      const username = localStorage.getItem('chatra_username');
+      const token = localStorage.getItem('zap_token') || localStorage.getItem('chatra_token');
+      const username = localStorage.getItem('zap_username') || localStorage.getItem('chatra_username');
       const sessionEncKeyBase64 = localStorage.getItem('session_enc_key');
-      const encPrivateKeysStr = localStorage.getItem('chatra_encrypted_private_keys');
-      const pubIdentityKeyStr = localStorage.getItem('chatra_public_identity_key');
-      const pubSigningKeyStr = localStorage.getItem('chatra_public_signing_key');
-      const displayName = localStorage.getItem('chatra_display_name') || null;
-      const avatarIcon = localStorage.getItem('chatra_avatar_icon') || null;
+      const encPrivateKeysStr = localStorage.getItem('zap_encrypted_private_keys') || localStorage.getItem('chatra_encrypted_private_keys');
+      const pubIdentityKeyStr = localStorage.getItem('zap_public_identity_key') || localStorage.getItem('chatra_public_identity_key');
+      const pubSigningKeyStr = localStorage.getItem('zap_public_signing_key') || localStorage.getItem('chatra_public_signing_key');
+      const displayName = localStorage.getItem('zap_display_name') || localStorage.getItem('chatra_display_name') || null;
+      const avatarIcon = localStorage.getItem('zap_avatar_icon') || localStorage.getItem('chatra_avatar_icon') || null;
 
       if (token && username && sessionEncKeyBase64 && encPrivateKeysStr && pubIdentityKeyStr && pubSigningKeyStr) {
         try {
@@ -53,7 +53,7 @@ export function useAuthSession() {
             token,
             displayName,
             avatarIcon,
-            themeColor: localStorage.getItem('chatra_theme_rgb') || null,
+            themeColor: localStorage.getItem('zap_theme_rgb') || localStorage.getItem('chatra_theme_rgb') || null,
             encryptedPrivateKeys,
             keys: {
               publicIdentityKey: JSON.parse(pubIdentityKeyStr),
@@ -70,6 +70,7 @@ export function useAuthSession() {
           console.log('E2EE Session restored successfully.');
         } catch (err) {
           console.error('Failed to restore session:', err);
+          localStorage.removeItem('zap_token');
           localStorage.removeItem('chatra_token');
           setIsRestoring(false);
           setIsPreloaderFading(false);
@@ -100,12 +101,12 @@ export function useAuthSession() {
 
   // Apply theme preferences synchronously on boot
   useEffect(() => {
-    const savedRgb = localStorage.getItem('chatra_theme_rgb');
+    const savedRgb = localStorage.getItem('zap_theme_rgb') || localStorage.getItem('chatra_theme_rgb');
     if (savedRgb) {
       applyThemeTokens(savedRgb);
     }
 
-    const glass = localStorage.getItem('chatra_glass') !== 'false';
+    const glass = (localStorage.getItem('zap_glass') ?? localStorage.getItem('chatra_glass')) !== 'false';
     if (!glass) {
       document.body.classList.add('flat-theme');
     } else {
@@ -116,28 +117,30 @@ export function useAuthSession() {
   // Persist currentUser details to localStorage and apply theme
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('chatra_username', currentUser.username);
-      localStorage.setItem('chatra_token', currentUser.token);
+      localStorage.setItem('zap_username', currentUser.username);
+      localStorage.setItem('zap_token', currentUser.token);
       if (currentUser.encryptedPrivateKeys) {
-        localStorage.setItem('chatra_encrypted_private_keys', typeof currentUser.encryptedPrivateKeys === 'string' ? currentUser.encryptedPrivateKeys : JSON.stringify(currentUser.encryptedPrivateKeys));
+        localStorage.setItem('zap_encrypted_private_keys', typeof currentUser.encryptedPrivateKeys === 'string' ? currentUser.encryptedPrivateKeys : JSON.stringify(currentUser.encryptedPrivateKeys));
       }
-      localStorage.setItem('chatra_public_identity_key', JSON.stringify(currentUser.keys.publicIdentityKey));
-      localStorage.setItem('chatra_public_signing_key', JSON.stringify(currentUser.keys.publicSigningKey));
+      localStorage.setItem('zap_public_identity_key', JSON.stringify(currentUser.keys.publicIdentityKey));
+      localStorage.setItem('zap_public_signing_key', JSON.stringify(currentUser.keys.publicSigningKey));
       
       if (currentUser.displayName) {
-        localStorage.setItem('chatra_display_name', currentUser.displayName);
+        localStorage.setItem('zap_display_name', currentUser.displayName);
       } else {
+        localStorage.removeItem('zap_display_name');
         localStorage.removeItem('chatra_display_name');
       }
       
       if (currentUser.avatarIcon) {
-        localStorage.setItem('chatra_avatar_icon', currentUser.avatarIcon);
+        localStorage.setItem('zap_avatar_icon', currentUser.avatarIcon);
       } else {
+        localStorage.removeItem('zap_avatar_icon');
         localStorage.removeItem('chatra_avatar_icon');
       }
 
       if (currentUser.themeColor) {
-        localStorage.setItem('chatra_theme_rgb', currentUser.themeColor);
+        localStorage.setItem('zap_theme_rgb', currentUser.themeColor);
         applyThemeTokens(currentUser.themeColor);
       }
     }
@@ -145,15 +148,10 @@ export function useAuthSession() {
 
   const clearUserSession = useCallback(() => {
     localStorage.removeItem('session_enc_key');
-    localStorage.removeItem('chatra_username');
-    localStorage.removeItem('chatra_token');
-    localStorage.removeItem('chatra_encrypted_private_keys');
-    localStorage.removeItem('chatra_public_identity_key');
-    localStorage.removeItem('chatra_public_signing_key');
-    localStorage.removeItem('chatra_display_name');
-    localStorage.removeItem('chatra_avatar_icon');
-    localStorage.removeItem('chatra_active_view');
-    localStorage.removeItem('chatra_active_contact');
+    ['username', 'token', 'encrypted_private_keys', 'public_identity_key', 'public_signing_key', 'display_name', 'avatar_icon', 'active_view', 'active_contact'].forEach(key => {
+      localStorage.removeItem(`zap_${key}`);
+      localStorage.removeItem(`chatra_${key}`);
+    });
     setCurrentUser(null);
   }, []);
 

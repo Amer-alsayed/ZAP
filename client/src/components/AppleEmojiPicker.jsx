@@ -3,7 +3,7 @@ import { Search, X, Delete, Smile, Film, Loader2 } from 'lucide-react';
 import { useElasticBounce } from '../hooks/useElasticBounce';
 import { GIF_REACTION_PILLS, RECENT_GIFS_KEY, MAX_RECENT_GIFS, fetchGifs } from '../data/gifsData';
 
-const RECENT_EMOJIS_KEY = 'chatra_frequent_emojis';
+const RECENT_EMOJIS_KEY = 'zap_frequent_emojis';
 const MAX_RECENT_EMOJIS = 14; // Exactly 2 clean rows of 7 emojis (Apple iOS standard)
 const DEFAULT_RECENT_EMOJIS = ['😂', '❤️', '🔥', '👍', '🙏', '😊', '😍', '✨', '🥺', '🎉', '👏', '🤣', '🥰', '💯'];
 
@@ -280,7 +280,7 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({
   // Mode Switcher: 'emojis' | 'gifs'
   const [activeTab, setActiveTab] = useState(() => {
     try {
-      const saved = localStorage.getItem('chatra_picker_tab');
+      const saved = localStorage.getItem('zap_picker_tab') || localStorage.getItem('chatra_picker_tab');
       return saved === 'gifs' ? 'gifs' : 'emojis';
     } catch {
       return 'emojis';
@@ -291,7 +291,7 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({
     setActiveTab(newTab);
     setSearchQuery('');
     try {
-      localStorage.setItem('chatra_picker_tab', newTab);
+      localStorage.setItem('zap_picker_tab', newTab);
     } catch {}
   };
 
@@ -302,7 +302,7 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({
   // --- EMOJIS STATE ---
   const [recentEmojis, setRecentEmojis] = useState(() => {
     try {
-      const saved = localStorage.getItem(RECENT_EMOJIS_KEY);
+      const saved = localStorage.getItem(RECENT_EMOJIS_KEY) || localStorage.getItem('chatra_frequent_emojis');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {

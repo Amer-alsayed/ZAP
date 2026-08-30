@@ -780,6 +780,8 @@ const ChatArea = React.memo(function ChatArea({
     setSelectionMode(active);
     setSelectionCount(count);
     setSelectionCanCopy(Boolean(canCopy));
+    window.__isZapSelectionMode = active;
+    window.__isChatraSelectionMode = active;
   };
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -810,6 +812,7 @@ const ChatArea = React.memo(function ChatArea({
   const isRecordingRef = useRef(false);
   useEffect(() => {
     isRecordingRef.current = isRecording;
+    window.__isZapRecording = isRecording;
     window.__isChatraRecording = isRecording;
   }, [isRecording]);
   const stopRecordingRef = useRef(null);
@@ -2624,7 +2627,7 @@ const ChatArea = React.memo(function ChatArea({
     }
     setIsSendingVoice(true);
     try {
-      const token = currentUserToken || currentUser?.token || localStorage.getItem('chatra_token') || localStorage.getItem('token');
+      const token = currentUserToken || currentUser?.token || localStorage.getItem('zap_token') || localStorage.getItem('chatra_token') || localStorage.getItem('token');
       if (!token) {
         throw new Error('User session token is missing. Please re-login.');
       }

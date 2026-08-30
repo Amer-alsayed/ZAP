@@ -64,11 +64,11 @@ export const deriveKeysFromPassword = async (password, username, saltHex = null)
     if (match) {
       salt = new Uint8Array(match.map(byte => parseInt(byte, 16)));
     } else {
-      salt = stringToBuffer(`chatra-salt-${username.toLowerCase()}`);
+      salt = stringToBuffer(`zap-salt-${username.toLowerCase()}`);
     }
   } else {
     // Fallback for legacy accounts without a random salt
-    salt = stringToBuffer(`chatra-salt-${username.toLowerCase()}`);
+    salt = stringToBuffer(`zap-salt-${username.toLowerCase()}`);
   }
 
   const passwordBuffer = stringToBuffer(password);

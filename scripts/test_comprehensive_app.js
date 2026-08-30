@@ -67,7 +67,7 @@ async function setTextareaValue(page, selector, text) {
 }
 
 async function main() {
-  logHeader('ZAP / CHATRA: COMPREHENSIVE END-TO-END AUTOMATION SUITE');
+  logHeader('ZAP: COMPREHENSIVE END-TO-END AUTOMATION SUITE');
   console.log('Initializing Database, Server, and Chrome browser environments...\n');
 
   // 1. Initialize SQLite database

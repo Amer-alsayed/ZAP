@@ -7,7 +7,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 // Immediately initialize user theme tokens before React mount
 try {
-  const savedRgb = localStorage.getItem('chatra_theme_rgb') || localStorage.getItem('zap_theme_rgb');
+  const savedRgb = localStorage.getItem('zap_theme_rgb') || localStorage.getItem('chatra_theme_rgb');
   if (savedRgb) {
     applyThemeTokens(savedRgb);
   }

@@ -87,7 +87,7 @@ export function useWebRTC({
 
   const optimizeSDP = useCallback((sdp) => {
     try {
-      const quality = localStorage.getItem('chatra_call_quality') || 'medium';
+      const quality = localStorage.getItem('zap_call_quality') || localStorage.getItem('chatra_call_quality') || 'medium';
       let audioBitrate = 64000;
       let isStereo = '1';
       let minVideoBitrate = 1500;
@@ -142,7 +142,7 @@ export function useWebRTC({
 
   const optimizeSenderParameters = useCallback(async (sender, isScreenShare) => {
     try {
-      const quality = localStorage.getItem('chatra_call_quality') || 'medium';
+      const quality = localStorage.getItem('zap_call_quality') || localStorage.getItem('chatra_call_quality') || 'medium';
       const parameters = sender.getParameters();
       if (!parameters.encodings) {
         parameters.encodings = [{}];
@@ -196,7 +196,7 @@ export function useWebRTC({
   }, []);
 
   const getVideoConstraints = useCallback(() => {
-    const quality = localStorage.getItem('chatra_call_quality') || 'medium';
+    const quality = localStorage.getItem('zap_call_quality') || localStorage.getItem('chatra_call_quality') || 'medium';
     if (quality === 'high') {
       return {
         width: { ideal: 1920 },
@@ -222,7 +222,7 @@ export function useWebRTC({
   }, []);
 
   const getScreenShareConstraints = useCallback(() => {
-    const quality = localStorage.getItem('chatra_call_quality') || 'medium';
+    const quality = localStorage.getItem('zap_call_quality') || localStorage.getItem('chatra_call_quality') || 'medium';
     if (quality === 'high') {
       return {
         frameRate: { ideal: 30, max: 30 },

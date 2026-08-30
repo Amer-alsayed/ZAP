@@ -26,10 +26,10 @@ const deriveKeysFromPassword = async (password, username, saltHex = null) => {
     if (match) {
       salt = new Uint8Array(match.map(byte => parseInt(byte, 16)));
     } else {
-      salt = stringToBuffer(`chatra-salt-${username.toLowerCase()}`);
+      salt = stringToBuffer(`zap-salt-${username.toLowerCase()}`);
     }
   } else {
-    salt = stringToBuffer(`chatra-salt-${username.toLowerCase()}`);
+    salt = stringToBuffer(`zap-salt-${username.toLowerCase()}`);
   }
 
   const baseKey = await webcrypto.subtle.importKey(

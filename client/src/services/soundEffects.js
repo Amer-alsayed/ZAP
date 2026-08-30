@@ -1,4 +1,4 @@
-// Premium Acoustic Sound Effects Engine for Chatra
+// Premium Acoustic Sound Effects Engine for ZAP
 // Engineered using pure sine harmonics, exponential decay curves, and musical interval acoustics modeled after the Message Received chime.
 
 class SoundEffectsEngine {
@@ -22,16 +22,18 @@ class SoundEffectsEngine {
   }
 
   isSoundEnabled() {
-    return localStorage.getItem('chatra_sound_effects') !== 'false';
+    const saved = localStorage.getItem('zap_sound_effects') ?? localStorage.getItem('chatra_sound_effects');
+    return saved !== 'false';
   }
 
   isCategoryEnabled(key) {
     if (!this.isSoundEnabled()) return false;
-    return localStorage.getItem(`chatra_sound_${key}`) !== 'false';
+    const saved = localStorage.getItem(`zap_sound_${key}`) ?? localStorage.getItem(`chatra_sound_${key}`);
+    return saved !== 'false';
   }
 
   getVolume() {
-    const vol = parseFloat(localStorage.getItem('chatra_sound_volume'));
+    const vol = parseFloat(localStorage.getItem('zap_sound_volume') || localStorage.getItem('chatra_sound_volume'));
     return isNaN(vol) ? 0.6 : Math.max(0, Math.min(1, vol));
   }
 

@@ -9,6 +9,21 @@
 **Open-source, zero-knowledge, end-to-end encrypted real-time communications platform.**  
 Featuring encrypted messaging, WebRTC P2P voice/video calling, voice notes, and media sharing.
 
+<br />
+
+<div align="center">
+  <a href="https://zap-messenger.onrender.com" target="_blank">
+    <img src="https://img.shields.io/badge/🌐_Live_Demo-zap--messenger.onrender.com-007acc?style=for-the-badge&logo=render&logoColor=white" alt="Live Demo" />
+  </a>
+  &nbsp;
+  <a href="#deployment">
+    <img src="https://img.shields.io/badge/⚡_Deployment-100%25_Free_Tier_%7C_Docker-2ea44f?style=for-the-badge&logo=docker&logoColor=white" alt="Deployment" />
+  </a>
+</div>
+
+<br />
+
+[![Live Demo](https://img.shields.io/badge/Live_Demo-zap--messenger.onrender.com-007acc?style=flat-square&logo=render&logoColor=white)](https://zap-messenger.onrender.com)
 [![CI](https://github.com/Amer-alsayed/ZAP/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/Amer-alsayed/ZAP/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg?style=flat-square)](LICENSE)
 [![Free Tier: $0/mo](https://img.shields.io/badge/Hosting-100%25_Free_Tier-success.svg?style=flat-square)](#deployment)
@@ -262,7 +277,7 @@ npm run test:e2e          # 29/29 Full Puppeteer browser end-to-end automation s
 ### Full Multi-User Browser Automation Suite (`npm run test:e2e`)
 ```text
 ================================================================
-   ZAP / CHATRA: COMPREHENSIVE END-TO-END AUTOMATION SUITE
+   ZAP: COMPREHENSIVE END-TO-END AUTOMATION SUITE
 ================================================================
 
 MODULE 1: AUTHENTICATION, REGISTRATION & SESSION PERSISTENCE (Tests 01-04)

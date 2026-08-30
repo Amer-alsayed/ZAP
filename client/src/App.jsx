@@ -130,7 +130,7 @@ export default function App() {
   }, [isFullscreen]);
 
   const [sidebarMinimized, setSidebarMinimized] = useState(() => {
-    return localStorage.getItem('chatra_sidebar_minimized') === 'true';
+    return (localStorage.getItem('zap_sidebar_minimized') ?? localStorage.getItem('chatra_sidebar_minimized')) === 'true';
   });
   const [isSidebarAnimating, setIsSidebarAnimating] = useState(false);
   const sidebarAnimTimerRef = useRef(null);
@@ -152,7 +152,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('chatra_sidebar_minimized', sidebarMinimized);
+    localStorage.setItem('zap_sidebar_minimized', sidebarMinimized);
   }, [sidebarMinimized]);
 
   // Network Connectivity
@@ -691,7 +691,7 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       if (window.__isProgrammaticPop) return;
-      if (window.__isChatraRecording || window.__isPoppingRecording || window.__isPoppingCall || window.__isPoppingFullscreen) {
+      if (window.__isZapRecording || window.__isChatraRecording || window.__isPoppingRecording || window.__isPoppingCall || window.__isPoppingFullscreen) {
         window.__isPoppingCall = false;
         window.__isPoppingFullscreen = false;
         return;

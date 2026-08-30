@@ -50,7 +50,7 @@ export function useChatManager({
 }) {
   const [contacts, setContacts] = useState(() => {
     try {
-      const username = localStorage.getItem('chatra_username');
+      const username = localStorage.getItem('zap_username') || localStorage.getItem('chatra_username');
       if (username) {
         const stored = localStorage.getItem(`contacts_${username}`);
         if (stored) {
@@ -1042,7 +1042,7 @@ export function useChatManager({
     setBlockedUsers(prev => prev.includes(lower) ? prev : [...prev, lower]);
     setContacts(prev => {
       const filtered = prev.filter(c => c.username.toLowerCase() !== lower);
-      const curUser = localStorage.getItem('chatra_username');
+      const curUser = localStorage.getItem('zap_username') || localStorage.getItem('chatra_username');
       if (curUser) {
         localStorage.setItem(`contacts_${curUser}`, JSON.stringify(filtered));
       }
@@ -1083,7 +1083,7 @@ export function useChatManager({
         }
         return c;
       });
-      const curUser = localStorage.getItem('chatra_username');
+      const curUser = localStorage.getItem('zap_username') || localStorage.getItem('chatra_username');
       if (curUser) {
         localStorage.setItem(`contacts_${curUser}`, JSON.stringify(updated));
       }
