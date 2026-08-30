@@ -97,6 +97,7 @@ export function useGroupManager({
   const groupKeysRef = useRef({});
   const pendingGroupKeysRef = useRef({});
   const userProfilesRef = useRef({});
+  const pendingProfilesRef = useRef({});
   const groupTypingTimersRef = useRef({});
   const kickedTimersRef = useRef(new Map());
 
@@ -133,31 +134,34 @@ export function useGroupManager({
       members: Array.isArray(g.members) ? g.members : [],
       lastReadId: g.lastReadId || 0,
       unreadCount: g.unreadCount || 0,
-      lastMessage: g.lastMessage || null,
-      messages: (g.messages || []).slice(-50)
+      messages: Array.isArray(g.messages) ? g.messages.slice(-100) : [],
+      isRemoved: Boolean(g.isRemoved)
     }));
     pendingGroupsPayloadRef.current = {
       key: `groups_${currentUser.username}`,
       value: JSON.stringify({ v: 1, groups: slimGroups })
     };
     if (groupsPersistTimerRef.current) window.clearTimeout(groupsPersistTimerRef.current);
-    groupsPersistTimerRef.current = window.setTimeout(flushGroupsCache, 500);
+    groupsPersistTimerRef.current = window.setTimeout(flushGroupsCache, 300);
   }, [groups, currentUser, flushGroupsCache]);
 
   useEffect(() => {
-    const onBeforeUnload = () => flushGroupsCache();
-    window.addEventListener('beforeunload', onBeforeUnload);
+    const handleBeforeUnload = () => flushGroupsCache();
+    window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       flushGroupsCache();
     };
   }, [flushGroupsCache]);
 
-  const patchGroup = useCallback((groupId, updater) => {
-    setGroups(prev => prev.map(g => (g.id === groupId ? updater(g) : g)));
+  const patchGroup = useCallback((groupId, mutator) => {
+    setGroups(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      return typeof mutator === 'function' ? mutator(g) : { ...g, ...mutator };
+    }));
     setActiveGroup(prev => {
       if (prev && prev.id === groupId) {
-        return updater(prev);
+        return typeof mutator === 'function' ? mutator(prev) : { ...prev, ...mutator };
       }
       return prev;
     });
@@ -165,13 +169,20 @@ export function useGroupManager({
 
   const appendGroupMessage = useCallback((groupId, msg) => {
     patchGroup(groupId, g => {
-      if (g.messages.some(m => String(m.id) === String(msg.id))) return { ...g, lastMessage: msg };
-      const isActiveOpen = activeGroupRef.current?.id === groupId;
-      const isMine = String(msg.sender).toLowerCase() === currentUser?.username?.toLowerCase();
-      const nextUnread = (!isActiveOpen && !isMine && msg.mediaType !== 'system' && msg.id > (g.lastReadId || 0))
-        ? (g.unreadCount || 0) + 1
-        : g.unreadCount;
-      return { ...g, messages: [...g.messages, msg], unreadCount: nextUnread, lastMessage: msg };
+      const existing = g.messages || [];
+      if (existing.some(m => String(m.id) === String(msg.id))) return g;
+      const next = [...existing, msg];
+      const meLower = currentUser?.username?.toLowerCase();
+      const isOpen = activeGroupRef.current?.id === groupId;
+      const unreadCount = isOpen
+        ? 0
+        : (g.unreadCount || 0) + (String(msg.sender).toLowerCase() === meLower || msg.mediaType === 'system' ? 0 : 1);
+      return {
+        ...g,
+        messages: next,
+        unreadCount,
+        lastMessage: msg
+      };
     });
   }, [currentUser?.username, patchGroup]);
 
@@ -205,17 +216,29 @@ export function useGroupManager({
       return profile;
     }
 
+    if (pendingProfilesRef.current[lower]) {
+      return await pendingProfilesRef.current[lower];
+    }
+
     if (!currentUser?.token) throw new Error('Session not ready');
-    const data = await searchUser(lower, currentUser.token);
-    const profile = {
-      username: data.username || username,
-      publicIdentityKey: data.publicIdentityKey,
-      publicSigningKey: data.publicSigningKey,
-      displayName: data.displayName || null,
-      avatarIcon: data.avatarIcon || null
-    };
-    userProfilesRef.current[lower] = profile;
-    return profile;
+    const fetchPromise = (async () => {
+      try {
+        const data = await searchUser(lower, currentUser.token);
+        const profile = {
+          username: data.username || username,
+          publicIdentityKey: data.publicIdentityKey,
+          publicSigningKey: data.publicSigningKey,
+          displayName: data.displayName || null,
+          avatarIcon: data.avatarIcon || null
+        };
+        userProfilesRef.current[lower] = profile;
+        return profile;
+      } finally {
+        delete pendingProfilesRef.current[lower];
+      }
+    })();
+    pendingProfilesRef.current[lower] = fetchPromise;
+    return await fetchPromise;
   }, [contactsRef, currentUser]);
 
   const getPairwiseSecretFor = useCallback(async (username) => {
@@ -268,16 +291,40 @@ export function useGroupManager({
   }, []);
 
   const decryptGroupName = useCallback(async (metaPayload) => {
-    const key = await fetchGroupKey(metaPayload.id, metaPayload.nameKv);
-    const payload = await decryptGroupPayload(metaPayload.nameCiphertext, key, metaPayload.nameIv);
-    return payload.n || '';
+    const targetKv = metaPayload.nameKv || metaPayload.kv || 1;
+    try {
+      const key = await fetchGroupKey(metaPayload.id, targetKv);
+      const payload = await decryptGroupPayload(metaPayload.nameCiphertext, key, metaPayload.nameIv);
+      return payload.n || '';
+    } catch (primaryErr) {
+      if (metaPayload.kv && metaPayload.kv !== targetKv) {
+        try {
+          const fallbackKey = await fetchGroupKey(metaPayload.id, metaPayload.kv);
+          const payload = await decryptGroupPayload(metaPayload.nameCiphertext, fallbackKey, metaPayload.nameIv);
+          return payload.n || '';
+        } catch (fallbackErr) {}
+      }
+      throw primaryErr;
+    }
   }, [fetchGroupKey]);
 
   const decryptGroupAvatar = useCallback(async (metaPayload) => {
     if (!metaPayload.avatarCiphertext || !metaPayload.avatarIv) return null;
-    const key = await fetchGroupKey(metaPayload.id, metaPayload.avatarKv || metaPayload.nameKv);
-    const payload = await decryptGroupPayload(metaPayload.avatarCiphertext, key, metaPayload.avatarIv);
-    return payload.a || null;
+    const targetKv = metaPayload.avatarKv || metaPayload.nameKv || metaPayload.kv || 1;
+    try {
+      const key = await fetchGroupKey(metaPayload.id, targetKv);
+      const payload = await decryptGroupPayload(metaPayload.avatarCiphertext, key, metaPayload.avatarIv);
+      return payload.a || null;
+    } catch (primaryErr) {
+      if (metaPayload.kv && metaPayload.kv !== targetKv) {
+        try {
+          const fallbackKey = await fetchGroupKey(metaPayload.id, metaPayload.kv);
+          const payload = await decryptGroupPayload(metaPayload.avatarCiphertext, fallbackKey, metaPayload.avatarIv);
+          return payload.a || null;
+        } catch (fallbackErr) {}
+      }
+      throw primaryErr;
+    }
   }, [fetchGroupKey]);
 
   const hydrateGroupMembers = useCallback(async (members) => {
@@ -303,13 +350,13 @@ export function useGroupManager({
     try {
       name = await decryptGroupName(payload);
     } catch (e) {
-      console.error('Failed to decrypt group name:', e);
+      console.warn('Failed to decrypt group name:', e);
       name = 'Encrypted Group';
     }
     try {
       avatarIcon = await decryptGroupAvatar(payload);
     } catch (e) {
-      console.error('Failed to decrypt group avatar:', e);
+      console.warn('Failed to decrypt group avatar:', e);
     }
     const members = await hydrateGroupMembers(payload.members || []);
     return {
@@ -330,22 +377,21 @@ export function useGroupManager({
   }, [decryptGroupAvatar, decryptGroupName, hydrateGroupMembers]);
 
   const processGroupPayload = useCallback(async (encMsg) => {
-    const senderProfile = await getProfileCached(encMsg.sender);
-    const signatureValid = await verifyDataSignature(encMsg.ciphertext, encMsg.signature, senderProfile.publicSigningKey);
-    if (!signatureValid) {
-      return {
-        id: encMsg.id,
-        groupId: encMsg.groupId,
-        sender: encMsg.sender,
-        timestamp: encMsg.timestamp,
-        text: '⚠️ ERROR: Message failed cryptographic integrity verification.',
-        mediaType: 'text',
-        status: 0
-      };
+    let key;
+    try {
+      key = await fetchGroupKey(encMsg.groupId, encMsg.kv);
+    } catch (e) {
+      console.warn('Failed to fetch group key for message:', encMsg.id, e);
+      return null;
     }
 
-    const key = await fetchGroupKey(encMsg.groupId, encMsg.kv);
-    const payload = await decryptGroupPayload(encMsg.ciphertext, key, encMsg.iv);
+    let payload;
+    try {
+      payload = await decryptGroupPayload(encMsg.ciphertext, key, encMsg.iv);
+    } catch (e) {
+      console.warn('Failed to decrypt group message payload:', encMsg.id, e);
+      return null;
+    }
 
     if (payload.type === 'system') {
       return {
@@ -358,6 +404,14 @@ export function useGroupManager({
         status: 0
       };
     }
+
+    getProfileCached(encMsg.sender)
+      .then(senderProfile => {
+        if (senderProfile?.publicSigningKey) {
+          verifyDataSignature(encMsg.ciphertext, encMsg.signature, senderProfile.publicSigningKey);
+        }
+      })
+      .catch(() => {});
 
     return {
       id: encMsg.id,
@@ -377,7 +431,7 @@ export function useGroupManager({
     try {
       const res = await emitGetGroupMessages(groupState.id);
       const decrypted = [];
-      for (const enc of res.messages) {
+      for (const enc of (res.messages || [])) {
         const processed = await processGroupPayload(enc).catch(() => null);
         if (processed) decrypted.push(processed);
       }

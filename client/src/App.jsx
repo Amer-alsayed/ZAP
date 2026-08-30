@@ -202,11 +202,15 @@ export default function App() {
   const forwardBackHandlerRef = useRef(null);
   const chatBackHandlerRef = useRef(null);
 
+  // Shared in-memory caches for direct chats and group channels
+  const sharedSecretsRef = useRef({});
+  const contactsRef = useRef([]);
+
   // Group Manager Hook
   const groupManager = useGroupManager({
     currentUser,
-    contactsRef: useRef([]), // Updated below
-    sharedSecrets: useRef({}), // Updated below
+    contactsRef,
+    sharedSecrets: sharedSecretsRef,
     showToast,
     onBackToMenu: () => handleBackToMenu(),
     onClearActiveContact: () => {
@@ -261,6 +265,8 @@ export default function App() {
     currentUser,
     setCurrentUser,
     showToast,
+    contactsRef,
+    sharedSecrets: sharedSecretsRef,
     onClearActiveGroup: () => {
       if (activeGroupRef.current) {
         setActiveGroup(null);
@@ -291,7 +297,6 @@ export default function App() {
   const {
     contacts,
     setContacts,
-    contactsRef,
     activeContact,
     setActiveContact,
     activeContactRef,
@@ -300,7 +305,6 @@ export default function App() {
     blockedUsers,
     setBlockedUsers,
     blockedUsersRef,
-    sharedSecrets,
     replyingTo,
     setReplyingTo,
     forwardingMessage,
@@ -330,10 +334,6 @@ export default function App() {
     handleRenameContact,
     updateContactProfileAndStatus
   } = chatManager;
-
-  // Link chatManager contactsRef & sharedSecrets to groupManager
-  groupManager.contactsRef = contactsRef;
-  groupManager.sharedSecrets = sharedSecrets;
 
   // 1-on-1 WebRTC Hook
   const webrtc = useWebRTC({

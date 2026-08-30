@@ -44,7 +44,9 @@ export function useChatManager({
   encryptGroupPayload,
   emitSendGroupMessage,
   patchGroup,
-  emitDeleteGroupMessages
+  emitDeleteGroupMessages,
+  contactsRef: externalContactsRef,
+  sharedSecrets: externalSharedSecrets
 }) {
   const [contacts, setContacts] = useState(() => {
     try {
@@ -77,10 +79,11 @@ export function useChatManager({
     } catch (e) {}
     return [];
   });
-  const contactsRef = useRef([]);
+  const localContactsRef = useRef([]);
+  const contactsRef = externalContactsRef || localContactsRef;
   useEffect(() => {
     contactsRef.current = contacts;
-  }, [contacts]);
+  }, [contacts, contactsRef]);
 
   const [activeContact, setActiveContact] = useState(null);
   const activeContactRef = useRef(null);
@@ -96,7 +99,8 @@ export function useChatManager({
     blockedUsersRef.current = blockedUsers;
   }, [blockedUsers]);
 
-  const sharedSecrets = useRef({});
+  const localSharedSecrets = useRef({});
+  const sharedSecrets = externalSharedSecrets || localSharedSecrets;
   const conversationRatchetCounters = useRef(new Map());
 
   const [replyingTo, setReplyingTo] = useState(null);
