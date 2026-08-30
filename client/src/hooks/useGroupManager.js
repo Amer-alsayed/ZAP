@@ -885,7 +885,40 @@ export function useGroupManager({
       }
     };
 
-    const handleGroupUpdated = async ({ groupId, nameCiphertext, nameIv, avatarCiphertext, avatarIv, nameKv, avatarKv }) => {
+    const handleGroupKicked = ({ groupId, removedBy, groupName }) => {
+      const existing = groupsRef.current.find(g => g.id === groupId);
+      const displayName = existing?.name || groupName || 'Group';
+
+      // Remove group from client state
+      setGroups(prev => prev.filter(g => g.id !== groupId));
+      setGroupInfoGroupId(null);
+
+      // If user is currently viewing this group, immediately return to main menu
+      if (activeGroupRef.current?.id === groupId) {
+        setActiveGroup(null);
+        activeGroupRef.current = null;
+        lastActiveGroupVmRef.current = null;
+        if (onBackToMenu) onBackToMenu();
+      }
+
+      // Invalidate cached group key
+      delete groupKeysRef.current[groupId];
+
+      // Show clear notification toast
+      showToast?.(
+        removedBy
+          ? `You were removed from "${displayName}" by @${removedBy}.`
+          : `You were removed from "${displayName}".`,
+        'error',
+        'Removed from Group'
+      );
+    };
+
+    const handleGroupUpdated = async ({ groupId, nameCiphertext, nameIv, avatarCiphertext, avatarIv, nameKv, avatarKv, type, removed, removedBy }) => {
+      if (type === 'member_removed' && removed?.toLowerCase() === currentUser?.username?.toLowerCase()) {
+        handleGroupKicked({ groupId, removedBy });
+        return;
+      }
       try {
         const name = await decryptGroupName({ id: groupId, nameCiphertext, nameIv, nameKv });
         const avatarIcon = avatarCiphertext ? await decryptGroupAvatar({ id: groupId, avatarCiphertext, avatarIv, avatarKv }) : null;
@@ -946,6 +979,8 @@ export function useGroupManager({
     socket.on('group-sync', handleGroupSync);
     socket.on('group-updated', handleGroupUpdated);
     socket.on('group-deleted', handleGroupDeleted);
+    socket.on('group-kicked', handleGroupKicked);
+    socket.on('group-removed', handleGroupKicked);
     socket.on('group-user-typing', handleGroupTyping);
     socket.on('group-messages-deleted', handleGroupMessagesDeleted);
 
@@ -955,6 +990,8 @@ export function useGroupManager({
       socket.off('group-sync', handleGroupSync);
       socket.off('group-updated', handleGroupUpdated);
       socket.off('group-deleted', handleGroupDeleted);
+      socket.off('group-kicked', handleGroupKicked);
+      socket.off('group-removed', handleGroupKicked);
       socket.off('group-user-typing', handleGroupTyping);
       socket.off('group-messages-deleted', handleGroupMessagesDeleted);
     };

@@ -547,6 +547,17 @@ export const registerGroupHandlers = (socket, io, helpers) => {
         await dbRun('UPDATE groups SET avatar_ciphertext = ?, avatar_iv = ?, avatar_kv = ? WHERE id = ?', [avatarCiphertext, avatarIv, newKv, gid]);
       }
 
+      // Evict removed user's active sockets from the group room so they stop receiving typing/calls/messages
+      try {
+        await io.in(removedLower).socketsLeave(`group_${gid}`);
+      } catch (leaveErr) {
+        logger.warn(`remove-group-member: room leave issue for ${removedLower}:`, leaveErr);
+      }
+
+      // Notify the removed user directly
+      io.to(removedLower).emit('group-kicked', { groupId: gid, removedBy: username });
+      io.to(removedLower).emit('group-removed', { groupId: gid, removedBy: username });
+
       callback?.({ success: true, kv: newKv, removed: removedLower });
       await notifyRosterChange(gid, 'member_removed', { removedBy: username, removed: removedLower });
       logger.info(`${username} removed ${removedLower} from group ${gid}; key rotated to v${newKv}`);
@@ -565,6 +576,13 @@ export const registerGroupHandlers = (socket, io, helpers) => {
 
       const myMembership = await getMembership(gid, username);
       if (!myMembership) return callback?.({ error: 'not_member' });
+
+      // Evict leaving user's sockets from group room
+      try {
+        await io.in(username.toLowerCase()).socketsLeave(`group_${gid}`);
+      } catch (leaveErr) {
+        logger.warn(`leave-group: room leave issue for ${username}:`, leaveErr);
+      }
 
       const roster = await getRoster(gid);
       const remaining = roster.filter(r => r.username.toLowerCase() !== username.toLowerCase());
