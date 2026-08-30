@@ -203,14 +203,14 @@ export default function App() {
   const chatBackHandlerRef = useRef(null);
 
   // Shared in-memory caches for direct chats and group channels
-  const sharedSecretsRef = useRef({});
+  const sharedSecrets = useRef({});
   const contactsRef = useRef([]);
 
   // Group Manager Hook
   const groupManager = useGroupManager({
     currentUser,
     contactsRef,
-    sharedSecrets: sharedSecretsRef,
+    sharedSecrets,
     showToast,
     onBackToMenu: () => handleBackToMenu(),
     onClearActiveContact: () => {
@@ -266,7 +266,7 @@ export default function App() {
     setCurrentUser,
     showToast,
     contactsRef,
-    sharedSecrets: sharedSecretsRef,
+    sharedSecrets,
     onClearActiveGroup: () => {
       if (activeGroupRef.current) {
         setActiveGroup(null);
