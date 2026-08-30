@@ -165,7 +165,7 @@ export const socketHandler = (io) => {
     const deliverOfflineMessages = async () => {
       try {
         const offlineMessages = await dbAll(
-          `SELECT m.id, m.sender, m.recipient, m.ciphertext, m.iv, m.signature, m.timestamp, m.delivered
+          `SELECT m.id, m.sender, m.recipient, m.ciphertext, m.iv, m.signature, m.aad, m.auth_tag, m.timestamp, m.delivered
            FROM messages m
            LEFT JOIN deleted_messages_user d ON m.id = d.message_id AND LOWER(d.username) = LOWER(?)
            WHERE LOWER(m.recipient) = LOWER(?) AND m.delivered = 0 AND d.message_id IS NULL
@@ -192,6 +192,8 @@ export const socketHandler = (io) => {
               ciphertext: msg.ciphertext,
               iv: msg.iv,
               signature: msg.signature,
+              aad: msg.aad || null,
+              authTag: msg.auth_tag || null,
               delivered: 1,
               timestamp: msg.timestamp
             });
@@ -302,7 +304,7 @@ export const socketHandler = (io) => {
     // Handle real-time messaging
     socket.on('send-message', async (data, callback) => {
       try {
-        const { recipient, ciphertext, iv, signature } = data || {};
+        const { recipient, ciphertext, iv, signature, aad, authTag } = data || {};
         const sender = socket.user.username;
 
         // Anti-bot message frequency check
@@ -328,6 +330,10 @@ export const socketHandler = (io) => {
           return;
         }
 
+        // Validate optional aad and authTag if provided
+        const safeAad = (aad && typeof aad === 'string' && aad.length < 5000) ? aad : null;
+        const safeAuthTag = (authTag && typeof authTag === 'string' && authTag.length < 500) ? authTag : null;
+
         msgTimestamps.push(now);
 
         // Check if sender has blocked recipient
@@ -351,9 +357,9 @@ export const socketHandler = (io) => {
           // Store the message with delivered = -1 so it stays permanently in sender's history on refresh,
           // but is NEVER delivered or visible to recipient!
           const result = await dbRun(
-            `INSERT INTO messages (sender, recipient, ciphertext, iv, signature, delivered)
-             VALUES (?, ?, ?, ?, ?, -1)`,
-            [sender, recipient, ciphertext, iv, signature]
+            `INSERT INTO messages (sender, recipient, ciphertext, iv, signature, aad, auth_tag, delivered)
+             VALUES (?, ?, ?, ?, ?, ?, ?, -1)`,
+            [sender, recipient, ciphertext, iv, signature, safeAad, safeAuthTag]
           );
           if (typeof callback === 'function') {
             callback({ success: true, messageId: result.id, status: 0, timestamp: new Date().toISOString() });
@@ -365,9 +371,9 @@ export const socketHandler = (io) => {
         const status = isOnline ? 1 : 0; // 0 = sent, 1 = delivered
 
         const result = await dbRun(
-          `INSERT INTO messages (sender, recipient, ciphertext, iv, signature, delivered)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [sender, recipient, ciphertext, iv, signature, status]
+          `INSERT INTO messages (sender, recipient, ciphertext, iv, signature, aad, auth_tag, delivered)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [sender, recipient, ciphertext, iv, signature, safeAad, safeAuthTag, status]
         );
 
         const messageId = result.id;
@@ -378,6 +384,8 @@ export const socketHandler = (io) => {
           ciphertext,
           iv,
           signature,
+          aad: safeAad,
+          authTag: safeAuthTag,
           delivered: status,
           timestamp: new Date().toISOString()
         };
@@ -622,7 +630,7 @@ export const socketHandler = (io) => {
         }
 
         let query = `
-          SELECT m.id, m.sender, m.recipient, m.ciphertext, m.iv, m.signature, m.timestamp, m.delivered
+          SELECT m.id, m.sender, m.recipient, m.ciphertext, m.iv, m.signature, m.aad, m.auth_tag, m.timestamp, m.delivered
           FROM messages m
           LEFT JOIN deleted_messages_user d 
             ON m.id = d.message_id AND LOWER(d.username) = LOWER(?)
@@ -653,7 +661,15 @@ export const socketHandler = (io) => {
             ts = ts.replace(' ', 'T') + 'Z';
           }
           return {
-            ...m,
+            id: m.id,
+            sender: m.sender,
+            recipient: m.recipient,
+            ciphertext: m.ciphertext,
+            iv: m.iv,
+            signature: m.signature,
+            aad: m.aad || null,
+            authTag: m.auth_tag || null,
+            delivered: m.delivered,
             timestamp: ts
           };
         });

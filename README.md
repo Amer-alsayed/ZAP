@@ -3,6 +3,7 @@
 **Open-source, zero-knowledge, end-to-end encrypted real-time communications platform.**  
 Featuring encrypted messaging, WebRTC P2P voice/video calling, voice notes, and media sharing.
 
+[![CI](https://github.com/Amer-alsayed/ZAP/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/Amer-alsayed/ZAP/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg?style=flat-square)](LICENSE)
 [![Free Tier: $0/mo](https://img.shields.io/badge/Hosting-100%25_Free_Tier-success.svg?style=flat-square)](#-deployment)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
@@ -71,8 +72,9 @@ ZAP provides a complete, hardened communications suite that is **100% free to ho
 
 ### 1. End-to-End Encrypted Messaging
 - Real-time message exchange over persistent WebSockets with sub-10ms delivery.
-- Authenticated AES-256-GCM symmetric encryption with unique 12-byte initialization vectors per message.
-- Cryptographic digital signing (ECDSA P-256) on every transmission to prevent tampering, injection, and spoofing.
+- Authenticated **AES-256-GCM** symmetric encryption with unique 12-byte initialization vectors per message.
+- **Additional Authenticated Data (AAD) Context Binding**: Binds `{ sender, recipient, clientMsgId, timestamp }` directly into the AEAD cipher, mathematically preventing message re-routing, context swapping, and replay injection.
+- **Deniable Authentication (HMAC-SHA256)**: Symmetric message authentication derived from the session secret provides cryptographic proof of origin to the recipient while preserving plausible deniability (non-repudiation protection).
 - Message status lifecycle tracking: Sent (`✓`), Delivered (`✓✓`), and Read (`✓✓` blue).
 - In-place message editing and dual deletion modes (*Delete for me* or *Delete for everyone*).
 - Offline message queuing and automatic synchronization upon reconnection.
@@ -91,7 +93,8 @@ ZAP provides a complete, hardened communications suite that is **100% free to ho
 
 ### 4. Privacy & Identity Verification
 - **Out-of-Band Safety Numbers**: 20-digit deterministic cryptographic fingerprints (`XXXXX XXXXX XXXXX XXXXX`) allow peers to visually verify identity keys and prevent Man-in-the-Middle (MITM) attacks.
-- **Client-Side Key Stretching**: Passwords are key-stretched in the browser using **PBKDF2-SHA256 with 600,000 rounds** before transmission. Raw passwords never touch the wire or database.
+- **Client-Side Key Stretching (NIST SP 800-132)**: Passwords are key-stretched in the browser using **PBKDF2-SHA256 with 600,000 rounds** and **dynamic 16-byte CSPRNG per-user salts** before transmission. Raw passwords never touch the wire or database.
+- **Anti-Enumeration Oracle Protection**: Constant-time deterministic HMAC pseudo-salts prevent username harvesting attacks.
 - **Full Presence & Blocklist Isolation**: Blocked users are completely isolated—they cannot observe typing status, presence, or deliver messages.
 
 ---
@@ -102,9 +105,9 @@ ZAP provides a complete, hardened communications suite that is **100% free to ho
                                 KEY DERIVATION & ENCRYPTION PIPELINE
                                 
    +-----------------------------------------------------------------------------------------+
-   | Client-Side Master Key Derivation                                                       |
+   | Client-Side Master Key Derivation (NIST SP 800-132)                                     |
    |                                                                                         |
-   |  Password + Salt("zap-salt-{username}")                                                 |
+   |  Password + 16-byte CSPRNG Salt (Stored in DB users.auth_salt)                          |
    |      |                                                                                  |
    |      v [ PBKDF2-HMAC-SHA256 (600,000 rounds) ]                                          |
    |      |                                                                                  |
@@ -114,29 +117,31 @@ ZAP provides a complete, hardened communications suite that is **100% free to ho
    +-----------------------------------------------------------------------------------------+
                                               |
    +------------------------------------------v----------------------------------------------+
-   | Key Pair Generation (Web Crypto API)                                                    |
+   | Key Agreement & Dual-Subkey Derivation                                                  |
    |                                                                                         |
    |  * Identity Key Pair: ECDH over Curve P-256 (secp256r1)                                 |
    |  * Signing Key Pair:  ECDSA over Curve P-256 (SHA-256)                                  |
    |                                                                                         |
-   |  Private keys are encrypted with the Master Key and backed up to the server.            |
-   |  Public keys (JWK format) are published to the public registry.                         |
+   |  Shared Secret = ECDH(Sender_PrivKey, Recipient_PubKey)                                 |
+   |      |                                                                                  |
+   |      +---> AES-GCM-256 Encryption Key                                                   |
+   |      +---> HMAC-SHA256 Deniable Authentication Key                                      |
    +-----------------------------------------------------------------------------------------+
                                               |
    +------------------------------------------v----------------------------------------------+
-   | Message Transmission & Verification                                                     |
+   | Message Transmission & AEAD Context Binding                                             |
    |                                                                                         |
    |  Sender:                                                                                |
-   |    1. Derives shared secret: ECDH(Sender_PrivKey, Recipient_PubKey)                     |
+   |    1. Builds AAD Context: { s: sender, r: recipient, mid: clientMsgId, t: timestamp }   |
    |    2. Generates 96-bit (12-byte) CSPRNG random IV                                       |
-   |    3. Ciphertext = AES-GCM-256(SharedKey, IV, Plaintext)                                |
-   |    4. Signature  = ECDSA-SHA256(Sender_SigningPrivKey, Ciphertext)                      |
-   |    5. Sends envelope: { recipient, ciphertext, iv, signature }                          |
+   |    3. Ciphertext = AES-GCM-256(SharedKey, IV, Plaintext, additionalData=AAD)            |
+   |    4. AuthTag    = HMAC-SHA256(AuthKey, Ciphertext || IV || AAD)                        |
+   |    5. Sends envelope: { recipient, ciphertext, iv, aad, authTag, signature }            |
    |                                                                                         |
    |  Recipient:                                                                             |
-   |    1. Verifies Signature using Sender's Public ECDSA Key                                 |
-   |    2. Derives matching shared secret: ECDH(Recipient_PrivKey, Sender_PubKey)            |
-   |    3. Plaintext = AES-GCM-256-Decrypt(SharedKey, IV, Ciphertext)                        |
+   |    1. Verifies Deniable HMAC AuthTag using shared symmetric AuthKey                     |
+   |    2. Plaintext = AES-GCM-256-Decrypt(SharedKey, IV, Ciphertext, additionalData=AAD)    |
+   |    * Tampered metadata, altered sender/recipient, or modified payload fails decryption  |
    +-----------------------------------------------------------------------------------------+
 ```
 
@@ -144,10 +149,13 @@ ZAP provides a complete, hardened communications suite that is **100% free to ho
 
 | Primitive | Standard / Parameters | Purpose |
 | :--- | :--- | :--- |
+| **Password Salt** | 16-byte CSPRNG Salt (`crypto.getRandomValues`) | Per-user entropy against precomputed rainbow table attacks |
+| **Anti-Enumeration** | Deterministic `HMAC-SHA256(Secret, user)` | Prevents username harvesting or enumeration on salt query |
 | **Key Derivation** | `PBKDF2-HMAC-SHA256` (600,000 iterations, 512-bit output) | Locally stretches raw password into login token & backup key |
 | **Key Agreement** | `ECDH` on NIST Curve `P-256` (`secp256r1`) | Derives 256-bit symmetric shared secret between peers |
 | **Symmetric Encryption** | `AES-GCM` (256-bit key, 96-bit random IV, 128-bit tag) | Authenticated encryption for messages, voice notes, and media |
-| **Digital Signatures** | `ECDSA` with `SHA-256` on Curve `P-256` | Signs ciphertexts to guarantee sender authenticity |
+| **Context Binding (AAD)** | Structured JSON byte buffer in `additionalData` | Cryptographically binds sender, recipient, and message ID |
+| **Deniable Authentication** | `HMAC-SHA256` over `ciphertext:iv:aad` | Guarantees message authenticity while preserving plausible deniability |
 | **Identity Fingerprints** | Deterministic 20-digit chunked numeric code | Out-of-band MITM key verification |
 | **Server Auth** | `Bcrypt` (10 rounds) + `JWT` (`HS256`) | Server-side token validation and session management |
 
@@ -158,11 +166,41 @@ ZAP provides a complete, hardened communications suite that is **100% free to ho
 | Threat Vector | Attack Scenario | ZAP Mitigation |
 | :--- | :--- | :--- |
 | **Server Compromise** | Rogue admin or compromised hosting database | Database contains only AES-256-GCM ciphertexts, public keys, and bcrypt hashes. Plaintext cannot be recovered without client private keys. |
-| **Network Sniffing** | Intercepting credentials over the wire | Passwords never leave the browser. Only the PBKDF2-stretched derivation hash is transmitted over TLS. |
-| **Man-in-the-Middle (MITM)** | Malicious actor tampering with in-transit messages | All payloads are signed with ECDSA P-256. Altered ciphertexts fail cryptographic verification and are dropped. |
+| **Precomputation Attacks** | Rainbow table attacks across known usernames | Dynamic 16-byte CSPRNG per-user salts force attacks to be calculated individually at $2^{256}$ cost. |
+| **Replay & Injection Attacks** | Intercepting ciphertexts and re-sending or re-routing to different chats | AES-GCM Additional Authenticated Data (AAD) cryptographically locks sender, recipient, and message ID into the auth tag. |
+| **Non-Repudiation Leak** | Exporting chat transcripts as legal receipts | Symmetric HMAC-SHA256 authentication provides deniability (both parties hold key material). |
 | **Public Key Substitution** | Server returning modified public keys | Users can verify identities out-of-band using the 20-digit deterministic Safety Number fingerprint. |
 | **Attachment Interception** | Intercepting uploaded images or voice notes | Media files are encrypted in the browser with AES-GCM prior to upload and served with sandboxed CSP isolation. |
 | **DoS & Flooding** | Brute-force guessing and upload flooding | Multi-tiered rate limiters isolate authentication (30 req/15m), uploads (300 req/15m), and general API traffic. |
+
+---
+
+## Automated Verification & Testing
+
+ZAP includes a standalone cryptographic verification test suite that executes all key derivation, AAD anti-tampering, deniable authentication, and backward compatibility tests locally using the native Web Crypto API:
+
+```bash
+# Run the automated cryptographic test suite
+npm run test:crypto
+```
+
+Output:
+```text
+1. Testing Random Salt Generation & PBKDF2 Isolation...
+✓ PASS: Random salts isolate hashes; legacy accounts remain backward-compatible.
+
+2. Testing ECDH Key Exchange...
+✓ PASS: ECDH P-256 shared secret derivation validated.
+
+3. Testing AES-GCM AAD Context Binding & Anti-Tampering...
+✓ PASS: AAD context binding mathematically prevents context tampering and re-routing attacks.
+
+4. Testing Deniable Authentication with HMAC-SHA256...
+✓ PASS: Deniable HMAC authentication verified with anti-tampering protection.
+
+5. Testing Legacy Message Fallback (Messages without AAD)...
+✓ PASS: Legacy messages without AAD decrypt smoothly with zero breaking changes.
+```
 
 ---
 

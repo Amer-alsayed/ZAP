@@ -21,9 +21,24 @@ const parseJsonResponse = async (response, fallbackErrorMessage) => {
 };
 
 /**
+ * Fetch a user's random authentication salt (returns null if legacy or non-existent).
+ */
+export const fetchAuthSalt = async (username) => {
+  if (!username) return null;
+  try {
+    const response = await fetch(`${BASE_URL}/api/auth/salt/${encodeURIComponent(username)}`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data?.authSalt || null;
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
  * Register a new user anonymously.
  */
-export const registerUser = async (username, loginHash, publicIdentityKey, publicSigningKey, encryptedPrivateKeys) => {
+export const registerUser = async (username, loginHash, publicIdentityKey, publicSigningKey, encryptedPrivateKeys, authSalt = null) => {
   const response = await fetch(`${BASE_URL}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -32,7 +47,8 @@ export const registerUser = async (username, loginHash, publicIdentityKey, publi
       loginHash,
       publicIdentityKey,
       publicSigningKey,
-      encryptedPrivateKeys
+      encryptedPrivateKeys,
+      authSalt
     })
   });
 

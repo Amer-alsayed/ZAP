@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Shield, User, Lock, KeyRound, AlertTriangle } from 'lucide-react';
 import ZapLogo from './ZapLogo';
-import { deriveKeysFromPassword, generateKeyPairs, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys } from '../services/crypto';
-import { registerUser, loginUser } from '../services/api';
+import { deriveKeysFromPassword, generateKeyPairs, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys, generateRandomSalt } from '../services/crypto';
+import { registerUser, loginUser, fetchAuthSalt } from '../services/api';
 import { useElasticBounce } from '../hooks/useElasticBounce';
 
 export default function Login({ onAuthSuccess }) {
@@ -82,30 +82,33 @@ export default function Login({ onAuthSuccess }) {
     setError('');
 
     try {
-      const { loginHash, encryptionKey } = await deriveKeysFromPassword(password, cleanUsername);
-
       if (isRegister) {
-        // 1. Generate new identity and signing key pairs
+        // 1. Generate a CSPRNG 16-byte random salt for new account registration
+        const authSalt = generateRandomSalt();
+        const { loginHash, encryptionKey } = await deriveKeysFromPassword(password, cleanUsername, authSalt);
+
+        // 2. Generate new identity and signing key pairs
         const { identityKeyPair, signingKeyPair } = await generateKeyPairs();
 
-        // 2. Encrypt private keys with derived password encryption key
+        // 3. Encrypt private keys with derived password encryption key
         const backup = await encryptAndBackupPrivateKeys(
           identityKeyPair.privateKey,
           signingKeyPair.privateKey,
           encryptionKey
         );
 
-        // 3. Export public keys as JWKs for server storage
+        // 4. Export public keys as JWKs for server storage
         const publicIdentityKey = await window.crypto.subtle.exportKey('jwk', identityKeyPair.publicKey);
         const publicSigningKey = await window.crypto.subtle.exportKey('jwk', signingKeyPair.publicKey);
 
-        // 4. Send registration request to server
+        // 5. Send registration request to server with random salt
         const data = await registerUser(
           cleanUsername,
           loginHash,
           publicIdentityKey,
           publicSigningKey,
-          backup
+          backup,
+          authSalt
         );
 
         // 5. Store derived key in localStorage safely
@@ -135,7 +138,10 @@ export default function Login({ onAuthSuccess }) {
           }
         });
       } else {
-        // Login flow
+        // Login flow: Fetch the user's random salt (or fallback to legacy null)
+        const authSalt = await fetchAuthSalt(cleanUsername);
+        const { loginHash, encryptionKey } = await deriveKeysFromPassword(password, cleanUsername, authSalt);
+
         const data = await loginUser(cleanUsername, loginHash);
 
         // Re-import the backup key

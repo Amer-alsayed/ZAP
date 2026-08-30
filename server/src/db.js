@@ -198,6 +198,27 @@ export const initDb = async () => {
       // Column already exists
     }
 
+    try {
+      await dbRun('ALTER TABLE users ADD COLUMN auth_salt TEXT');
+      logger.info('Database migration: Added auth_salt column to users table.');
+    } catch (e) {
+      // Column already exists
+    }
+
+    try {
+      await dbRun('ALTER TABLE messages ADD COLUMN aad TEXT');
+      logger.info('Database migration: Added aad column to messages table.');
+    } catch (e) {
+      // Column already exists
+    }
+
+    try {
+      await dbRun('ALTER TABLE messages ADD COLUMN auth_tag TEXT');
+      logger.info('Database migration: Added auth_tag column to messages table.');
+    } catch (e) {
+      // Column already exists
+    }
+
     // Create Deleted Messages Per User Table (stores per-user message deletion)
     await dbRun(`
       CREATE TABLE IF NOT EXISTS deleted_messages_user (

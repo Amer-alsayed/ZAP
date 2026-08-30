@@ -111,8 +111,8 @@ const emitWithTimeout = (eventName, payload, timeoutMs = 15000) => {
 /**
  * Send encrypted message payload to the server.
  */
-export const emitSendMessage = (recipient, ciphertext, iv, signature) => {
-  return emitWithTimeout('send-message', { recipient, ciphertext, iv, signature });
+export const emitSendMessage = (recipient, ciphertext, iv, signature, aad = null, authTag = null) => {
+  return emitWithTimeout('send-message', { recipient, ciphertext, iv, signature, aad, authTag });
 };
 
 export const emitDeleteMessages = (messageIds) =>

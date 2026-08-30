@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 import config from './src/config.js';
 import logger from './src/logger.js';
 import { initDb, dbPing } from './src/db.js';
-import { register, login, searchUser } from './src/authController.js';
+import { register, login, searchUser, getAuthSalt } from './src/authController.js';
 import { socketHandler } from './src/socketHandler.js';
 import { authenticateToken } from './src/middleware/authMiddleware.js';
 import { generalLimiter, authLimiter, uploadLimiter } from './src/middleware/rateLimiter.js';
@@ -24,48 +24,49 @@ const app = express();
 app.disable('x-powered-by');
 const httpServer = createServer(app);
 
-// Apply HTTP Security Headers via Helmet
+// Enable Reverse Proxy Trust for accurate rate limiting on cloud platforms
+app.set('trust proxy', 1);
+
+// Security Headers with Helmet
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Set to false to avoid breaking external media assets if loaded dynamically
-    crossOriginResourcePolicy: { policy: 'cross-origin' }
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
   })
 );
-
-// Apply general rate limiting across all API endpoints
-app.use('/api', generalLimiter);
 
 // Configurable CORS configuration
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, same-origin requests)
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
-    // Allow all origins when allowedOrigins is null (production without CLIENT_ORIGIN set)
+    // In development / local testing, allow any origin
     if (!config.allowedOrigins) return callback(null, true);
-    // In development always allow
+    // In production, check against allowed origins
     if (!config.isProd) return callback(null, true);
-    // Check against the explicit whitelist
     if (config.allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, false);
+      return callback(null, true);
     }
+    return callback(new Error('Blocked by CORS policy'));
   },
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '60mb' })); // Support base64 uploads up to 60MB
 
-// Create uploads directory if it doesn't exist
+// Body Parser with strict 50MB payload limits
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Ensure upload directory exists
 if (!fs.existsSync(config.uploadsDir)) {
   fs.mkdirSync(config.uploadsDir, { recursive: true });
 }
 
 // Periodic background cleanup for uploaded files (configurable TTL, default 7 days)
 const UPLOAD_FILE_TTL_MS = (config.mediaTtlHours || 168) * 60 * 60 * 1000;
-const uploadCleanupInterval = setInterval(async () => {
+setInterval(async () => {
   try {
     const files = await fs.promises.readdir(config.uploadsDir);
     const now = Date.now();
@@ -74,32 +75,34 @@ const uploadCleanupInterval = setInterval(async () => {
       const stats = await fs.promises.stat(filePath);
       if (now - stats.mtimeMs > UPLOAD_FILE_TTL_MS) {
         await fs.promises.unlink(filePath);
-        logger.info(`Auto-purged expired upload file: ${file}`);
+        logger.info(`Auto-cleaned expired media upload: ${file}`);
       }
     }
   } catch (err) {
-    logger.error('Error cleaning up expired upload files:', err);
+    logger.error('Background upload cleanup error:', err);
   }
-}, 60 * 60 * 1000); // Run hourly check
+}, 60 * 60 * 1000);
 
-uploadCleanupInterval.unref();
-
-// Serve uploaded encrypted files statically with strict security response headers
+// Static uploads serving with security headers
 app.use('/uploads', express.static(config.uploadsDir, {
+  dotfiles: 'ignore',
+  index: false,
   setHeaders: (res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
   }
 }));
 
-// System Health Probe Endpoint
+// Apply global rate limiter
+app.use('/api/', generalLimiter);
+
+// Liveness & Readiness Healthcheck Endpoint
 app.get('/health', async (req, res) => {
   const dbAlive = await dbPing();
   const healthStatus = {
     status: dbAlive ? 'ok' : 'degraded',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
     environment: config.env,
+    timestamp: new Date().toISOString(),
     database: dbAlive ? 'connected' : 'disconnected'
   };
 
@@ -107,6 +110,8 @@ app.get('/health', async (req, res) => {
 });
 
 // API Routes with rate limiters & auth protection
+app.get('/api/auth/salt/:username', authLimiter, getAuthSalt);
+app.get('/api/auth/salt', authLimiter, getAuthSalt);
 app.post('/api/auth/register', authLimiter, register);
 app.post('/api/auth/login', authLimiter, login);
 app.get('/api/auth/search', authenticateToken, searchUser);

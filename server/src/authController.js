@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { dbGet, dbRun } from './db.js';
@@ -15,8 +16,44 @@ const safeJsonParse = (val) => {
   }
 };
 
+export const getAuthSalt = async (req, res) => {
+  const username = req.params.username || req.query.username;
+  if (!username || typeof username !== 'string' || username.length > 50) {
+    const fallbackDummy = crypto.createHmac('sha256', config.jwtSecret || 'zap-secret').update('dummy_anonymous').digest('hex').slice(0, 32);
+    return res.status(200).json({ authSalt: fallbackDummy });
+  }
+
+  try {
+    const user = await dbGet('SELECT auth_salt FROM users WHERE LOWER(username) = LOWER(?)', [username]);
+    if (user && user.auth_salt) {
+      return res.status(200).json({ authSalt: user.auth_salt });
+    }
+
+    // Anti-Enumeration Oracle Protection:
+    // For non-existent accounts or legacy accounts without a salt, generate a deterministic 16-byte
+    // pseudo-salt derived from HMAC-SHA256(ServerSecret, username).
+    // This ensures EVERY username query returns a realistic 16-byte hex string in constant time,
+    // making it mathematically impossible for an attacker to enumerate valid registered usernames.
+    const pseudoSalt = crypto
+      .createHmac('sha256', config.jwtSecret || 'zap-secret')
+      .update(username.toLowerCase())
+      .digest('hex')
+      .slice(0, 32);
+
+    return res.status(200).json({ authSalt: pseudoSalt });
+  } catch (error) {
+    logger.error('Error fetching auth salt:', error);
+    const fallbackSalt = crypto
+      .createHmac('sha256', config.jwtSecret || 'zap-secret')
+      .update(username.toLowerCase())
+      .digest('hex')
+      .slice(0, 32);
+    return res.status(200).json({ authSalt: fallbackSalt });
+  }
+};
+
 export const register = async (req, res) => {
-  const { username, loginHash, publicIdentityKey, publicSigningKey, encryptedPrivateKeys } = req.body;
+  const { username, loginHash, publicIdentityKey, publicSigningKey, encryptedPrivateKeys, authSalt } = req.body;
 
   if (!username || !loginHash || !publicIdentityKey || !publicSigningKey || !encryptedPrivateKeys) {
     return res.status(400).json({ error: 'All fields are required' });
@@ -45,14 +82,15 @@ export const register = async (req, res) => {
 
     // Save user to DB
     const result = await dbRun(
-      `INSERT INTO users (username, password_hash, public_identity_key, public_signing_key, encrypted_private_keys)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO users (username, password_hash, public_identity_key, public_signing_key, encrypted_private_keys, auth_salt)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         username, 
         passwordHash, 
         typeof publicIdentityKey === 'string' ? publicIdentityKey : JSON.stringify(publicIdentityKey), 
         typeof publicSigningKey === 'string' ? publicSigningKey : JSON.stringify(publicSigningKey), 
-        typeof encryptedPrivateKeys === 'string' ? encryptedPrivateKeys : JSON.stringify(encryptedPrivateKeys)
+        typeof encryptedPrivateKeys === 'string' ? encryptedPrivateKeys : JSON.stringify(encryptedPrivateKeys),
+        typeof authSalt === 'string' ? authSalt : null
       ]
     );
 

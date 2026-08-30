@@ -41,6 +41,9 @@ import { AppToastContainer, AppConfirmModal } from './components/AppNotification
 import { searchUser } from './services/api';
 import { 
   deriveSharedSecret, 
+  deriveAuthKey,
+  generateMessageAuthTag,
+  verifyMessageAuthTag,
   encryptMessage, 
   decryptMessage, 
   signData, 
@@ -2453,15 +2456,29 @@ export default function App() {
       // 1. Get E2EE Symmetric shared key
       const sharedSecret = await getSharedSecret(activeContact);
 
-      // 2. Encrypt the payload string (contains text or file details)
-      const payloadString = JSON.stringify(msgContent);
-      const { ciphertext, iv } = await encryptMessage(payloadString, sharedSecret);
+      // 2. Generate client message ID to prevent chicken-and-egg AAD binding issues
+      const clientMsgId = window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const timestamp = Date.now();
+      const aadContext = {
+        s: currentUser.username,
+        r: recipient,
+        mid: clientMsgId,
+        t: timestamp
+      };
 
-      // 3. Sign the ciphertext with our private signing key
+      // 3. Encrypt the payload string with AES-GCM and bind context via AAD
+      const payloadString = JSON.stringify(msgContent);
+      const { ciphertext, iv, aad } = await encryptMessage(payloadString, sharedSecret, aadContext);
+
+      // 4. Deniable Authentication: derive symmetric authKey and compute HMAC-SHA256 tag
+      const authKey = await deriveAuthKey(sharedSecret);
+      const authTag = await generateMessageAuthTag(authKey, ciphertext, iv, aad);
+
+      // Also compute ECDSA digital signature for backward compatibility with legacy clients
       const signature = await signData(ciphertext, currentUser.keys.privateSigningKey);
 
-      // 4. Send encrypted payload via WebSockets
-      const ack = await emitSendMessage(recipient, ciphertext, iv, signature);
+      // 5. Send encrypted payload via WebSockets
+      const ack = await emitSendMessage(recipient, ciphertext, iv, signature, aad, authTag);
 
       // 5. Append locally (instantly decrypt it back or just use the local message object)
       const localMsg = {
@@ -2626,19 +2643,34 @@ export default function App() {
       // 2. Derive shared secret key
       const secret = await getSharedSecret(contact);
 
-      // 3. Verify digital signature using sender's public signing key
-      const senderPubKey = msg.sender.toLowerCase() === currentUser.username.toLowerCase()
-        ? currentUser.keys.publicSigningKey
-        : contact.publicSigningKey;
+      // 3. Authenticate message origin (Deniable HMAC authentication + ECDSA fallback)
+      let isAuthenticated = false;
 
-      const isSignatureValid = await verifyDataSignature(
-        msg.ciphertext,
-        msg.signature,
-        senderPubKey
-      );
+      // Priority 1: Check Deniable HMAC Authentication tag if present
+      if (msg.authTag) {
+        const authKey = await deriveAuthKey(secret);
+        if (authKey) {
+          isAuthenticated = await verifyMessageAuthTag(authKey, msg.ciphertext, msg.iv, msg.aad, msg.authTag);
+        }
+      }
 
-      if (!isSignatureValid) {
-        console.error('WARNING: E2EE Signature Verification FAILED! Message tampered.');
+      // Priority 2: Fallback to ECDSA signature verification
+      if (!isAuthenticated && msg.signature) {
+        const senderPubKey = msg.sender.toLowerCase() === currentUser.username.toLowerCase()
+          ? currentUser.keys.publicSigningKey
+          : contact.publicSigningKey;
+
+        if (senderPubKey) {
+          isAuthenticated = await verifyDataSignature(
+            msg.ciphertext,
+            msg.signature,
+            senderPubKey
+          );
+        }
+      }
+
+      if (!isAuthenticated) {
+        console.error('WARNING: E2EE Cryptographic Integrity Verification FAILED! Message dropped.');
         appendMessageToContact(chatPartner, {
           id: msg.id,
           sender: msg.sender,
@@ -2651,8 +2683,8 @@ export default function App() {
         return;
       }
 
-      // 4. Decrypt E2EE ciphertext
-      const decryptedString = await decryptMessage(msg.ciphertext, secret, msg.iv);
+      // 4. Decrypt E2EE ciphertext with AAD context (smooth fallback for legacy messages)
+      const decryptedString = await decryptMessage(msg.ciphertext, secret, msg.iv, msg.aad);
       const decryptedPayload = JSON.parse(decryptedString);
 
       // 5. Format and append message
@@ -2784,17 +2816,32 @@ export default function App() {
     for (const msg of encryptedMsgs) {
       const normTimestamp = normalizeMessageTimestamp(msg.timestamp);
       try {
-        const senderPubKey = msg.sender.toLowerCase() === currentUser.username.toLowerCase()
-          ? currentUser.keys.publicSigningKey
-          : contact.publicSigningKey;
+        let isAuthenticated = false;
 
-        const isSignatureValid = await verifyDataSignature(
-          msg.ciphertext,
-          msg.signature,
-          senderPubKey
-        );
+        // Priority 1: Check Deniable HMAC Authentication tag if present
+        if (msg.authTag) {
+          const authKey = await deriveAuthKey(secret);
+          if (authKey) {
+            isAuthenticated = await verifyMessageAuthTag(authKey, msg.ciphertext, msg.iv, msg.aad, msg.authTag);
+          }
+        }
 
-        if (!isSignatureValid) {
+        // Priority 2: Fallback to ECDSA signature verification
+        if (!isAuthenticated && msg.signature) {
+          const senderPubKey = msg.sender.toLowerCase() === currentUser.username.toLowerCase()
+            ? currentUser.keys.publicSigningKey
+            : contact.publicSigningKey;
+
+          if (senderPubKey) {
+            isAuthenticated = await verifyDataSignature(
+              msg.ciphertext,
+              msg.signature,
+              senderPubKey
+            );
+          }
+        }
+
+        if (!isAuthenticated) {
           decryptedMsgs.push({
             id: msg.id,
             sender: msg.sender,
@@ -2807,7 +2854,7 @@ export default function App() {
           continue;
         }
 
-        const decryptedString = await decryptMessage(msg.ciphertext, secret, msg.iv);
+        const decryptedString = await decryptMessage(msg.ciphertext, secret, msg.iv, msg.aad);
         const decryptedPayload = JSON.parse(decryptedString);
 
         decryptedMsgs.push({

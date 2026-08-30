@@ -43,13 +43,34 @@ const bufferToString = (buffer) => {
 };
 
 /**
- * Derive a Master Key and subkeys from a password and username (as salt).
+ * Generate a 16-byte cryptographically secure random salt (hex-encoded) for user password derivation.
+ */
+export const generateRandomSalt = () => {
+  const saltBytes = window.crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+/**
+ * Derive a Master Key and subkeys from a password and user salt.
  * @param {string} password 
  * @param {string} username 
+ * @param {string|null} saltHex - 16-byte random salt in hex. If null, falls back to legacy username-based salt.
  * @returns {Promise<{ loginHash: string, encryptionKey: CryptoKey }>}
  */
-export const deriveKeysFromPassword = async (password, username) => {
-  const salt = stringToBuffer(`chatra-salt-${username.toLowerCase()}`);
+export const deriveKeysFromPassword = async (password, username, saltHex = null) => {
+  let salt;
+  if (saltHex && typeof saltHex === 'string' && saltHex.length >= 16) {
+    const match = saltHex.match(/.{1,2}/g);
+    if (match) {
+      salt = new Uint8Array(match.map(byte => parseInt(byte, 16)));
+    } else {
+      salt = stringToBuffer(`chatra-salt-${username.toLowerCase()}`);
+    }
+  } else {
+    // Fallback for legacy accounts without a random salt
+    salt = stringToBuffer(`chatra-salt-${username.toLowerCase()}`);
+  }
+
   const passwordBuffer = stringToBuffer(password);
 
   // Import raw password as key material
@@ -61,7 +82,7 @@ export const deriveKeysFromPassword = async (password, username) => {
     ['deriveBits', 'deriveKey']
   );
 
-  // Derive master bits using PBKDF2
+  // Derive master bits using PBKDF2 with 600,000 iterations (OWASP standard)
   const derivedBits = await window.crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
@@ -151,7 +172,7 @@ export const encryptAndBackupPrivateKeys = async (identityPrivateKey, signingPri
 /**
  * Decrypt private keys restored from the server using the user's password-derived key.
  */
-export const decryptRestoredPrivateKeys = async (encryptedBackup, backupKey) => {
+export const decryptRestPrivateKeys = async (encryptedBackup, backupKey) => {
   let backup = encryptedBackup;
   if (typeof backup === 'string') {
     try {
@@ -210,6 +231,7 @@ export const decryptRestoredPrivateKeys = async (encryptedBackup, backupKey) => 
 
   return { identityPrivateKey, signingPrivateKey };
 };
+export const decryptRestoredPrivateKeys = decryptRestPrivateKeys;
 
 /**
  * Derive an AES-GCM shared key from our private key and their public key using ECDH.
@@ -248,31 +270,104 @@ export const deriveSharedSecret = async (ourPrivateKey, theirPublicKeyJwk) => {
 };
 
 /**
- * Encrypt data using an AES-GCM shared key.
+ * Derive a dedicated HMAC-SHA256 authentication key from the shared ECDH secret for deniable authentication.
  */
-export const encryptMessage = async (plaintext, sharedKey) => {
+export const deriveAuthKey = async (sharedKey) => {
+  if (!sharedKey) return null;
+  try {
+    const rawKey = await window.crypto.subtle.exportKey('raw', sharedKey);
+    return await window.crypto.subtle.importKey(
+      'raw',
+      rawKey,
+      {
+        name: 'HMAC',
+        hash: { name: 'SHA-256' }
+      },
+      false,
+      ['sign', 'verify']
+    );
+  } catch (e) {
+    console.error('Error deriving auth key from shared secret:', e);
+    return null;
+  }
+};
+
+/**
+ * Generate a symmetric HMAC-SHA256 authentication tag over ciphertext and AAD.
+ * Provides Deniable Authentication (both sender and recipient hold the key; protects against non-repudiation leaks).
+ */
+export const generateMessageAuthTag = async (authKey, ciphertext, iv, aadString = '') => {
+  if (!authKey || !ciphertext) return '';
+  try {
+    const dataToAuth = `${ciphertext}:${iv}:${aadString || ''}`;
+    const tagBuffer = await window.crypto.subtle.sign(
+      'HMAC',
+      authKey,
+      stringToBuffer(dataToAuth)
+    );
+    return bufferToBase64(tagBuffer);
+  } catch (e) {
+    console.error('Error generating message auth tag:', e);
+    return '';
+  }
+};
+
+/**
+ * Verify a symmetric HMAC-SHA256 authentication tag.
+ */
+export const verifyMessageAuthTag = async (authKey, ciphertext, iv, aadString, authTagBase64) => {
+  if (!authKey || !ciphertext || !authTagBase64) return false;
+  try {
+    const dataToAuth = `${ciphertext}:${iv}:${aadString || ''}`;
+    const tagBuffer = base64ToBuffer(authTagBase64);
+    if (tagBuffer.byteLength === 0) return false;
+    return await window.crypto.subtle.verify(
+      'HMAC',
+      authKey,
+      tagBuffer,
+      stringToBuffer(dataToAuth)
+    );
+  } catch (e) {
+    console.error('Error verifying message auth tag:', e);
+    return false;
+  }
+};
+
+/**
+ * Encrypt data using an AES-GCM shared key with Additional Authenticated Data (AAD).
+ */
+export const encryptMessage = async (plaintext, sharedKey, aadContext = null) => {
   const plaintextBuffer = stringToBuffer(plaintext);
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
 
+  const encryptParams = {
+    name: 'AES-GCM',
+    iv: iv
+  };
+
+  let aadString = '';
+  if (aadContext) {
+    aadString = typeof aadContext === 'string' ? aadContext : JSON.stringify(aadContext);
+    encryptParams.additionalData = stringToBuffer(aadString);
+  }
+
   const ciphertextBuffer = await window.crypto.subtle.encrypt(
-    {
-      name: 'AES-GCM',
-      iv: iv
-    },
+    encryptParams,
     sharedKey,
     plaintextBuffer
   );
 
   return {
     ciphertext: bufferToBase64(ciphertextBuffer),
-    iv: bufferToBase64(iv)
+    iv: bufferToBase64(iv),
+    aad: aadString || null
   };
 };
 
 /**
- * Decrypt data using an AES-GCM shared key.
+ * Decrypt data using an AES-GCM shared key with Additional Authenticated Data (AAD) and backward-compatible fallback.
  */
-export const decryptMessage = async (ciphertext, sharedKey, ivBase64) => {
+export const decryptMessage = async (ciphertext, sharedKey, ivBase64, aadContext = null) => {
   const ciphertextBuffer = base64ToBuffer(ciphertext);
   const ivBuffer = base64ToBuffer(ivBase64);
 
@@ -280,6 +375,26 @@ export const decryptMessage = async (ciphertext, sharedKey, ivBase64) => {
     throw new Error('Invalid Base64 payload or IV for message decryption.');
   }
 
+  // 1. If AAD context is provided, attempt authenticated AAD decryption first
+  if (aadContext) {
+    try {
+      const aadString = typeof aadContext === 'string' ? aadContext : JSON.stringify(aadContext);
+      const decryptedBuffer = await window.crypto.subtle.decrypt(
+        {
+          name: 'AES-GCM',
+          iv: ivBuffer,
+          additionalData: stringToBuffer(aadString)
+        },
+        sharedKey,
+        ciphertextBuffer
+      );
+      return bufferToString(decryptedBuffer);
+    } catch (aadErr) {
+      // Fallback for legacy messages that might not have been encrypted with AAD
+    }
+  }
+
+  // 2. Fallback / Standard decryption without AAD
   const decryptedBuffer = await window.crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
