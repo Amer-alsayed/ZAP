@@ -241,17 +241,28 @@ export const deriveSharedSecret = async (ourPrivateKey, theirPublicKeyJwk) => {
     throw new Error('Missing private or public key for shared secret derivation.');
   }
 
+  let jwk = theirPublicKeyJwk;
+  while (typeof jwk === 'string') {
+    try {
+      jwk = JSON.parse(jwk);
+    } catch (e) {
+      break;
+    }
+  }
+
   // Import their public key from JWK format
-  const theirPublicKey = await window.crypto.subtle.importKey(
-    'jwk',
-    theirPublicKeyJwk,
-    {
-      name: 'ECDH',
-      namedCurve: 'P-256'
-    },
-    true,
-    []
-  );
+  const theirPublicKey = (jwk instanceof CryptoKey)
+    ? jwk
+    : await window.crypto.subtle.importKey(
+        'jwk',
+        jwk,
+        {
+          name: 'ECDH',
+          namedCurve: 'P-256'
+        },
+        true,
+        []
+      );
 
   // Perform Diffie-Hellman to derive shared AES key
   return await window.crypto.subtle.deriveKey(
@@ -530,17 +541,28 @@ export const verifyDataSignature = async (dataString, signatureBase64, theirPubl
       return false;
     }
 
+    let jwk = theirPublicKeyJwk;
+    while (typeof jwk === 'string') {
+      try {
+        jwk = JSON.parse(jwk);
+      } catch (e) {
+        break;
+      }
+    }
+
     // Import their public signing key from JWK format
-    const theirPublicKey = await window.crypto.subtle.importKey(
-      'jwk',
-      theirPublicKeyJwk,
-      {
-        name: 'ECDSA',
-        namedCurve: 'P-256'
-      },
-      true,
-      ['verify']
-    );
+    const theirPublicKey = (jwk instanceof CryptoKey)
+      ? jwk
+      : await window.crypto.subtle.importKey(
+          'jwk',
+          jwk,
+          {
+            name: 'ECDSA',
+            namedCurve: 'P-256'
+          },
+          true,
+          ['verify']
+        );
 
     const isValid = await window.crypto.subtle.verify(
       {

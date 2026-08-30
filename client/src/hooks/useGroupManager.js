@@ -180,6 +180,18 @@ export function useGroupManager({
     if (!lower) throw new Error('Invalid username');
     if (userProfilesRef.current[lower]) return userProfilesRef.current[lower];
 
+    if (currentUser && currentUser.username && currentUser.username.toLowerCase() === lower && currentUser.keys) {
+      const selfProfile = {
+        username: currentUser.username,
+        publicIdentityKey: currentUser.keys.publicIdentityKey,
+        publicSigningKey: currentUser.keys.publicSigningKey,
+        displayName: currentUser.displayName || null,
+        avatarIcon: currentUser.avatarIcon || null
+      };
+      userProfilesRef.current[lower] = selfProfile;
+      return selfProfile;
+    }
+
     const fromContacts = contactsRef?.current?.find(c => c.username.toLowerCase() === lower);
     if (fromContacts && fromContacts.publicIdentityKey && fromContacts.publicSigningKey) {
       const profile = {
@@ -204,7 +216,7 @@ export function useGroupManager({
     };
     userProfilesRef.current[lower] = profile;
     return profile;
-  }, [contactsRef, currentUser?.token]);
+  }, [contactsRef, currentUser]);
 
   const getPairwiseSecretFor = useCallback(async (username) => {
     const lower = String(username).toLowerCase();
