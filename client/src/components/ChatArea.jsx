@@ -1102,7 +1102,7 @@ const ChatArea = React.memo(function ChatArea({
     if (isBannerDismissing) return;
     setIsBannerDismissing(true);
     setTimeout(() => {
-      saveContactToPermanentList?.(username);
+      onSaveContact?.(username);
       setDismissedBannerUser(username);
       setIsBannerDismissing(false);
     }, 280);
@@ -3165,7 +3165,7 @@ const ChatArea = React.memo(function ChatArea({
       </div>
 
       {/* Unsaved contact warning banner with smooth pill animation */}
-      {activeContact?.isSaved === false && dismissedBannerUser !== activeContact.username && (
+      {!isGroupMode && activeContact?.isSaved !== true && dismissedBannerUser !== activeContact.username && (
         <div className={`unsaved-contact-banner glass ${isBannerDismissing ? 'dismissing' : ''}`}>
           <div className="banner-content">
             <AlertTriangle size={15} className="warning-icon" />

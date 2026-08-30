@@ -938,7 +938,8 @@ export default function App() {
                   publicSigningKey: sc.publicSigningKey,
                   status: sc.status || 'offline',
                   messages: [],
-                  unreadCount: sc.unreadCount || 0
+                  unreadCount: sc.unreadCount || 0,
+                  isSaved: false
                 });
               } else {
                 const c = existing.get(key);
