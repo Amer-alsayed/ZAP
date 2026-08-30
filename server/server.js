@@ -156,9 +156,9 @@ app.post('/api/upload', uploadLimiter, authenticateToken, async (req, res) => {
   }
 });
 
-// Serve frontend in production
-if (config.isProd) {
-  const clientDist = path.resolve(__dirname, '../client/dist');
+// Serve frontend if built, otherwise display API status
+const clientDist = path.resolve(__dirname, '../client/dist');
+if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
   app.get('*', (req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));

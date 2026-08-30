@@ -14,7 +14,9 @@ Featuring encrypted messaging, WebRTC P2P voice/video calling, voice notes, and 
 <br />
 
 <div align="center">
-  <img src="docs/screenshots/02-chat-interface.png" alt="ZAP Encrypted Chat Interface" width="100%" />
+  <img src="docs/zap-showcase.gif" alt="ZAP Real-Time Product Tour" width="100%" style="border-radius: 12px;" />
+  <br />
+  <sub><b>Interactive Showcase: E2EE Messaging, Emoji Reactions, Cryptographic Safety Verification, and Draggable WebRTC Picture-in-Picture Calls</b></sub>
 </div>
 
 <br />
@@ -23,26 +25,26 @@ Featuring encrypted messaging, WebRTC P2P voice/video calling, voice notes, and 
   <table>
     <tr>
       <td width="50%" align="center">
+        <img src="docs/screenshots/02-chat-interface.png" alt="ZAP Encrypted Chat Interface" />
+        <br />
+        <sub><b>OLED Glassmorphic Chat Interface</b></sub>
+      </td>
+      <td width="50%" align="center">
         <img src="docs/screenshots/03-safety-number.png" alt="E2EE Safety Number Verification" />
         <br />
         <sub><b>E2EE Safety Number Verification (MITM Protection)</b></sub>
       </td>
-      <td width="50%" align="center">
-        <img src="docs/screenshots/04-settings-themes.png" alt="Settings & Theming Engine" />
-        <br />
-        <sub><b>Settings, Theming & Stream Controls</b></sub>
-      </td>
     </tr>
     <tr>
       <td width="50%" align="center">
-        <img src="docs/screenshots/01-auth-screen.png" alt="Zero-Knowledge Auth" />
+        <img src="docs/screenshots/04-settings-themes.png" alt="Settings & Theming Engine" />
         <br />
-        <sub><b>Zero-Knowledge Authentication Vault</b></sub>
+        <sub><b>Custom RGB Accent Theming & Audio Quality</b></sub>
       </td>
       <td width="50%" align="center">
         <img src="docs/screenshots/05-call-hud.png" alt="WebRTC P2P Calling" />
         <br />
-        <sub><b>WebRTC Direct P2P Calling ($0 Relay Cost)</b></sub>
+        <sub><b>WebRTC Direct P2P Calling ($0 Server Cost)</b></sub>
       </td>
     </tr>
   </table>
