@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ShieldAlert, X, ShieldCheck, WifiOff, RefreshCw } from 'lucide-react';
+import { ShieldAlert, X, ShieldCheck, WifiOff, RefreshCw, Copy } from 'lucide-react';
 
 // ==========================================
 // E2EE Safety Fingerprint Helper (Synchronous Hash)
@@ -541,6 +541,17 @@ export default function App() {
       setIsSafetyModalClosing(false);
     }, 250);
   };
+
+  // Keyboard shortcut: Escape smoothly dismisses the safety modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && showSafetyModal && !isSafetyModalClosing) {
+        handleCloseSafetyModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSafetyModal, isSafetyModalClosing]);
   const [sidebarMinimized, setSidebarMinimized] = useState(() => {
     return localStorage.getItem('chatra_sidebar_minimized') === 'true';
   });
@@ -5141,40 +5152,63 @@ export default function App() {
           {(showSafetyModal || isSafetyModalClosing) && activeContact && (
             <div 
               className={`safety-modal-overlay glass-modal-overlay ${isSafetyModalClosing ? 'closing' : ''}`} 
-              onClick={handleCloseSafetyModal}
+              onClick={() => handleCloseSafetyModal()}
             >
-              <div className="safety-modal-card glass" onClick={(e) => e.stopPropagation()}>
+              <div 
+                className="safety-modal-card glass" 
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="safety-modal-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <ShieldCheck size={22} style={{ color: 'var(--accent-color)' }} />
+                  <div className="safety-header-title-group">
+                    <div className={`safety-modal-icon-badge ${activeContact.isVerified ? 'verified' : ''}`}>
+                      <ShieldCheck size={20} />
+                    </div>
                     <h3>E2EE Safety Number</h3>
                   </div>
-                  <button className="safety-close-btn" onClick={handleCloseSafetyModal}>
-                    <X size={18} />
+                  <button 
+                    className="safety-close-btn" 
+                    onClick={() => handleCloseSafetyModal()}
+                    title="Close (Esc)"
+                    aria-label="Close safety number modal"
+                  >
+                    <X size={17} />
                   </button>
                 </div>
                 <div className="safety-modal-body">
-                  <p>
+                  <p className="safety-modal-desc">
                     To verify the cryptographic security of your end-to-end encrypted connection with <strong>{activeContact.displayName || activeContact.username}</strong>, compare the numbers below with the numbers on their screen.
                   </p>
                   
-                  <div className="safety-number-display">
-                    {getSafetyNumber(currentUser.keys.publicIdentityKey, activeContact.publicIdentityKey)}
+                  <div 
+                    className="safety-number-display"
+                    onClick={() => {
+                      const num = getSafetyNumber(currentUser?.keys?.publicIdentityKey, activeContact.publicIdentityKey);
+                      navigator.clipboard?.writeText(num);
+                      if (navigator.vibrate) navigator.vibrate(10);
+                      showToast?.('Safety number copied to clipboard', 'info');
+                    }}
+                    title="Click to copy safety number"
+                  >
+                    <span className="safety-number-digits">
+                      {getSafetyNumber(currentUser?.keys?.publicIdentityKey, activeContact.publicIdentityKey)}
+                    </span>
+                    <span className="safety-copy-icon-wrapper" title="Copy">
+                      <Copy size={14} className="safety-copy-icon" />
+                    </span>
                   </div>
                   
                   <div className="safety-status-row">
-                    <span>Verification status:</span>
-                    {activeContact.isVerified ? (
-                      <span className="status-badge verified">Verified</span>
-                    ) : (
-                      <span className="status-badge unverified">Not Verified</span>
-                    )}
+                    <span className="safety-status-label">Verification status:</span>
+                    <span className={`status-badge ${activeContact.isVerified ? 'verified' : 'unverified'}`}>
+                      {activeContact.isVerified ? 'VERIFIED' : 'NOT VERIFIED'}
+                    </span>
                   </div>
                   
                   <button 
                     type="button" 
                     className={`safety-toggle-verify-btn ${activeContact.isVerified ? 'unverify' : 'verify'}`}
                     onClick={() => {
+                      if (navigator.vibrate) navigator.vibrate(15);
                       handleVerifyContact(activeContact.username, !activeContact.isVerified);
                     }}
                   >

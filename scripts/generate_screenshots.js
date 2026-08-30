@@ -1,4 +1,4 @@
-﻿import puppeteer from 'puppeteer-core';
+import puppeteer from 'puppeteer-core';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -134,7 +134,14 @@ async function run() {
     const safetyBtn = await pageA.$('.safety-number-btn');
     if (safetyBtn) {
       await safetyBtn.click();
-      await new Promise(r => setTimeout(r, 1200));
+      await new Promise(r => setTimeout(r, 600));
+
+      // Click "Mark as Verified" to showcase verified state
+      const verifyToggle = await pageA.$('.safety-toggle-verify-btn');
+      if (verifyToggle) {
+        await verifyToggle.click();
+        await new Promise(r => setTimeout(r, 800));
+      }
 
       console.log('3/5 Capturing 03-safety-number.png...');
       await pageA.screenshot({
@@ -143,8 +150,10 @@ async function run() {
 
       // Close modal
       const closeBtn = await pageA.$('.safety-close-btn');
-      if (closeBtn) await closeBtn.click();
-      await new Promise(r => setTimeout(r, 600));
+      if (closeBtn) {
+        await closeBtn.click();
+        await new Promise(r => setTimeout(r, 600));
+      }
     }
 
     // 4/5 Open Settings View
