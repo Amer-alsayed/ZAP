@@ -681,7 +681,8 @@ export const registerGroupHandlers = (socket, io, helpers) => {
 
       const hasName = nameCiphertext && nameIv;
       const hasAvatar = avatarCiphertext && avatarIv;
-      if (!hasName && !hasAvatar) return callback?.({ error: 'Nothing to update' });
+      const wantsAvatarClear = !hasAvatar && data && Object.prototype.hasOwnProperty.call(data, 'avatarCiphertext') && Object.prototype.hasOwnProperty.call(data, 'avatarIv') && data.avatarCiphertext === null && data.avatarIv === null;
+      if (!hasName && !hasAvatar && !wantsAvatarClear) return callback?.({ error: 'Nothing to update' });
 
       if (hasName && (typeof nameCiphertext !== 'string' || nameCiphertext.length > MAX_NAME_CIPHERTEXT || typeof nameIv !== 'string' || nameIv.length > 100)) {
         return callback?.({ error: 'Invalid group name payload' });
@@ -695,6 +696,8 @@ export const registerGroupHandlers = (socket, io, helpers) => {
       }
       if (hasAvatar) {
         await dbRun('UPDATE groups SET avatar_ciphertext = ?, avatar_iv = ?, avatar_kv = ? WHERE id = ?', [avatarCiphertext, avatarIv, group.key_version, gid]);
+      } else if (wantsAvatarClear) {
+        await dbRun('UPDATE groups SET avatar_ciphertext = NULL, avatar_iv = NULL, avatar_kv = NULL WHERE id = ?', [gid]);
       }
 
       callback?.({ success: true });
