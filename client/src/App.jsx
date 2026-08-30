@@ -5151,11 +5151,11 @@ export default function App() {
           {/* E2EE Safety Number verification modal (Root level to overlap Sidebar) */}
           {(showSafetyModal || isSafetyModalClosing) && activeContact && (
             <div 
-              className={`safety-modal-overlay confirmation-modal-overlay ${isSafetyModalClosing ? 'closing' : ''}`} 
+              className={`safety-modal-overlay ${isSafetyModalClosing ? 'closing' : ''}`} 
               onClick={() => handleCloseSafetyModal()}
             >
               <div 
-                className={`safety-modal-card confirmation-modal glass ${isSafetyModalClosing ? 'closing' : ''}`} 
+                className={`safety-modal-card glass ${isSafetyModalClosing ? 'closing' : ''}`} 
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="safety-modal-header">
