@@ -9,6 +9,7 @@
     "start": "node server/server.js",
     "test:crypto": "node scripts/test_crypto_security.js",
     "test:integration": "node scripts/test_integration_e2e.js",
+    "test:e2e": "node scripts/test_comprehensive_app.js",
     "test": "npm run test:crypto && npm run test:integration",
     "install:all": "npm install --prefix server && npm install --prefix client --include=dev --legacy-peer-deps",
     "server": "npm run dev --prefix server",

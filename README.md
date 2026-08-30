@@ -70,28 +70,36 @@ ZAP provides a complete, hardened communications suite that is **100% free to ho
 
 ## Core Capabilities
 
-### 1. End-to-End Encrypted Messaging
+### 1. End-to-End Encrypted 1-on-1 & Multi-User Group Messaging
 - Real-time message exchange over persistent WebSockets with sub-10ms delivery.
 - Authenticated **AES-256-GCM** symmetric encryption with unique 12-byte initialization vectors per message.
 - **Additional Authenticated Data (AAD) Context Binding**: Binds `{ sender, recipient, clientMsgId, timestamp }` directly into the AEAD cipher, mathematically preventing message re-routing, context swapping, and replay injection.
+- **Zero-Knowledge Multi-User Groups**: End-to-end encrypted group messaging with versioned sealed key envelopes (KV), automated key rotation on member changes, role-based administration (Owner, Admin, Member), and encrypted system notifications.
+- **Rich Message Interactions**: Interactive quoted replies with animated jump-to-source scrolling, message forwarding modal, multi-select deletion, and markdown rendering (`*bold*`, `_italic_`, `code`, and `||spoiler||` tags).
 - **Deniable Authentication (HMAC-SHA256)**: Symmetric message authentication derived from the session secret provides cryptographic proof of origin to the recipient while preserving plausible deniability (non-repudiation protection).
 - Message status lifecycle tracking: Sent (`✓`), Delivered (`✓✓`), and Read (`✓✓` blue).
 - In-place message editing and dual deletion modes (*Delete for me* or *Delete for everyone*).
 - Offline message queuing and automatic synchronization upon reconnection.
 
-### 2. P2P Voice & Video Calling
-- Direct browser-to-browser WebRTC media streams with STUN/TURN fallback.
-- In-call HUD with camera toggles, microphone mute, live audio visualizer, and session duration counter.
-- Stateful offer/answer signaling and automated session cleanup on network disconnection.
+### 2. P2P Direct & Multi-Peer Mesh Group Calling
+- **1-on-1 WebRTC Calls**: Direct browser-to-browser audio and video streams ($0 server bandwidth cost) with STUN/TURN fallback.
+- **Multi-Peer Group Calls**: Full-mesh WebRTC group video and audio calling with dynamic peer tile grid, active speaker highlighting, and real-time joining/leaving.
+- **In-Call HUD Controls**: Real-time microphone mute across all active peer senders with audio chimes, camera toggle, screen sharing, Picture-in-Picture (PiP), audio waveform visualizer, and session duration timer.
 
-### 3. Encrypted Voice Notes & Media Vault
-- In-browser voice note recorder with dynamic waveform generation and client-side encryption before transmission.
-- Encrypted file and image sharing (up to 50MB) with chunked client-side AES-GCM encryption.
-- Encrypted media caching (IndexedDB) for fast local decryption and playback without repeated server fetching.
-- Sandboxed server-side asset isolation (`X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`).
-- Automated background worker that purges expired media uploads to prevent server disk bloat.
+### 3. Encrypted Multi-Photo Albums, Voice Notes & Media Vault
+- **Multi-Photo Album Grid**: Intelligent collage layouts (1, 2, 3, 4+ photos) rendered inline within chat bubbles.
+- **Full-Screen Lightbox Gallery**: Interactive image viewer with keyboard navigation, zoom & pan, swipe gestures, and download capabilities.
+- **Encrypted Voice Notes**: In-browser voice recorder with real-time waveform animation, playback scrubber, and client-side encryption.
+- **Apple Emoji & GIF Pickers**: Native Apple-style emoji categories, recent emoji caching, search, and integrated Tenor/Giphy animated GIF reaction picker.
+- **Encrypted File Vault**: Client-side AES-GCM encrypted media sharing (up to 50MB) with chunked encryption and IndexedDB local decryption caching.
+- Sandboxed server-side asset isolation (`X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`) and automated background TTL purges.
 
-### 4. Privacy & Identity Verification
+### 4. Zero-State Persistence & Instant Cache Hydration
+- **Instant Synchronous Hydration**: Local storage caches contacts, groups, and message snippets synchronously on application mount, preventing UI flickering and `"No messages yet"` resets across page reloads.
+- **Authoritative Unread Badges**: Undelivered and unread message counters are tracked authoritatively on the server and preserved across reloads until explicitly opened and read.
+- **Background Message Reconciliation**: Automatically synchronizes and decrypts recent history for conversation partners in the background without requiring manual clicks.
+
+### 5. Privacy & Identity Verification
 - **Out-of-Band Safety Numbers**: 20-digit deterministic cryptographic fingerprints (`XXXXX XXXXX XXXXX XXXXX`) allow peers to visually verify identity keys and prevent Man-in-the-Middle (MITM) attacks.
 - **Client-Side Key Stretching (NIST SP 800-132)**: Passwords are key-stretched in the browser using **PBKDF2-SHA256 with 600,000 rounds** and **dynamic 16-byte CSPRNG per-user salts** before transmission. Raw passwords never touch the wire or database.
 - **Anti-Enumeration Oracle Protection**: Constant-time deterministic HMAC pseudo-salts prevent username harvesting attacks.
@@ -179,15 +187,16 @@ ZAP provides a complete, hardened communications suite that is **100% free to ho
 
 ## Automated Verification & Testing
 
-ZAP includes automated suites for both cryptographic security invariants and live multi-client WebSocket integration:
+ZAP includes automated suites for cryptographic security invariants, multi-client live socket integration, and complete multi-user end-to-end browser automation:
 
 ```bash
-# Run all tests (crypto invariants + multi-client E2E integration)
+# Run all core test suites
 npm test
 
 # Run individual test suites
 npm run test:crypto       # 10/10 Cryptographic security invariants
 npm run test:integration  # 20/20 Multi-client live socket & E2EE exchanges
+npm run test:e2e          # 29/29 Full Puppeteer browser end-to-end automation suite
 ```
 
 ### Cryptographic Security Invariant Suite (`npm run test:crypto`)
@@ -241,6 +250,64 @@ npm run test:integration  # 20/20 Multi-client live socket & E2EE exchanges
 
 ================================================================
   ALL 20 / 20 INTEGRATION TESTS PASSED SUCCESSFULLY (100%)  
+================================================================
+```
+
+### Full Multi-User Browser Automation Suite (`npm run test:e2e`)
+```text
+================================================================
+   ZAP / CHATRA: COMPREHENSIVE END-TO-END AUTOMATION SUITE
+================================================================
+
+MODULE 1: AUTHENTICATION, REGISTRATION & SESSION PERSISTENCE (Tests 01-04)
+  [PASS] Register Alice with PBKDF2 (600k rounds) & Key Generation
+  [PASS] Register Bob with PBKDF2 (600k rounds) & Key Generation
+  [PASS] Register Charlie with PBKDF2 (600k rounds) & Key Generation
+  [PASS] Verify Session Auto-Restore & Persistent Key Storage
+
+MODULE 2: USER SEARCH, CONTACTS, PRESENCE & CUSTOM NICKNAMES (Tests 05-08)
+  [PASS] Bob searches for Alice and adds her to active chats
+  [PASS] Verify Alice real-time online status badge in Bob view
+  [PASS] Alice searches for Charlie and adds Charlie to contacts
+  [PASS] Test Sidebar collapse/expand animation toggle button
+
+MODULE 3: 1-ON-1 DIRECT E2EE MESSAGES, MARKDOWN & READ RECEIPTS (Tests 09-11)
+  [PASS] Bob sends E2EE plaintext message to Alice
+  [PASS] Bob sends Markdown formatted message (bold, italic, code, spoiler)
+  [PASS] Alice types and Bob receives typing indicator
+
+MODULE 4: APPLE EMOJI PICKER, ANIMATED GIFS & JUMBO EMOJIS (Tests 12-13)
+  [PASS] Test Apple Emoji Picker: search and insert emoji
+  [PASS] Test GIF Picker and sending animated GIF reaction
+
+MODULE 5: PHOTOS, MULTI-PHOTO ALBUMS & VOICE NOTES (Tests 14-16)
+  [PASS] Send Single Photo Attachment and verify image preview
+  [PASS] Send Multi-Photo Album (3 images) and verify collage grid
+  [PASS] Test Voice Note recording, waveform animation, and send
+
+MODULE 6: QUOTED REPLIES, FORWARD MODAL & SAFETY VERIFICATION (Tests 17-19)
+  [PASS] Test Quoted Message Reply and jump-to-source click
+  [PASS] Test Message Forwarding modal to Charlie
+  [PASS] Test Out-of-Band Safety Number Fingerprint verification modal
+
+MODULE 7: WEBRTC 1-ON-1 CALLS, HUD CONTROLS & SCREEN SHARING (Tests 20-22)
+  [PASS] Voice Call Decline scenario (Alice calls Bob, Bob declines)
+  [PASS] Video Call Connect scenario (Alice calls Bob, Bob accepts)
+  [PASS] Test Call HUD Buttons: Mute, Camera, Screen Share, PiP, and Hang Up
+
+MODULE 8: ENCRYPTED GROUP CHATS, MEMBER ROLES & GROUP CALLS (Tests 23-26)
+  [PASS] Create Group Chat with Bob and Charlie as members
+  [PASS] Send Encrypted Group Message and verify all members decrypt
+  [PASS] Test Group Info Modal and Admin role management
+  [PASS] Test Group Video Call signaling and multi-peer join
+
+MODULE 9: SETTINGS, THEME TOKENS, PRIVACY CONTROLS & LOGOUT (Tests 27-29)
+  [PASS] Open Settings View, update display name and theme color
+  [PASS] Test Block Contact and Privacy Isolation
+  [PASS] Test Log Out action and return to Auth View
+
+================================================================
+  ALL 29 / 29 COMPREHENSIVE E2E TESTS PASSED SUCCESSFULLY (100%)
 ================================================================
 ```
 
@@ -420,19 +487,78 @@ npm run dev
 
 | Channel | Event | Payload Direction | Description |
 | :--- | :--- | :---: | :--- |
-| **Auth** | `connection` | Client $\rightarrow$ Server | Authenticates connection via handshake JWT token. |
-| **Messaging** | `send-message` | Client $\rightarrow$ Server | Dispatches `{ recipient, ciphertext, iv, aad, authTag, signature }`. |
+| **Auth & Contacts** | `connection` | Client $\rightarrow$ Server | Authenticates connection via handshake JWT token. |
+| | `get-contacts` | Client $\leftrightarrow$ Server | Fetches conversation partners, profiles, and unread counters. |
+| | `get-chat-history` | Client $\leftrightarrow$ Server | Retrieves encrypted 1-on-1 message history. |
+| | `block-user` / `unblock-user` | Client $\leftrightarrow$ Server | Manages privacy isolation blocklists. |
+| **1-on-1 Messaging** | `send-message` | Client $\rightarrow$ Server | Dispatches `{ recipient, ciphertext, iv, aad, authTag, signature }`. |
 | | `receive-message` | Server $\rightarrow$ Client | Delivers authenticated AEAD ciphertext envelope to recipient socket. |
 | | `message-delivered` | Server $\rightarrow$ Client | Confirms message delivery receipt (`✓✓`). |
-| | `message-read` | Client $\leftrightarrow$ Server | Signals read receipts and updates blue tick status. |
+| | `mark-as-read` / `messages-read`| Client $\leftrightarrow$ Server | Signals read receipts and updates blue tick status. |
 | | `message-edit` | Client $\leftrightarrow$ Server | Propagates edited ciphertext to conversation participants. |
-| | `delete-messages` | Client $\leftrightarrow$ Server | Synchronizes single or bidirectional message removal. |
-| **Signaling** | `call-user` | Client $\leftrightarrow$ Server | Relays WebRTC SDP offer to recipient. |
-| | `call-accepted` | Client $\leftrightarrow$ Server | Relays WebRTC SDP answer to caller. |
+| | `delete-messages` / `delete-chat`| Client $\leftrightarrow$ Server | Synchronizes single message, selection, or chat removal. |
+| **Group Messaging** | `create-group` | Client $\leftrightarrow$ Server | Creates group with initial sealed key envelopes. |
+| | `get-groups` | Client $\leftrightarrow$ Server | Fetches user groups and cryptographic key envelopes. |
+| | `send-group-message` | Client $\leftrightarrow$ Server | Broadcasts encrypted group message payload. |
+| | `receive-group-message` | Server $\rightarrow$ Client | Delivers encrypted group message to all member sockets. |
+| | `rotate-group-keys` | Client $\leftrightarrow$ Server | Distributes new sealed symmetric key envelopes (KV). |
+| | `update-group-profile` | Client $\leftrightarrow$ Server | Renames group or updates group avatar icon. |
+| | `add-group-members` / `remove-group-member` | Client $\leftrightarrow$ Server | Modifies group membership and triggers key rotation. |
+| | `set-member-role` | Client $\leftrightarrow$ Server | Updates member permissions (Owner, Admin, Member). |
+| **P2P & Group Calling**| `call-user` / `call-accepted` | Client $\leftrightarrow$ Server | Relays 1-on-1 WebRTC SDP offer and answer. |
 | | `ice-candidate` | Client $\leftrightarrow$ Server | Exchanges STUN/TURN network routing candidates. |
-| | `end-call` | Client $\leftrightarrow$ Server | Terminates active call session and resets state. |
+| | `end-call` | Client $\leftrightarrow$ Server | Terminates active 1-on-1 call session. |
+| | `start-group-call` / `join-group-call` | Client $\leftrightarrow$ Server | Initiates or joins multi-peer mesh group call session. |
+| | `group-call-signal` | Client $\leftrightarrow$ Server | Relays multi-peer mesh WebRTC SDP offers/answers and ICE. |
+| | `leave-group-call` | Client $\leftrightarrow$ Server | Disconnects peer from group call mesh. |
 | **Presence** | `typing` / `stop-typing`| Client $\leftrightarrow$ Server | Broadcasts active typing indicators. |
 | | `user-status` | Server $\rightarrow$ Client | Real-time online/offline presence notifications. |
+| | `profile-updated` | Server $\rightarrow$ Client | Propagates display name and avatar updates in real time. |
+
+---
+
+## 📁 Repository Structure & Modular Architecture
+
+```text
+ZAP/
+├── client/                           # React 19 Single Page Application
+│   ├── src/
+│   │   ├── components/               # Modular UI Components
+│   │   │   ├── AlbumGalleryModal.jsx # Full-screen lightbox album gallery viewer
+│   │   │   ├── AppleEmojiPicker.jsx  # Apple-style emoji & Tenor GIF reaction picker
+│   │   │   ├── ChatArea.jsx          # Message stream, input bar, and reaction trays
+│   │   │   ├── Dashboard.jsx         # Call log history and analytics dashboard
+│   │   │   ├── GroupCallWindow.jsx   # Multi-peer group video grid & in-call controls
+│   │   │   ├── MediaAlbumGrid.jsx    # Inline multi-photo collage grid layouts
+│   │   │   ├── Sidebar.jsx           # Unified contacts & groups list with search
+│   │   │   ├── TypingIndicator.jsx   # Animated pulsing typing indicator
+│   │   │   └── VoiceNotePlayerItem.jsx # Dynamic waveform audio scrubber player
+│   │   ├── hooks/                    # Headless State & Protocol Hooks
+│   │   │   ├── useAuthSession.js     # Instant session restoration & key management
+│   │   │   ├── useChatManager.js     # 1-on-1 E2EE messaging, contacts, & persistence
+│   │   │   ├── useGroupCalls.js      # Multi-peer WebRTC mesh calling orchestration
+│   │   │   ├── useGroupManager.js    # Zero-knowledge group encryption & member roles
+│   │   │   └── useWebRTC.js          # Direct 1-on-1 P2P voice & video signaling
+│   │   ├── services/                 # Core Protocol & Networking Services
+│   │   │   ├── crypto.js             # Native Web Crypto API hardware-accelerated engine
+│   │   │   └── socket.js             # Socket.IO event emitter & timeout handlers
+│   │   ├── styles/                   # Glassmorphic CSS design system with RGB tokens
+│   │   └── utils/                    # Audio engines, WebRTC ICE discovery, & helpers
+│   └── vite.config.js                # Vite build configuration & bundler optimization
+├── server/                           # Node.js Zero-Knowledge Gateway
+│   ├── src/
+│   │   ├── handlers/                 # Modular Socket.IO Event Handlers
+│   │   │   ├── callSocketHandler.js  # 1-on-1 WebRTC & multi-peer group call signaling
+│   │   │   ├── messageSocketHandler.js # E2EE message routing, edits, deletes, & history
+│   │   │   └── userSocketHandler.js  # Presence, contacts discovery, & blocklists
+│   │   ├── db.js                     # Unified PostgreSQL & SQLite WAL database driver
+│   │   └── socketHandler.js          # Socket.IO connection dispatcher & auth middleware
+│   └── server.js                     # Express REST API, rate limiters, & static serving
+└── scripts/                          # Automated Verification & Test Automation Suites
+    ├── test_crypto_security.js       # 10/10 Cryptographic security invariant suite
+    ├── test_integration_e2e.js       # 20/20 Multi-client live socket integration suite
+    └── test_comprehensive_app.js     # 29/29 Full Puppeteer browser automation suite
+```
 
 ---
 
