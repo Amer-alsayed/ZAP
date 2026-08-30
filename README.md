@@ -5,7 +5,7 @@ Featuring encrypted messaging, WebRTC P2P voice/video calling, voice notes, and 
 
 [![CI](https://github.com/Amer-alsayed/ZAP/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/Amer-alsayed/ZAP/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg?style=flat-square)](LICENSE)
-[![Free Tier: $0/mo](https://img.shields.io/badge/Hosting-100%25_Free_Tier-success.svg?style=flat-square)](#-deployment)
+[![Free Tier: $0/mo](https://img.shields.io/badge/Hosting-100%25_Free_Tier-success.svg?style=flat-square)](#deployment)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![React](https://img.shields.io/badge/React-19.x-61DAFB.svg?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![Web Crypto API](https://img.shields.io/badge/Cryptography-Web_Crypto_API-8A2BE2.svg?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
@@ -350,7 +350,7 @@ flowchart LR
 
 ---
 
-## 🚀 Deployment
+## Deployment
 
 You can run ZAP **100% free of charge** using cloud free tiers, or self-host it on your own private server / VPS.
 
@@ -517,7 +517,7 @@ npm run dev
 
 ---
 
-## 📁 Repository Structure & Modular Architecture
+## Repository Structure & Modular Architecture
 
 ```text
 ZAP/
