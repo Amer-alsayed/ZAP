@@ -931,7 +931,11 @@ const Sidebar = React.memo(function Sidebar({
                       </div>
                       <div className="contact-preview-row">
                         <div className="contact-preview-text">
-                          {typingNames.length > 0
+                          {group.isRemoved ? (
+                            <span style={{ color: 'rgba(248, 113, 113, 0.82)', fontSize: '12.5px', fontWeight: '500' }}>
+                              Removed from group
+                            </span>
+                          ) : typingNames.length > 0
                             ? `${typingNames.slice(0, 2).map(u => {
                                 const m = (group.members || []).find(mm => mm.username.toLowerCase() === u.toLowerCase());
                                 return m?.profile?.displayName || u;

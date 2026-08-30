@@ -3053,8 +3053,12 @@ const ChatArea = React.memo(function ChatArea({
               )}
             </h2>
             {isGroupMode ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <span>{(activeContact.members?.length || 0)} member{((activeContact.members?.length || 0) === 1) ? '' : 's'}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: activeContact.isRemoved ? 'rgba(239, 68, 68, 0.9)' : 'var(--text-muted)' }}>
+                {activeContact.isRemoved ? (
+                  <span style={{ fontWeight: '500' }}>Removed from group</span>
+                ) : (
+                  <span>{(activeContact.members?.length || 0)} member{((activeContact.members?.length || 0) === 1) ? '' : 's'}</span>
+                )}
               </span>
             ) : (
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -3099,22 +3103,26 @@ const ChatArea = React.memo(function ChatArea({
             <>
               {isGroupMode ? (
                 <>
-                  <button 
-                    className="header-action-btn" 
-                    onClick={() => onInitiateCall('voice')}
-                    title="Group Voice Call"
-                    aria-label="Start group voice call"
-                  >
-                    <Phone size={19} />
-                  </button>
-                  <button 
-                    className="header-action-btn" 
-                    onClick={() => onInitiateCall('video')}
-                    title="Group Video Call"
-                    aria-label="Start group video call"
-                  >
-                    <Video size={19} />
-                  </button>
+                  {!activeContact.isRemoved && (
+                    <>
+                      <button 
+                        className="header-action-btn" 
+                        onClick={() => onInitiateCall('voice')}
+                        title="Group Voice Call"
+                        aria-label="Start group voice call"
+                      >
+                        <Phone size={19} />
+                      </button>
+                      <button 
+                        className="header-action-btn" 
+                        onClick={() => onInitiateCall('video')}
+                        title="Group Video Call"
+                        aria-label="Start group video call"
+                      >
+                        <Video size={19} />
+                      </button>
+                    </>
+                  )}
                   <button
                     className="header-action-btn"
                     onClick={() => onOpenGroupInfo?.()}
@@ -3427,90 +3435,96 @@ const ChatArea = React.memo(function ChatArea({
           )}
         </div>
 
-        {/* Separated Pill-Style Input Controls */}
-        <div className="chat-input-row">
-          <input
-            type="file"
-            id="file-input"
-            multiple
-            style={{ display: 'none' }}
-            onChange={handleFileSelect}
-          />
-
-          {/* 1. Left: Separated Media Attachment Pill Button */}
-          <div className={`input-action-pill-wrapper attach-pill-wrapper ${(isRecording && !recordingExitMode) ? 'is-hidden' : ''}`}>
-            {(showAttachMenu || isClosingAttachMenu) && !isRecording && (
-              <div ref={attachMenuRef} className={`attach-menu-popover glass ${isClosingAttachMenu ? 'is-closing' : ''}`}>
-                <div className="attach-menu-header">
-                  <span>Share Media & Files</span>
-                </div>
-                <div className="attach-menu-options">
-                  <button 
-                    className="attach-menu-item"
-                    onClick={() => openFilePicker('image/*,video/*')}
-                  >
-                    <div className="attach-icon-badge photos">
-                      <Image size={18} />
-                    </div>
-                    <div className="attach-item-text">
-                      <span className="attach-title">Photos & Videos</span>
-                      <span className="attach-desc">Share images or video clips</span>
-                    </div>
-                  </button>
-
-                  <button 
-                    className="attach-menu-item"
-                    onClick={() => openFilePicker('.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.tar,.gz,.csv,.json,.apk')}
-                  >
-                    <div className="attach-icon-badge document">
-                      <FileText size={18} />
-                    </div>
-                    <div className="attach-item-text">
-                      <span className="attach-title">Document</span>
-                      <span className="attach-desc">Share documents, PDFs, or archives</span>
-                    </div>
-                  </button>
-
-                  <button 
-                    className="attach-menu-item"
-                    onClick={() => openFilePicker('audio/*')}
-                  >
-                    <div className="attach-icon-badge audio">
-                      <Music size={18} />
-                    </div>
-                    <div className="attach-item-text">
-                      <span className="attach-title">Audio & Music</span>
-                      <span className="attach-desc">Share audio tracks or sound</span>
-                    </div>
-                  </button>
-
-                  <button 
-                    className="attach-menu-item"
-                    onClick={() => openFilePicker('image/*', 'environment')}
-                  >
-                    <div className="attach-icon-badge camera">
-                      <Camera size={18} />
-                    </div>
-                    <div className="attach-item-text">
-                      <span className="attach-title">Camera</span>
-                      <span className="attach-desc">Capture a photo or selfie</span>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <button 
-              ref={attachBtnRef}
-              className={`input-circle-btn attach-btn ${showAttachMenu ? 'active-menu' : ''}`}
-              onClick={toggleAttachMenu}
-              title={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
-              aria-label={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
-              disabled={isRecording || uploading}
-            >
-              <Plus size={20} strokeWidth={2.5} />
-            </button>
+        {/* Separated Pill-Style Input Controls or Removed Notice */}
+        {activeContact?.isRemoved ? (
+          <div className="chat-removed-banner glass">
+            <Ban size={16} style={{ color: '#f87171', flexShrink: 0 }} />
+            <span>You have been removed from this group</span>
           </div>
+        ) : (
+          <div className="chat-input-row">
+            <input
+              type="file"
+              id="file-input"
+              multiple
+              style={{ display: 'none' }}
+              onChange={handleFileSelect}
+            />
+
+            {/* 1. Left: Separated Media Attachment Pill Button */}
+            <div className={`input-action-pill-wrapper attach-pill-wrapper ${(isRecording && !recordingExitMode) ? 'is-hidden' : ''}`}>
+              {(showAttachMenu || isClosingAttachMenu) && !isRecording && (
+                <div ref={attachMenuRef} className={`attach-menu-popover glass ${isClosingAttachMenu ? 'is-closing' : ''}`}>
+                  <div className="attach-menu-header">
+                    <span>Share Media & Files</span>
+                  </div>
+                  <div className="attach-menu-options">
+                    <button 
+                      className="attach-menu-item"
+                      onClick={() => openFilePicker('image/*,video/*')}
+                    >
+                      <div className="attach-icon-badge photos">
+                        <Image size={18} />
+                      </div>
+                      <div className="attach-item-text">
+                        <span className="attach-title">Photos & Videos</span>
+                        <span className="attach-desc">Share images or video clips</span>
+                      </div>
+                    </button>
+
+                    <button 
+                      className="attach-menu-item"
+                      onClick={() => openFilePicker('.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.tar,.gz,.csv,.json,.apk')}
+                    >
+                      <div className="attach-icon-badge document">
+                        <FileText size={18} />
+                      </div>
+                      <div className="attach-item-text">
+                        <span className="attach-title">Document</span>
+                        <span className="attach-desc">Share documents, PDFs, or archives</span>
+                      </div>
+                    </button>
+
+                    <button 
+                      className="attach-menu-item"
+                      onClick={() => openFilePicker('audio/*')}
+                    >
+                      <div className="attach-icon-badge audio">
+                        <Music size={18} />
+                      </div>
+                      <div className="attach-item-text">
+                        <span className="attach-title">Audio & Music</span>
+                        <span className="attach-desc">Share audio tracks or sound</span>
+                      </div>
+                    </button>
+
+                    <button 
+                      className="attach-menu-item"
+                      onClick={() => openFilePicker('image/*', 'environment')}
+                    >
+                      <div className="attach-icon-badge camera">
+                        <Camera size={18} />
+                      </div>
+                      <div className="attach-item-text">
+                        <span className="attach-title">Camera</span>
+                        <span className="attach-desc">Capture a photo or selfie</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <button 
+                ref={attachBtnRef}
+                className={`input-circle-btn attach-btn ${showAttachMenu ? 'active-menu' : ''}`}
+                onClick={toggleAttachMenu}
+                title={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
+                aria-label={showAttachMenu ? "Cancel media sharing" : "Share media or files"}
+                disabled={isRecording || uploading}
+              >
+                <Plus size={20} strokeWidth={2.5} />
+              </button>
+            </div>
 
             {/* 2. Center: Dedicated Pill-Shaped Typing Bar */}
             <div className={`chat-input-pill ${(selectedFiles.length > 0 || replyingTo) ? 'with-preview' : ''} ${(isRecording && !recordingExitMode) ? 'is-recording-mode' : ''} glass`}>
@@ -3581,66 +3595,58 @@ const ChatArea = React.memo(function ChatArea({
               </div>
             )}
 
-          {/* 3. Right: Separated Action Pill Button (Mic / Send / Loading) */}
-          <div className="input-action-pill-wrapper">
-            {isSendingVoice ? (
-              <button 
-                className="input-circle-btn send-btn voice-sending-active" 
-                disabled 
-                title="Encrypting & sending voice note..."
-                aria-label="Encrypting & sending voice note..."
-              >
-                <Loader2 size={18} className="spinner-rotating" />
-              </button>
-            ) : uploading ? (
-              <button 
-                className="input-circle-btn send-btn uploading-active" 
-                disabled 
-                title="Encrypting & sending payload..."
-                aria-label="Encrypting & sending payload..."
-              >
-                <Loader2 size={18} className="spinner-rotating" />
-              </button>
-            ) : isRecording ? (
-              <button 
-                className={`input-circle-btn send-btn voice-send ${recordingExitMode === 'send' ? 'is-sending-blink' : ''}`}
-                onClick={() => stopRecording(true)} 
-                title="Stop and send voice note"
-                aria-label="Stop and send voice note"
-              >
-                <ArrowUp size={18} strokeWidth={2.5} />
-              </button>
-            ) : (inputText.trim() || selectedFiles.length > 0) ? (
-              <button 
-                className={`input-circle-btn send-btn send-active ${preparingFilesCount > 0 ? 'preparing-attachments' : ''}`} 
-                onPointerDown={(e) => {
-                  // Prevent focus transfer away from textarea to keep keyboard up
-                  e.preventDefault();
-                }}
-                onClick={() => {
-                  handleSendMessage();
-                }} 
-                disabled={(!inputText.trim() && selectedFiles.length === 0) || uploading || preparingFilesCount > 0}
-                title={preparingFilesCount > 0 ? 'Encrypting attachments...' : 'Send Encrypted Message'}
-                aria-label={preparingFilesCount > 0 ? 'Encrypting attachments...' : 'Send Encrypted Message'}
-              >
-                {preparingFilesCount > 0
-                  ? <Loader2 size={18} className="spinner-rotating" />
-                  : <ArrowUp size={18} strokeWidth={2.8} />}
-              </button>
-            ) : (
-              <button 
-                className="input-circle-btn mic-btn"
-                onClick={startRecording}
-                title="Record voice note"
-                aria-label="Record voice note"
-                disabled={uploading}
-              >
-                <Mic size={19} />
-              </button>
-            )}
+            {/* 3. Right: Voice Note Mic or Send Button Pill */}
+            <div className="input-action-pill-wrapper action-btn-pill-wrapper">
+              {uploading ? (
+                <button 
+                  className="input-circle-btn send-btn is-uploading-spin" 
+                  disabled 
+                  title="Encrypting & sending payload..."
+                  aria-label="Encrypting & sending payload..."
+                >
+                  <Loader2 size={18} className="spinner-rotating" />
+                </button>
+              ) : isRecording ? (
+                <button 
+                  className={`input-circle-btn send-btn voice-send ${recordingExitMode === 'send' ? 'is-sending-blink' : ''}`}
+                  onClick={() => stopRecording(true)} 
+                  title="Stop and send voice note"
+                  aria-label="Stop and send voice note"
+                >
+                  <ArrowUp size={18} strokeWidth={2.5} />
+                </button>
+              ) : (inputText.trim() || selectedFiles.length > 0) ? (
+                <button 
+                  className={`input-circle-btn send-btn send-active ${preparingFilesCount > 0 ? 'preparing-attachments' : ''}`} 
+                  onPointerDown={(e) => {
+                    // Prevent focus transfer away from textarea to keep keyboard up
+                    e.preventDefault();
+                  }}
+                  onClick={() => {
+                    handleSendMessage();
+                  }} 
+                  disabled={(!inputText.trim() && selectedFiles.length === 0) || uploading || preparingFilesCount > 0}
+                  title={preparingFilesCount > 0 ? 'Encrypting attachments...' : 'Send Encrypted Message'}
+                  aria-label={preparingFilesCount > 0 ? 'Encrypting attachments...' : 'Send Encrypted Message'}
+                >
+                  {preparingFilesCount > 0
+                    ? <Loader2 size={18} className="spinner-rotating" />
+                    : <ArrowUp size={18} strokeWidth={2.8} />}
+                </button>
+              ) : (
+                <button 
+                  className="input-circle-btn mic-btn"
+                  onClick={startRecording}
+                  title="Record voice note"
+                  aria-label="Record voice note"
+                  disabled={uploading}
+                >
+                  <Mic size={19} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {activeGalleryModal && (

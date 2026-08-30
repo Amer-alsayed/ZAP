@@ -394,19 +394,33 @@ export function useGroupManager({
       const locals = await Promise.all(serverGroups.map(payload => buildLocalGroup(payload)));
       setGroups(prev => {
         const byId = new Map(prev.map(g => [g.id, g]));
+        const serverIds = new Set(locals.map(l => l.id));
         const merged = locals.map(local => {
           const existing = byId.get(local.id);
           if (existing) {
             return {
               ...local,
+              isRemoved: false,
               messages: existing.messages,
               unreadCount: existing.unreadCount,
               lastReadId: Math.max(existing.lastReadId || 0, local.lastReadId || 0),
               typingUsers: existing.typingUsers
             };
           }
-          return local;
+          return { ...local, isRemoved: false };
         });
+
+        // Preserve groups where the user was previously kicked/removed
+        for (const [id, existingGroup] of byId.entries()) {
+          if (!serverIds.has(id)) {
+            merged.push({
+              ...existingGroup,
+              isRemoved: true,
+              typingUsers: []
+            });
+          }
+        }
+
         return merged;
       });
 
@@ -804,6 +818,9 @@ export function useGroupManager({
     const group = groupsRef.current.find(g => g.id === groupId);
     if (!group) throw new Error('Group not found');
 
+    const nameChanged = Boolean(name && name.trim() && name.trim() !== group.name);
+    const avatarChanged = avatarIcon !== group.avatarIcon;
+
     const groupKey = await fetchGroupKey(groupId, group.kv);
     const { nameEnc, avatarEnc } = await encryptGroupMeta(name, avatarIcon, groupKey);
 
@@ -817,7 +834,15 @@ export function useGroupManager({
     if (!ack || !ack.success) throw new Error(ack?.error || 'Failed to update group');
 
     patchGroup(groupId, g => ({ ...g, name, avatarIcon }));
-    await sendGroupSystemMessage(groupId, `${currentUser.displayName || currentUser.username} renamed the group to "${name}"`);
+
+    const actor = currentUser.displayName || currentUser.username;
+    if (nameChanged && avatarChanged) {
+      await sendGroupSystemMessage(groupId, `${actor} updated the group name and photo`);
+    } else if (nameChanged) {
+      await sendGroupSystemMessage(groupId, `${actor} renamed the group to "${name}"`);
+    } else if (avatarChanged) {
+      await sendGroupSystemMessage(groupId, `${actor} changed the group photo`);
+    }
   }, [currentUser, encryptGroupMeta, fetchGroupKey, patchGroup, sendGroupSystemMessage]);
 
   const handleSetMemberRole = useCallback(async (groupId, targetUsername, role) => {
@@ -863,11 +888,29 @@ export function useGroupManager({
         if (!payload || !payload.id) return;
         const local = await buildLocalGroup(payload);
         setGroups(prev => {
-          if (prev.some(g => g.id === local.id)) return prev;
-          return [...prev, local];
+          const exists = prev.find(g => g.id === local.id);
+          if (exists) {
+            return prev.map(g => g.id === local.id ? {
+              ...g,
+              ...local,
+              isRemoved: false,
+              messages: [
+                ...(g.messages || []),
+                {
+                  id: `sys_readded_${Date.now()}`,
+                  groupId: local.id,
+                  sender: 'System',
+                  mediaType: 'system',
+                  text: 'You were added back to the group.',
+                  timestamp: new Date().toISOString()
+                }
+              ]
+            } : g);
+          }
+          return [...prev, { ...local, isRemoved: false }];
         });
         await loadGroupHistory(local);
-        showToast?.(`You were added to "${local.name}".`, 'info', 'New Group');
+        showToast?.(`You were added to "${local.name}".`, 'info', 'Group');
       } catch (err) {
         console.error('Failed to process group-added event:', err);
       }
@@ -878,8 +921,20 @@ export function useGroupManager({
         const payload = eventData?.group || eventData;
         if (!payload || !payload.id) return;
         const updated = await buildLocalGroup(payload);
-        setGroups(prev => prev.map(g => (g.id === updated.id ? { ...g, ...updated, messages: g.messages, unreadCount: g.unreadCount } : g)));
-        setActiveGroup(prev => (prev && prev.id === updated.id ? { ...prev, ...updated, messages: prev.messages, unreadCount: prev.unreadCount } : prev));
+        setGroups(prev => prev.map(g => (g.id === updated.id ? {
+          ...g,
+          ...updated,
+          isRemoved: false,
+          messages: g.messages,
+          unreadCount: g.unreadCount
+        } : g)));
+        setActiveGroup(prev => (prev && prev.id === updated.id ? {
+          ...prev,
+          ...updated,
+          isRemoved: false,
+          messages: prev.messages,
+          unreadCount: prev.unreadCount
+        } : prev));
       } catch (err) {
         console.error('Failed to process group-sync event:', err);
       }
@@ -889,17 +944,25 @@ export function useGroupManager({
       const existing = groupsRef.current.find(g => g.id === groupId);
       const displayName = existing?.name || groupName || 'Group';
 
-      // Remove group from client state
-      setGroups(prev => prev.filter(g => g.id !== groupId));
-      setGroupInfoGroupId(null);
-
-      // If user is currently viewing this group, immediately return to main menu
-      if (activeGroupRef.current?.id === groupId) {
-        setActiveGroup(null);
-        activeGroupRef.current = null;
-        lastActiveGroupVmRef.current = null;
-        if (onBackToMenu) onBackToMenu();
-      }
+      // Keep group in local state with isRemoved: true and append system notice
+      patchGroup(groupId, g => {
+        const sysMsg = {
+          id: `sys_removed_${Date.now()}`,
+          groupId,
+          sender: removedBy || 'Admin',
+          mediaType: 'system',
+          text: `You were removed from the group by @${removedBy || 'an admin'}.`,
+          timestamp: new Date().toISOString()
+        };
+        const msgs = g.messages || [];
+        const alreadyHasSys = msgs.some(m => m.id === sysMsg.id || (m.mediaType === 'system' && m.text?.includes('You were removed')));
+        return {
+          ...g,
+          isRemoved: true,
+          typingUsers: [],
+          messages: alreadyHasSys ? msgs : [...msgs, sysMsg]
+        };
+      });
 
       // Invalidate cached group key
       delete groupKeysRef.current[groupId];
