@@ -16,7 +16,7 @@ Featuring encrypted messaging, WebRTC P2P voice/video calling, voice notes, and 
 <div align="center">
   <img src="docs/zap-showcase.gif" alt="ZAP Real-Time Product Tour" width="100%" style="border-radius: 12px;" />
   <br />
-  <sub><b>Interactive Showcase: E2EE Messaging, Emoji Reactions, Cryptographic Safety Verification, and Draggable WebRTC Picture-in-Picture Calls</b></sub>
+  <sub><b>Interactive Showcase: Zero-Knowledge E2EE Messaging, Animated GIF Sharing, Elastic Sidebar Transitions, Dynamic RGB Theming, & Safety Verification</b></sub>
 </div>
 
 <br />

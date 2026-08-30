@@ -35,8 +35,6 @@ async function recordTour() {
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-web-security',
-      '--use-fake-ui-for-media-stream',
-      '--use-fake-device-for-media-stream',
       '--window-size=1440,900',
       '--force-device-scale-factor=2'
     ],
@@ -132,38 +130,84 @@ async function recordTour() {
     // Scene 1: Real-Time Encrypted Typing & Send
     console.log('Scene 1: Encrypted Messaging...');
     const messageInput = await pageA.waitForSelector('textarea.message-textarea');
-    await messageInput.type('All messages & calls here are zero-knowledge end-to-end encrypted! ⚡', { delay: 30 });
+    await messageInput.type('All messages & media here are zero-knowledge end-to-end encrypted! ⚡', { delay: 30 });
     await new Promise(r => setTimeout(r, 400));
     await pageA.keyboard.press('Enter');
     await new Promise(r => setTimeout(r, 1200));
 
-    // Scene 2: Apple Emoji Picker & Reaction
-    console.log('Scene 2: Apple Emoji Picker...');
+    // Scene 2: Apple Emoji Picker & Sending Animated GIF
+    console.log('Scene 2: Emoji Picker & Sending GIF...');
     const emojiBtn = await pageA.$('.input-emoji-btn');
     if (emojiBtn) {
       await emojiBtn.click();
       await new Promise(r => setTimeout(r, 800));
 
-      const emojiButtons = await pageA.$$('.apple-emoji-grid button, .emoji-item, .apple-emoji-item');
-      if (emojiButtons.length > 5) {
-        await emojiButtons[2].click();
-        await new Promise(r => setTimeout(r, 250));
-        await emojiButtons[4].click();
-        await new Promise(r => setTimeout(r, 250));
-        await emojiButtons[6].click();
-        await new Promise(r => setTimeout(r, 250));
+      // Click on GIF tab
+      const gifTabBtn = await pageA.evaluateHandle(() => {
+        const btns = Array.from(document.querySelectorAll('.expression-control-btn'));
+        return btns.find(b => b.textContent.includes('GIFs')) || null;
+      });
+
+      if (gifTabBtn && gifTabBtn.asElement()) {
+        await gifTabBtn.asElement().click();
+        await new Promise(r => setTimeout(r, 1200));
+
+        // Click a GIF in the masonry grid
+        const gifItems = await pageA.$$('.gif-grid-item');
+        if (gifItems.length > 0) {
+          await gifItems[0].click();
+          await new Promise(r => setTimeout(r, 1500));
+        }
       }
+    }
 
-      await new Promise(r => setTimeout(r, 600));
-      await emojiBtn.click(); // close picker
-      await new Promise(r => setTimeout(r, 600));
-
-      await pageA.keyboard.press('Enter');
+    // Scene 3: Fluid Sidebar Collapse & Expand Animation
+    console.log('Scene 3: Sidebar Minimize & Expand...');
+    const minimizeSidebarBtn = await pageA.$('.minimize-btn');
+    if (minimizeSidebarBtn) {
+      await minimizeSidebarBtn.click();
+      await new Promise(r => setTimeout(r, 1000));
+      await minimizeSidebarBtn.click();
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    // Scene 3: E2EE Safety Number Verification Modal
-    console.log('Scene 3: Cryptographic Fingerprint Verification...');
+    // Scene 4: App Theme & RGB Accent Customization in Settings
+    console.log('Scene 4: Theme & Accent Color Customization...');
+    const settingsBtn = await pageA.$('.sidebar-settings-btn');
+    if (settingsBtn) {
+      await settingsBtn.click();
+      await new Promise(r => setTimeout(r, 1200));
+
+      // Cycle through custom accent color dots
+      const colorDots = await pageA.$$('.color-dot');
+      if (colorDots.length >= 6) {
+        // Royal Violet
+        await colorDots[1].click();
+        await new Promise(r => setTimeout(r, 600));
+
+        // Neon Emerald
+        await colorDots[3].click();
+        await new Promise(r => setTimeout(r, 600));
+
+        // Cyan Spark
+        await colorDots[5].click();
+        await new Promise(r => setTimeout(r, 600));
+
+        // Bright Orange
+        await colorDots[7] ? await colorDots[7].click() : await colorDots[0].click();
+        await new Promise(r => setTimeout(r, 800));
+      }
+
+      // Return back to chat
+      const backBtn = await pageA.$('.settings-header .back-btn, .back-btn');
+      if (backBtn) {
+        await backBtn.click();
+        await new Promise(r => setTimeout(r, 1200));
+      }
+    }
+
+    // Scene 5: Cryptographic Safety Fingerprint Verification Modal
+    console.log('Scene 5: E2EE Safety Number Verification...');
     const safetyBtn = await pageA.$('.safety-number-btn');
     if (safetyBtn) {
       await safetyBtn.click();
@@ -180,86 +224,7 @@ async function recordTour() {
       const closeBtn = await pageA.$('.safety-close-btn');
       if (closeBtn) {
         await closeBtn.click();
-        await new Promise(r => setTimeout(r, 800));
-      }
-    }
-
-    // Scene 4: WebRTC Video Call & Picture-in-Picture (PiP) Dragging
-    console.log('Scene 4: WebRTC P2P Video Call & Picture-in-Picture Dragging...');
-    const videoCallBtn = await pageA.$('button[title*="Video Call"], button[aria-label*="Video Call"]');
-    if (videoCallBtn) {
-      await videoCallBtn.click();
-      await new Promise(r => setTimeout(r, 1500));
-
-      // Bob accepts call in Context B
-      await pageB.waitForSelector('.pill-btn.accept, button[title*="Accept"]', { timeout: 8000 });
-      const acceptBtn = await pageB.$('.pill-btn.accept, button[title*="Accept"]');
-      if (acceptBtn) {
-        await acceptBtn.click();
-      }
-
-      await new Promise(r => setTimeout(r, 2500));
-
-      // Alice minimizes call to PiP mode
-      console.log('Minimizing call to floating PiP window...');
-      const minimizeBtn = await pageA.$('.call-btn.minimize, button[title*="Minimize"]');
-      if (minimizeBtn) {
-        await minimizeBtn.click();
-        await new Promise(r => setTimeout(r, 1500));
-
-        // Drag floating PiP window across screen
-        console.log('Dragging PiP window across screen...');
-        const pipOverlay = await pageA.$('.call-overlay.pip-mode');
-        if (pipOverlay) {
-          const box = await pipOverlay.boundingBox();
-          if (box) {
-            const startX = box.x + box.width / 2;
-            const startY = box.y + box.height / 2;
-
-            await pageA.mouse.move(startX, startY);
-            await pageA.mouse.down();
-            await new Promise(r => setTimeout(r, 80));
-
-            // Smooth drag to top-left area
-            for (let i = 0; i <= 25; i++) {
-              const curX = startX - (startX - 340) * (i / 25);
-              const curY = startY - (startY - 140) * (i / 25);
-              await pageA.mouse.move(curX, curY);
-              await new Promise(r => setTimeout(r, 20));
-            }
-            await pageA.mouse.up();
-            await new Promise(r => setTimeout(r, 800));
-
-            // Type while floating call is active
-            await messageInput.type('Multitasking seamlessly with movable PiP calls! 🚀', { delay: 30 });
-            await pageA.keyboard.press('Enter');
-            await new Promise(r => setTimeout(r, 1200));
-
-            // Drag PiP back to bottom-right
-            const newBox = await pipOverlay.boundingBox();
-            if (newBox) {
-              const nX = newBox.x + newBox.width / 2;
-              const nY = newBox.y + newBox.height / 2;
-              await pageA.mouse.move(nX, nY);
-              await pageA.mouse.down();
-              for (let i = 0; i <= 25; i++) {
-                const curX = nX + (1120 - nX) * (i / 25);
-                const curY = nY + (540 - nY) * (i / 25);
-                await pageA.mouse.move(curX, curY);
-                await new Promise(r => setTimeout(r, 20));
-              }
-              await pageA.mouse.up();
-              await new Promise(r => setTimeout(r, 1000));
-            }
-          }
-        }
-
-        // End Call
-        const endCallBtn = await pageA.$('.call-btn.decline, button[title*="Cancel Call"], button[title*="End Call"]');
-        if (endCallBtn) {
-          await endCallBtn.click();
-          await new Promise(r => setTimeout(r, 1200));
-        }
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
 
@@ -275,7 +240,7 @@ async function recordTour() {
     await runFfmpeg([
       '-y',
       '-i', rawVideoPath,
-      '-vf', 'fps=12,scale=800:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=96:stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3',
+      '-vf', 'fps=14,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=112:stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3',
       optimizedGifPath
     ]);
     console.log('SUCCESS: Generated animated GIF ->', optimizedGifPath);
