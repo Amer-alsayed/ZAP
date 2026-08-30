@@ -381,23 +381,30 @@ const Sidebar = React.memo(function Sidebar({
   const unifiedEntries = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    const lastTimeOf = (messages) => {
-      if (!messages || messages.length === 0) return 0;
-      const ts = new Date(messages[messages.length - 1].timestamp).getTime();
-      return isNaN(ts) ? 0 : ts;
+    const lastTimeOf = (item) => {
+      const messages = item.messages;
+      if (messages && messages.length > 0) {
+        const ts = new Date(messages[messages.length - 1].timestamp).getTime();
+        if (!isNaN(ts)) return ts;
+      }
+      if (item.lastMessage?.timestamp) {
+        const ts = new Date(item.lastMessage.timestamp).getTime();
+        if (!isNaN(ts)) return ts;
+      }
+      return 0;
     };
 
     const contactEntries = contacts.map(c => ({
       kind: 'contact',
       key: `c_${c.username}`,
-      sortTime: lastTimeOf(c.messages),
+      sortTime: lastTimeOf(c),
       contact: c
     }));
 
     const groupEntries = groups.map(g => ({
       kind: 'group',
       key: `g_${g.id}`,
-      sortTime: lastTimeOf(g.messages),
+      sortTime: lastTimeOf(g),
       group: g
     }));
 
@@ -955,7 +962,7 @@ const Sidebar = React.memo(function Sidebar({
               const isSelected = !isNavigatingBack && activeContact?.username === contact.username;
               const lastMsg = contact.messages && contact.messages.length > 0 
                 ? contact.messages[contact.messages.length - 1]
-                : null;
+                : (contact.lastMessage || null);
 
               return (
                 <div

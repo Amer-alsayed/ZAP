@@ -179,14 +179,18 @@ ZAP provides a complete, hardened communications suite that is **100% free to ho
 
 ## Automated Verification & Testing
 
-ZAP includes a standalone cryptographic verification test suite that executes all key derivation, PFS ratcheting, AAD anti-tampering, deniable authentication, and backward compatibility tests locally using the native Web Crypto API:
+ZAP includes automated suites for both cryptographic security invariants and live multi-client WebSocket integration:
 
 ```bash
-# Run the automated cryptographic test suite
-npm run test:crypto
+# Run all tests (crypto invariants + multi-client E2E integration)
+npm test
+
+# Run individual test suites
+npm run test:crypto       # 10/10 Cryptographic security invariants
+npm run test:integration  # 20/20 Multi-client live socket & E2EE exchanges
 ```
 
-Output:
+### Cryptographic Security Invariant Suite (`npm run test:crypto`)
 ```text
 ================================================================
    ZAP PROTOCOL: AUTOMATED CRYPTOGRAPHIC VERIFICATION SUITE   
@@ -201,9 +205,42 @@ Output:
 [PASS] AES-256-GCM AAD: Context Envelope Binding Blocks Spoofing and Re-routing Attacks
 [PASS] Deniable HMAC-SHA256: Session Message Authenticity Without Third-Party Non-Repudiation
 [PASS] High-Throughput Burst: 50 Rapid Consecutive Encryptions with Unique 96-bit IVs
+[PASS] Safety Numbers: Commutative SHA-256 20-Digit Fingerprint Verification (MITM Defense)
 
 ================================================================
-  ALL 9 / 9 CRYPTOGRAPHIC INVARIANTS VERIFIED SUCCESSFULLY (100%)  
+  ALL 10 / 10 CRYPTOGRAPHIC INVARIANTS VERIFIED SUCCESSFULLY (100%)  
+================================================================
+```
+
+### Multi-Client E2E Integration Suite (`npm run test:integration`)
+```text
+================================================================
+   ZAP PROTOCOL: MULTI-CLIENT END-TO-END INTEGRATION SUITE     
+================================================================
+
+[PASS] Test 1a: Alice registered and received JWT
+[PASS] Test 1b: Bob registered and received JWT
+[PASS] Test 2: Alice and Bob connected to WebSocket server with JWT
+[PASS] Test 3: Alice queried Bob status and received "online"
+[PASS] Test 4a: Server acknowledged Alice send-message with messageId
+[PASS] Test 4b: Bob received exact ciphertext payload
+[PASS] Test 4c: Bob verified Deniable HMAC-SHA256 authentication tag
+[PASS] Test 4d: Bob verified ECDSA P-256 digital signature
+[PASS] Test 4e: Bob successfully decrypted plaintext matching Alice input
+[PASS] Test 5: Alice received real-time messages-read receipt from Bob
+[PASS] Test 6: Alice and Bob computed identical 20-digit commutative Safety Numbers
+[PASS] Test 7a: Group created on server with versioned key envelope
+[PASS] Test 7b: Bob received group-added socket event
+[PASS] Test 7c: Bob unsealed key envelope and decrypted group title
+[PASS] Test 7d: Bob received and decrypted group message broadcast
+[PASS] Test 8a: Bob received call-made offer from Alice
+[PASS] Test 8b: Alice received answer-made SDP from Bob
+[PASS] Test 8c: Bob received call-ended event on hangup
+[PASS] Test 9a: Alice successfully blocked Bob
+[PASS] Test 9b: Bob queries Alice status and receives "offline" due to block isolation
+
+================================================================
+  ALL 20 / 20 INTEGRATION TESTS PASSED SUCCESSFULLY (100%)  
 ================================================================
 ```
 

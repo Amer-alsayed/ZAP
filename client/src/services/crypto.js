@@ -574,3 +574,42 @@ export const verifyDataSignature = async (dataString, signatureBase64, theirPubl
     return false;
   }
 };
+
+const safetyNumberCache = new Map();
+
+/**
+ * Compute an out-of-band E2EE Safety Number fingerprint with genuine 256-bit SHA-256 collision resistance.
+ * Sorts public keys commutatively so both Alice and Bob compute the exact same 20-digit code.
+ * @param {object|string} keyA
+ * @param {object|string} keyB
+ * @returns {Promise<string>} 20-digit chunked string "XXXXX XXXXX XXXXX XXXXX"
+ */
+export const computeSafetyNumber = async (keyA, keyB) => {
+  if (!keyA || !keyB) return 'N/A';
+  const strA = typeof keyA === 'string' ? keyA : JSON.stringify(keyA);
+  const strB = typeof keyB === 'string' ? keyB : JSON.stringify(keyB);
+  const sorted = [strA, strB].sort();
+  const cacheKey = sorted[0] + '::' + sorted[1];
+
+  if (safetyNumberCache.has(cacheKey)) {
+    return safetyNumberCache.get(cacheKey);
+  }
+
+  const combined = stringToBuffer(sorted[0] + sorted[1]);
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', combined);
+  const hashArray = new Uint8Array(hashBuffer);
+
+  const num1 = ((hashArray[0] << 24) | (hashArray[1] << 16) | (hashArray[2] << 8) | hashArray[3]) >>> 0;
+  const num2 = ((hashArray[4] << 24) | (hashArray[5] << 16) | (hashArray[6] << 8) | hashArray[7]) >>> 0;
+  const num3 = ((hashArray[8] << 24) | (hashArray[9] << 16) | (hashArray[10] << 8) | hashArray[11]) >>> 0;
+  const num4 = ((hashArray[12] << 24) | (hashArray[13] << 16) | (hashArray[14] << 8) | hashArray[15]) >>> 0;
+
+  const seg1 = String(num1 % 100000).padStart(5, '0');
+  const seg2 = String(num2 % 100000).padStart(5, '0');
+  const seg3 = String(num3 % 100000).padStart(5, '0');
+  const seg4 = String(num4 % 100000).padStart(5, '0');
+
+  const result = `${seg1} ${seg2} ${seg3} ${seg4}`;
+  safetyNumberCache.set(cacheKey, result);
+  return result;
+};

@@ -1,21 +1,22 @@
-﻿name: CI / Security Invariant Tests
+name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
-  test-and-build:
-    name: Node ${{ matrix.node-version }} - Crypto Tests & Build
+  verify:
+    name: Security Invariants & Integration Test Suite
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
-        node-version: [20.x, 22.x]
+        node-version: [20.x, 22.x, 24.x]
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js ${{ matrix.node-version }}
@@ -29,11 +30,11 @@ jobs:
           npm install --prefix server
           npm install --prefix client --include=dev --legacy-peer-deps
 
-      - name: Run Cryptographic Invariant Verification
+      - name: Verify Cryptographic Security Invariants (10/10)
         run: npm run test:crypto
 
-      - name: Build Client Production Bundle
-        run: npm run build --prefix client
+      - name: Verify Multi-Client E2E Integration Suite (20/20)
+        run: npm run test:integration
 
-      - name: Server Configuration Validation
-        run: node -e "import('./server/src/config.js').then(() => console.log('✓ Server config valid.'));"
+      - name: Verify Client Production Build
+        run: npm run build --prefix client

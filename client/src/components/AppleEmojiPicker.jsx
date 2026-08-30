@@ -7,6 +7,57 @@ const RECENT_EMOJIS_KEY = 'chatra_frequent_emojis';
 const MAX_RECENT_EMOJIS = 14; // Exactly 2 clean rows of 7 emojis (Apple iOS standard)
 const DEFAULT_RECENT_EMOJIS = ['😂', '❤️', '🔥', '👍', '🙏', '😊', '😍', '✨', '🥺', '🎉', '👏', '🤣', '🥰', '💯'];
 
+const EMOJI_KEYWORDS = {
+  '🔥': ['fire', 'flame', 'lit', 'hot'],
+  '😂': ['joy', 'laugh', 'crying', 'funny', 'tears', 'lol', 'haha'],
+  '❤️': ['heart', 'love', 'red'],
+  '👍': ['thumbs up', 'like', 'agree', 'approve', 'yes', 'good'],
+  '🙏': ['pray', 'please', 'thanks', 'thank you', 'namaste', 'hope'],
+  '😊': ['smile', 'happy', 'blush', 'pleased'],
+  '😍': ['heart eyes', 'love', 'adore', 'crush'],
+  '✨': ['sparkles', 'stars', 'magic', 'shine', 'clean'],
+  '🥺': ['pleading', 'puppy eyes', 'beg', 'cute'],
+  '🎉': ['party', 'celebration', 'tada', 'congrats'],
+  '👏': ['clap', 'applause', 'bravo', 'hands'],
+  '🤣': ['rofl', 'laugh', 'rolling', 'funny', 'haha'],
+  '🥰': ['hearts', 'love', 'warm', 'affection'],
+  '💯': ['100', 'hundred', 'score', 'perfect'],
+  '😀': ['grinning', 'smile', 'happy'],
+  '😃': ['happy', 'smiley', 'big smile'],
+  '😄': ['smile', 'laugh', 'joy'],
+  '😁': ['beam', 'grin', 'teeth'],
+  '😆': ['laughing', 'closed eyes', 'satisfied'],
+  '😅': ['sweat smile', 'relief', 'nervous'],
+  '🙂': ['slight smile', 'fine', 'ok'],
+  '😉': ['wink', 'flirt', 'joke'],
+  '😇': ['innocent', 'angel', 'halo'],
+  '🤩': ['star struck', 'excited', 'wow'],
+  '😘': ['kiss', 'blow kiss', 'love'],
+  '😋': ['yum', 'delicious', 'tasty', 'silly'],
+  '😎': ['cool', 'sunglasses', 'awesome'],
+  '🤔': ['thinking', 'wonder', 'hmm'],
+  '😴': ['sleeping', 'tired', 'sleep', 'zzz'],
+  '😭': ['sob', 'crying', 'sad', 'tears'],
+  '😡': ['angry', 'mad', 'furious'],
+  '💩': ['poop', 'poo', 'crap'],
+  '👻': ['ghost', 'halloween', 'spooky'],
+  '💀': ['skull', 'dead', 'skeleton', 'death'],
+  '🐶': ['dog', 'puppy', 'pet'],
+  '🐱': ['cat', 'kitty', 'pet'],
+  '🚀': ['rocket', 'space', 'launch', 'fast'],
+  '⭐': ['star', 'favorite'],
+  '🌟': ['glowing star', 'shine', 'sparkle'],
+  '🍕': ['pizza', 'food', 'cheese'],
+  '🍔': ['burger', 'hamburger', 'fast food'],
+  '☕️': ['coffee', 'tea', 'cafe', 'drink'],
+  '🍺': ['beer', 'drink', 'cheers'],
+  '⚽️': ['soccer', 'football', 'ball', 'sport'],
+  '🎮': ['game', 'controller', 'video game', 'gaming'],
+  '🚗': ['car', 'drive', 'auto', 'vehicle'],
+  '✈️': ['airplane', 'plane', 'flight', 'travel'],
+  '📱': ['phone', 'mobile', 'iphone', 'cell']
+};
+
 export const EMOJI_CATEGORIES = [
   {
     id: 'smileys',
@@ -336,12 +387,19 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({
     }
     const query = searchQuery.trim().toLowerCase();
     return EMOJI_CATEGORIES.map(cat => {
-      if (cat.name.toLowerCase().includes(query)) {
-        return cat;
-      }
+      const isCatMatch = cat.name.toLowerCase().includes(query);
+      if (isCatMatch) return cat;
+
+      const matchingEmojis = cat.emojis.filter(e => {
+        if (e.includes(query)) return true;
+        const keywords = EMOJI_KEYWORDS[e];
+        if (keywords && keywords.some(k => k.toLowerCase().includes(query))) return true;
+        return false;
+      });
+
       return {
         ...cat,
-        emojis: cat.emojis.filter(e => e.includes(query))
+        emojis: matchingEmojis
       };
     }).filter(cat => cat.emojis.length > 0);
   }, [searchQuery, allCategoriesWithRecents, renderedCategoryCount]);

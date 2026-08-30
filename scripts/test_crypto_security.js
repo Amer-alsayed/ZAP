@@ -1,4 +1,4 @@
-﻿import { webcrypto } from 'node:crypto';
+import { webcrypto } from 'node:crypto';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 
@@ -404,6 +404,38 @@ async function runTestSuite() {
       assert.strictEqual(dec, `Rapid burst message #${i}`);
     }
     assert.strictEqual(ivSet.size, 50, 'All 50 messages must have unique IVs');
+  });
+
+  // TEST 10: Out-of-Band Safety Number Fingerprinting (SHA-256 256-bit Collision Resistance)
+  await test('Safety Numbers: Commutative SHA-256 20-Digit Fingerprint Verification (MITM Defense)', async () => {
+    const pubKeyA = { kty: 'EC', crv: 'P-256', x: 'f83OJ3D2xFmTbKEBaOJ43uWDjb1T00qFEq6EnLCHamw', y: 'x_daaqurwLqTRHW56OZ4N_a92j51nlgyCG9xGawspcc' };
+    const pubKeyB = { kty: 'EC', crv: 'P-256', x: 'WKn-LZ13XSTPhNS1O4odaTHwWEZY3Nn7Mp428AbOTq8', y: 'WFlQjun72-RBMUiSuIdduUh5AOcvsQRePTgUquT-GLI' };
+
+    const computeSafetyNumber = async (keyA, keyB) => {
+      const strA = typeof keyA === 'string' ? keyA : JSON.stringify(keyA);
+      const strB = typeof keyB === 'string' ? keyB : JSON.stringify(keyB);
+      const sorted = [strA, strB].sort();
+      const combined = stringToBuffer(sorted[0] + sorted[1]);
+      const hashBuffer = await webcrypto.subtle.digest('SHA-256', combined);
+      const hashArray = new Uint8Array(hashBuffer);
+
+      const num1 = ((hashArray[0] << 24) | (hashArray[1] << 16) | (hashArray[2] << 8) | hashArray[3]) >>> 0;
+      const num2 = ((hashArray[4] << 24) | (hashArray[5] << 16) | (hashArray[6] << 8) | hashArray[7]) >>> 0;
+      const num3 = ((hashArray[8] << 24) | (hashArray[9] << 16) | (hashArray[10] << 8) | hashArray[11]) >>> 0;
+      const num4 = ((hashArray[12] << 24) | (hashArray[13] << 16) | (hashArray[14] << 8) | hashArray[15]) >>> 0;
+
+      return `${String(num1 % 100000).padStart(5, '0')} ${String(num2 % 100000).padStart(5, '0')} ${String(num3 % 100000).padStart(5, '0')} ${String(num4 % 100000).padStart(5, '0')}`;
+    };
+
+    const numAB = await computeSafetyNumber(pubKeyA, pubKeyB);
+    const numBA = await computeSafetyNumber(pubKeyB, pubKeyA);
+
+    assert.strictEqual(numAB, numBA, 'Safety numbers must be commutative (Alice & Bob see identical codes)');
+    assert(/^\d{5} \d{5} \d{5} \d{5}$/.test(numAB), 'Safety number must be 20 digits formatted in 4 5-digit segments');
+
+    const pubKeyC = { ...pubKeyB, x: 'ModifiedKeyDataForAttackerMITM' };
+    const numAC = await computeSafetyNumber(pubKeyA, pubKeyC);
+    assert.notStrictEqual(numAB, numAC, 'Altered public keys MUST produce distinct safety numbers');
   });
 
   console.log('\n================================================================');

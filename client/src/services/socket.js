@@ -2,6 +2,7 @@ import { io } from 'socket.io-client';
 import { BASE_URL } from './api.js';
 
 let socket = null;
+const eventListeners = new Map(); // eventName -> Set of functions
 
 /**
  * Connect to the Socket.io server with the user JWT token.
@@ -21,6 +22,13 @@ export const connectSocket = (token) => {
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000
   });
+
+  // Re-attach all registered listeners across reconnects
+  for (const [event, cbs] of eventListeners.entries()) {
+    for (const cb of cbs) {
+      socket.on(event, cb);
+    }
+  }
 
   socket.on('connect', () => {
     console.log('Connected to chat server (Socket ID:', socket.id, ')');
@@ -47,10 +55,59 @@ export const disconnectSocket = () => {
   }
 };
 
+const socketProxy = {
+  get connected() {
+    return Boolean(socket?.connected);
+  },
+  get id() {
+    return socket?.id || null;
+  },
+  on(event, callback) {
+    if (!eventListeners.has(event)) {
+      eventListeners.set(event, new Set());
+    }
+    eventListeners.get(event).add(callback);
+    if (socket) {
+      socket.on(event, callback);
+    }
+    return socketProxy;
+  },
+  off(event, callback) {
+    if (eventListeners.has(event)) {
+      eventListeners.get(event).delete(callback);
+    }
+    if (socket) {
+      socket.off(event, callback);
+    }
+    return socketProxy;
+  },
+  once(event, callback) {
+    if (socket) {
+      socket.once(event, callback);
+    } else {
+      const wrapped = (...args) => {
+        socketProxy.off(event, wrapped);
+        callback(...args);
+      };
+      socketProxy.on(event, wrapped);
+    }
+    return socketProxy;
+  },
+  emit(event, ...args) {
+    if (socket) {
+      return socket.emit(event, ...args);
+    }
+    return false;
+  },
+  disconnect() {
+    disconnectSocket();
+  }
+};
+
 /**
- * Get active socket instance.
+ * Get active socket instance or proxy.
  */
-export const getSocket = () => socket;
+export const getSocket = () => socketProxy;
 
 /**
  * Helper to wrap socket emit callback in a promise with connection waiting & timeout guard.
@@ -171,23 +228,19 @@ export const emitMarkAsRead = (sender) => {
 // ==========================================
 
 export const subscribeToMessages = (callback) => {
-  if (!socket) return;
-  socket.on('receive-message', callback);
+  socketProxy.on('receive-message', callback);
 };
 
 export const unsubscribeFromMessages = (callback) => {
-  if (!socket) return;
-  socket.off('receive-message', callback);
+  socketProxy.off('receive-message', callback);
 };
 
 export const subscribeToUserStatus = (callback) => {
-  if (!socket) return;
-  socket.on('user-status', callback);
+  socketProxy.on('user-status', callback);
 };
 
 export const unsubscribeFromUserStatus = (callback) => {
-  if (!socket) return;
-  socket.off('user-status', callback);
+  socketProxy.off('user-status', callback);
 };
 
 /**
@@ -281,11 +334,9 @@ export const emitGroupCallState = (groupId, state) => {
  * Listen for realtime profile changes from other users.
  */
 export const subscribeToProfileUpdates = (callback) => {
-  if (!socket) return;
-  socket.on('user-profile-updated', callback);
+  socketProxy.on('user-profile-updated', callback);
 };
 
 export const unsubscribeFromProfileUpdates = (callback) => {
-  if (!socket) return;
-  socket.off('user-profile-updated', callback);
+  socketProxy.off('user-profile-updated', callback);
 };
