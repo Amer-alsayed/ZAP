@@ -186,20 +186,21 @@ npm run test:crypto
 
 Output:
 ```text
-1. Testing Random Salt Generation & PBKDF2 Isolation...
-✓ PASS: Random salts isolate hashes; legacy accounts remain backward-compatible.
+================================================================
+   ZAP PROTOCOL: AUTOMATED CRYPTOGRAPHIC VERIFICATION SUITE   
+================================================================
 
-2. Testing ECDH Key Exchange...
-✓ PASS: ECDH P-256 shared secret derivation validated.
+[PASS] NIST SP 800-132: 100 Unique CSPRNG Salts Generated with 0 Collisions
+[PASS] Anti-Enumeration Oracle: Constant-Time Deterministic Pseudo-Salts for Unknown Users
+[PASS] PBKDF2-HMAC-SHA256: 600,000 Iteration Key Derivation & Backward Compatibility
+[PASS] ECDH P-256: Shared Secret Key Agreement Between Two Independent Peers
+[PASS] AES-256-GCM AAD: Context Envelope Binding Blocks Spoofing and Re-routing Attacks
+[PASS] Deniable HMAC-SHA256: Session Message Authenticity Without Third-Party Non-Repudiation
+[PASS] High-Throughput Burst: 50 Rapid Consecutive Encryptions with Unique 96-bit IVs
 
-3. Testing AES-GCM AAD Context Binding & Anti-Tampering...
-✓ PASS: AAD context binding mathematically prevents context tampering and re-routing attacks.
-
-4. Testing Deniable Authentication with HMAC-SHA256...
-✓ PASS: Deniable HMAC authentication verified with anti-tampering protection.
-
-5. Testing Legacy Message Fallback (Messages without AAD)...
-✓ PASS: Legacy messages without AAD decrypt smoothly with zero breaking changes.
+================================================================
+  ALL 7 / 7 CRYPTOGRAPHIC INVARIANTS VERIFIED SUCCESSFULLY (100%)  
+================================================================
 ```
 
 ---
@@ -381,7 +382,8 @@ npm run dev
 | Method | Route | Auth | Rate Limit | Purpose |
 | :--- | :--- | :---: | :---: | :--- |
 | `GET` | `/health` | None | General (500/15m) | Liveness probe and database connectivity verification. |
-| `POST` | `/api/auth/register` | None | Auth (30/15m) | Registers user with public keys and encrypted key bundle. |
+| `GET` | `/api/auth/salt/:username` | None | Auth (30/15m) | Retrieves user CSPRNG salt or constant-time deterministic pseudo-salt for anti-enumeration. |
+| `POST` | `/api/auth/register` | None | Auth (30/15m) | Registers user with CSPRNG salt, public keys, and encrypted key bundle. |
 | `POST` | `/api/auth/login` | None | Auth (30/15m) | Authenticates login hash, returns JWT and user key bundle. |
 | `GET` | `/api/auth/search` | JWT | General (500/15m) | Queries users by username prefix. |
 | `POST` | `/api/upload` | JWT | Upload (300/15m) | Uploads client-encrypted binary payload (max 50MB). |
@@ -392,8 +394,8 @@ npm run dev
 | Channel | Event | Payload Direction | Description |
 | :--- | :--- | :---: | :--- |
 | **Auth** | `connection` | Client $\rightarrow$ Server | Authenticates connection via handshake JWT token. |
-| **Messaging** | `send-message` | Client $\rightarrow$ Server | Dispatches `{ recipient, ciphertext, iv, signature }`. |
-| | `receive-message` | Server $\rightarrow$ Client | Delivers ciphertext envelope to recipient socket. |
+| **Messaging** | `send-message` | Client $\rightarrow$ Server | Dispatches `{ recipient, ciphertext, iv, aad, authTag, signature }`. |
+| | `receive-message` | Server $\rightarrow$ Client | Delivers authenticated AEAD ciphertext envelope to recipient socket. |
 | | `message-delivered` | Server $\rightarrow$ Client | Confirms message delivery receipt (`✓✓`). |
 | | `message-read` | Client $\leftrightarrow$ Server | Signals read receipts and updates blue tick status. |
 | | `message-edit` | Client $\leftrightarrow$ Server | Propagates edited ciphertext to conversation participants. |
