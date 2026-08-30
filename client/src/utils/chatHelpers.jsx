@@ -448,17 +448,16 @@ export const readBlobBufferSafely = async (blob) => {
   if (blob._preloadedBuffer && blob._preloadedBuffer.byteLength > 0) {
     return blob._preloadedBuffer;
   }
+
+  // Tier 1: Direct blob.arrayBuffer()
   if (typeof blob.arrayBuffer === 'function') {
     try {
       const buf = await blob.arrayBuffer();
       if (buf && buf.byteLength > 0) return buf;
     } catch (e) {}
   }
-  try {
-    const res = new Response(blob);
-    const buf = await res.arrayBuffer();
-    if (buf && buf.byteLength > 0) return buf;
-  } catch (e) {}
+
+  // Tier 2: blob.slice().arrayBuffer()
   try {
     const sliced = blob.slice(0, blob.size, blob.type);
     if (typeof sliced.arrayBuffer === 'function') {
@@ -466,16 +465,117 @@ export const readBlobBufferSafely = async (blob) => {
       if (buf && buf.byteLength > 0) return buf;
     }
   } catch (e) {}
-  return new Promise((resolve) => {
+
+  // Tier 3: Response(blob).arrayBuffer()
+  try {
+    const res = new Response(blob);
+    const buf = await res.arrayBuffer();
+    if (buf && buf.byteLength > 0) return buf;
+  } catch (e) {}
+
+  // Tier 4: FileReader.readAsArrayBuffer
+  const frBuf = await new Promise((resolve) => {
     try {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result || new ArrayBuffer(0));
-      reader.onerror = () => resolve(new ArrayBuffer(0));
+      reader.onload = () => {
+        if (reader.result && reader.result.byteLength > 0) {
+          resolve(reader.result);
+        } else {
+          resolve(null);
+        }
+      };
+      reader.onerror = () => resolve(null);
       reader.readAsArrayBuffer(blob);
     } catch (e) {
-      resolve(new ArrayBuffer(0));
+      resolve(null);
     }
   });
+  if (frBuf && frBuf.byteLength > 0) return frBuf;
+
+  // Tier 5: FileReader.readAsDataURL (Resilient on Android WebViews)
+  const dataUrlBuf = await new Promise((resolve) => {
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const res = String(reader.result || '');
+          const commaIdx = res.indexOf(',');
+          if (commaIdx !== -1) {
+            const b64 = res.substring(commaIdx + 1);
+            const binary = atob(b64);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            resolve(bytes.buffer);
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          resolve(null);
+        }
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+  if (dataUrlBuf && dataUrlBuf.byteLength > 0) return dataUrlBuf;
+
+  // Tier 6: Image Canvas Re-encode for photos on Android
+  const mime = inferMimeType(blob.name || '', blob.type || '');
+  if (mime.startsWith('image/')) {
+    const canvasBuf = await new Promise((resolve) => {
+      let objUrl = null;
+      try {
+        objUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              if (objUrl) URL.revokeObjectURL(objUrl);
+              return resolve(null);
+            }
+            ctx.drawImage(img, 0, 0);
+            if (objUrl) URL.revokeObjectURL(objUrl);
+            objUrl = null;
+            canvas.toBlob(async (b) => {
+              if (b) {
+                try {
+                  const ab = await b.arrayBuffer();
+                  resolve(ab);
+                } catch (e) {
+                  resolve(null);
+                }
+              } else {
+                resolve(null);
+              }
+            }, mime === 'image/png' ? 'image/png' : 'image/jpeg', 0.92);
+          } catch (e) {
+            if (objUrl) URL.revokeObjectURL(objUrl);
+            resolve(null);
+          }
+        };
+        img.onerror = () => {
+          if (objUrl) URL.revokeObjectURL(objUrl);
+          resolve(null);
+        };
+        img.src = objUrl;
+      } catch (e) {
+        if (objUrl) URL.revokeObjectURL(objUrl);
+        resolve(null);
+      }
+    });
+    if (canvasBuf && canvasBuf.byteLength > 0) return canvasBuf;
+  }
+
+  return null;
 };
 
 // Image optimization for transmission

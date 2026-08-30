@@ -2407,12 +2407,8 @@ const ChatArea = React.memo(function ChatArea({
     const inputElement = e.target;
     const files = Array.from(inputElement.files || []);
     if (!files.length) return;
-    // Add files to selection (captures bytes into RAM before clearing input value)
+    // Add files to selection (captures bytes into RAM immediately)
     addFilesToSelection(files);
-    // Delay clearing input value to avoid killing Android transient content URI grants
-    setTimeout(() => {
-      try { inputElement.value = ''; } catch {}
-    }, 800);
   };
 
 
@@ -3448,6 +3444,7 @@ const ChatArea = React.memo(function ChatArea({
               id="file-input"
               multiple
               style={{ display: 'none' }}
+              onClick={(e) => { e.target.value = ''; }}
               onChange={handleFileSelect}
             />
 
