@@ -98,6 +98,7 @@ export function useGroupManager({
   const pendingGroupKeysRef = useRef({});
   const userProfilesRef = useRef({});
   const groupTypingTimersRef = useRef({});
+  const kickedTimersRef = useRef(new Map());
 
   // Persist groups debounced
   const groupsPersistTimerRef = useRef(null);
@@ -941,6 +942,13 @@ export function useGroupManager({
     };
 
     const handleGroupKicked = ({ groupId, removedBy, groupName }) => {
+      const now = Date.now();
+      const lastKicked = kickedTimersRef.current.get(groupId);
+      if (lastKicked && now - lastKicked < 4000) {
+        return; // Prevent duplicate execution from multiple signals
+      }
+      kickedTimersRef.current.set(groupId, now);
+
       const existing = groupsRef.current.find(g => g.id === groupId);
       const displayName = existing?.name || groupName || 'Group';
 
@@ -1043,7 +1051,6 @@ export function useGroupManager({
     socket.on('group-updated', handleGroupUpdated);
     socket.on('group-deleted', handleGroupDeleted);
     socket.on('group-kicked', handleGroupKicked);
-    socket.on('group-removed', handleGroupKicked);
     socket.on('group-user-typing', handleGroupTyping);
     socket.on('group-messages-deleted', handleGroupMessagesDeleted);
 
@@ -1054,7 +1061,6 @@ export function useGroupManager({
       socket.off('group-updated', handleGroupUpdated);
       socket.off('group-deleted', handleGroupDeleted);
       socket.off('group-kicked', handleGroupKicked);
-      socket.off('group-removed', handleGroupKicked);
       socket.off('group-user-typing', handleGroupTyping);
       socket.off('group-messages-deleted', handleGroupMessagesDeleted);
     };

@@ -556,7 +556,6 @@ export const registerGroupHandlers = (socket, io, helpers) => {
 
       // Notify the removed user directly
       io.to(removedLower).emit('group-kicked', { groupId: gid, removedBy: username });
-      io.to(removedLower).emit('group-removed', { groupId: gid, removedBy: username });
 
       callback?.({ success: true, kv: newKv, removed: removedLower });
       await notifyRosterChange(gid, 'member_removed', { removedBy: username, removed: removedLower });

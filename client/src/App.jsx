@@ -50,8 +50,18 @@ export default function App() {
     confirmModalRef.current = confirmModal;
   }, [confirmModal]);
 
+  const recentToastsRef = useRef(new Map());
+
   const showToast = useCallback((message, type = 'error', title = null, duration = 4000) => {
     if (!message) return;
+    const dedupeKey = `${type}:${title || ''}:${message}`;
+    const now = Date.now();
+    const lastSeen = recentToastsRef.current.get(dedupeKey);
+    if (lastSeen && now - lastSeen < 3000) {
+      return; // Skip duplicate notification
+    }
+    recentToastsRef.current.set(dedupeKey, now);
+
     const id = 'toast_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const newToast = { id, message, type, title };
     setToasts(prev => [...prev, newToast]);
