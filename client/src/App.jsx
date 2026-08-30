@@ -204,6 +204,14 @@ export default function App() {
         chatManager.setActiveContact(null);
         chatManager.activeContactRef.current = null;
       }
+      if (showSettingsRef.current) {
+        setShowSettings(false);
+        showSettingsRef.current = false;
+      }
+      if (showRecentsRef.current) {
+        setShowRecents(false);
+        showRecentsRef.current = false;
+      }
     }
   });
 
@@ -248,6 +256,14 @@ export default function App() {
         setActiveGroup(null);
         activeGroupRef.current = null;
         lastActiveGroupVmRef.current = null;
+      }
+      if (showSettingsRef.current) {
+        setShowSettings(false);
+        showSettingsRef.current = false;
+      }
+      if (showRecentsRef.current) {
+        setShowRecents(false);
+        showRecentsRef.current = false;
       }
     },
     groupsRef,
@@ -618,6 +634,38 @@ export default function App() {
       }, 300);
     }
   }, [setActiveContact, setActiveGroup]);
+
+  const handleOpenContactChat = useCallback((contact) => {
+    if (settingsOpenTimeoutRef.current) {
+      clearTimeout(settingsOpenTimeoutRef.current);
+      settingsOpenTimeoutRef.current = null;
+    }
+    if (showSettingsRef.current) {
+      setShowSettings(false);
+      showSettingsRef.current = false;
+    }
+    if (showRecentsRef.current) {
+      setShowRecents(false);
+      showRecentsRef.current = false;
+    }
+    handleSelectContact(contact);
+  }, [handleSelectContact]);
+
+  const handleOpenGroupChat = useCallback((group) => {
+    if (settingsOpenTimeoutRef.current) {
+      clearTimeout(settingsOpenTimeoutRef.current);
+      settingsOpenTimeoutRef.current = null;
+    }
+    if (showSettingsRef.current) {
+      setShowSettings(false);
+      showSettingsRef.current = false;
+    }
+    if (showRecentsRef.current) {
+      setShowRecents(false);
+      showRecentsRef.current = false;
+    }
+    handleSelectGroup(group);
+  }, [handleSelectGroup]);
 
   // Handle native back gestures
   useEffect(() => {
@@ -1044,8 +1092,8 @@ export default function App() {
             groups={groups}
             activeContact={activeContact}
             activeGroup={activeGroup}
-            setActiveContact={handleSelectContact}
-            onSelectGroup={handleSelectGroup}
+            setActiveContact={handleOpenContactChat}
+            onSelectGroup={handleOpenGroupChat}
             onOpenCreateGroup={() => setShowCreateGroup(true)}
             onOpenGroupInfo={(group) => setGroupInfoGroupId(group.id)}
             onLeaveGroup={handleLeaveGroupById}
@@ -1071,7 +1119,7 @@ export default function App() {
               currentUser={currentUser}
               contacts={contacts}
               onInitiateCall={handleInitiateCall}
-              onSelectContact={handleSelectContact}
+              onSelectContact={handleOpenContactChat}
               onShowSettings={openSettingsView}
               onBack={handleBackToMenu}
               showBackButton={showRecents}
