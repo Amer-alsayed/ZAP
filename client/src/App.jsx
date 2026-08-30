@@ -640,6 +640,11 @@ export default function App() {
       clearTimeout(settingsOpenTimeoutRef.current);
       settingsOpenTimeoutRef.current = null;
     }
+    if (isNavigatingBackRef.current) {
+      setIsNavigatingBack(false);
+      isNavigatingBackRef.current = false;
+      setNavigatingBackFrom(null);
+    }
     if (showSettingsRef.current) {
       setShowSettings(false);
       showSettingsRef.current = false;
@@ -655,6 +660,11 @@ export default function App() {
     if (settingsOpenTimeoutRef.current) {
       clearTimeout(settingsOpenTimeoutRef.current);
       settingsOpenTimeoutRef.current = null;
+    }
+    if (isNavigatingBackRef.current) {
+      setIsNavigatingBack(false);
+      isNavigatingBackRef.current = false;
+      setNavigatingBackFrom(null);
     }
     if (showSettingsRef.current) {
       setShowSettings(false);
@@ -1115,15 +1125,17 @@ export default function App() {
             onShowRecents={openRecentsView}
           />
           <div className="main-content-pane">
-            <Dashboard
-              currentUser={currentUser}
-              contacts={contacts}
-              onInitiateCall={handleInitiateCall}
-              onSelectContact={handleOpenContactChat}
-              onShowSettings={openSettingsView}
-              onBack={handleBackToMenu}
-              showBackButton={showRecents}
-            />
+            {(!activeContact && !activeGroup && !showSettings && !(isNavigatingBack && navigatingBackFrom === 'settings')) && (
+              <Dashboard
+                currentUser={currentUser}
+                contacts={contacts}
+                onInitiateCall={handleInitiateCall}
+                onSelectContact={handleOpenContactChat}
+                onShowSettings={openSettingsView}
+                onBack={handleBackToMenu}
+                showBackButton={showRecents}
+              />
+            )}
 
             {(showSettings || (isNavigatingBack && navigatingBackFrom === 'settings')) && (
               <SettingsView
