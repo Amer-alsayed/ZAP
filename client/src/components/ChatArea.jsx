@@ -29,7 +29,10 @@ import {
   audioProgressManager, 
   renderFormattedText, 
   groupMessagesWithAlbums, 
-  prepareFileForSending 
+  prepareFileForSending,
+  readBlobBufferSafely,
+  readBlobBufferSafelyWithRetry,
+  recoverImageBufferViaBitmapOrCanvas
 } from '../utils/chatHelpers';
 import { ImagePreviewLoader, VideoPreviewLoader, VoiceNotePreloader } from './MediaLoaders';
 import AlbumGalleryModal from './AlbumGalleryModal';
@@ -2140,16 +2143,14 @@ const ChatArea = React.memo(function ChatArea({
           } else {
             updateProgress(15, 'Encrypting...');
 
-            // Fallback path: read file as ArrayBuffer safely (supporting Android content URI files)
-            let fallbackBuffer = null;
-            for (let attempt = 0; attempt < 4 && (!fallbackBuffer || fallbackBuffer.byteLength === 0); attempt++) {
-              if (attempt > 0) await new Promise(r => setTimeout(r, 200 * attempt));
-              fallbackBuffer = fileToUpload._preloadedBuffer || await readBlobBufferSafely(fileToUpload);
-              if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
-                try {
-                  fallbackBuffer = await new Response(fileToUpload).arrayBuffer();
-                } catch (e) {}
-              }
+            // Fallback path: read file as ArrayBuffer safely (supporting Android content URI files & cloud sync)
+            let fallbackBuffer = fileToUpload._preloadedBuffer || null;
+            if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
+              fallbackBuffer = await readBlobBufferSafelyWithRetry(fileToUpload, 7);
+            }
+            if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
+              const recovered = await recoverImageBufferViaBitmapOrCanvas(fileToUpload);
+              if (recovered?.buffer) fallbackBuffer = recovered.buffer;
             }
 
             if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
@@ -2350,17 +2351,18 @@ const ChatArea = React.memo(function ChatArea({
     const validFiles = [];
     setPreparingFilesCount(prev => prev + files.length);
     try {
-      // 1. Concurrently read all file ArrayBuffers into memory FIRST while OS file descriptors are guaranteed alive
-      await Promise.all(files.map(async (f) => {
+      // 1. Sequentially read file ArrayBuffers into memory with progressive retry
+      // Sequential reading avoids Android ContentProvider stream concurrency lock-ups on mobile
+      for (const f of files) {
         if (!f._preloadedBuffer || f._preloadedBuffer.byteLength === 0) {
           try {
-            const buf = await readBlobBufferSafely(f);
+            const buf = await readBlobBufferSafelyWithRetry(f, 6);
             if (buf && buf.byteLength > 0) {
               f._preloadedBuffer = buf;
             }
           } catch (e) {}
         }
-      }));
+      }
 
       // 2. Process, optimize, and pre-encrypt each file
       for (const f of files) {
@@ -3457,7 +3459,7 @@ const ChatArea = React.memo(function ChatArea({
                   <div className="attach-menu-options">
                     <button 
                       className="attach-menu-item"
-                      onClick={() => openFilePicker('image/*,video/*')}
+                      onClick={() => openFilePicker('image/*,video/*,image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,video/mp4,video/quicktime,video/webm,.jpg,.jpeg,.png,.webp,.gif,.mp4,.mov')}
                     >
                       <div className="attach-icon-badge photos">
                         <Image size={18} />

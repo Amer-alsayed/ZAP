@@ -639,6 +639,164 @@ export const readBlobBufferSafely = async (blob) => {
   return null;
 };
 
+// Robust image recovery using native createImageBitmap, canvas or data URL base64 binary decoding
+export const recoverImageBufferViaBitmapOrCanvas = async (blob) => {
+  if (!blob) return null;
+  const mime = inferMimeType(blob.name || '', blob.type || '');
+  if (!mime.startsWith('image/') || mime === 'image/gif') return null;
+
+  // 1. Try native createImageBitmap (hardware accelerated, decodes directly from OS buffer)
+  if (typeof window !== 'undefined' && typeof window.createImageBitmap === 'function') {
+    try {
+      const bitmap = await window.createImageBitmap(blob);
+      if (bitmap && bitmap.width > 0 && bitmap.height > 0) {
+        try {
+          const maxDim = 2560;
+          let w = bitmap.width;
+          let h = bitmap.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+            else { w = Math.round((w * maxDim) / h); h = maxDim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(bitmap, 0, 0, w, h);
+            const b = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.90));
+            if (b && b.size > 0) {
+              const ab = await b.arrayBuffer();
+              if (ab && ab.byteLength > 0) {
+                const name = (blob.name || 'photo.jpg').replace(/\.[^/.]+$/, '') + '.jpg';
+                return {
+                  buffer: ab,
+                  file: new File([b], name, { type: 'image/jpeg', lastModified: Date.now() })
+                };
+              }
+            }
+          }
+        } finally {
+          try { bitmap.close(); } catch (e) {}
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 2. Try Image() element via ObjectURL
+  try {
+    const objUrl = URL.createObjectURL(blob);
+    try {
+      const img = new Image();
+      const loaded = await new Promise((resolve) => {
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = objUrl;
+      });
+      if (loaded && (img.naturalWidth || img.width) > 0) {
+        const maxDim = 2560;
+        let w = img.naturalWidth || img.width;
+        let h = img.naturalHeight || img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+          else { w = Math.round((w * maxDim) / h); h = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const b = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.90));
+          if (b && b.size > 0) {
+            const ab = await b.arrayBuffer();
+            if (ab && ab.byteLength > 0) {
+              const name = (blob.name || 'photo.jpg').replace(/\.[^/.]+$/, '') + '.jpg';
+              return {
+                buffer: ab,
+                file: new File([b], name, { type: 'image/jpeg', lastModified: Date.now() })
+              };
+            }
+          }
+        }
+      }
+    } finally {
+      URL.revokeObjectURL(objUrl);
+    }
+  } catch (e) {}
+
+  // 3. Try FileReader readAsDataURL -> binary Uint8Array (bypasses OS stream locking on Android)
+  if (typeof FileReader !== 'undefined') {
+    try {
+      const ab = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const res = String(reader.result || '');
+            const commaIdx = res.indexOf(',');
+            if (commaIdx !== -1) {
+              const b64 = res.substring(commaIdx + 1);
+              const binary = atob(b64);
+              const len = binary.length;
+              const bytes = new Uint8Array(len);
+              for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+              }
+              resolve(bytes.buffer);
+            } else {
+              resolve(null);
+            }
+          } catch (e) {
+            resolve(null);
+          }
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+      if (ab && ab.byteLength > 0) {
+        return {
+          buffer: ab,
+          file: new File([ab], blob.name || 'photo.jpg', { type: blob.type || mime, lastModified: Date.now() })
+        };
+      }
+    } catch (e) {}
+  }
+
+  return null;
+};
+
+// Resilient reader with progressive retry (gives Android MediaStore & cloud backup time to stage/hydrate)
+export const readBlobBufferSafelyWithRetry = async (blob, maxRetries = 6) => {
+  if (!blob) return null;
+  if (blob._preloadedBuffer && blob._preloadedBuffer.byteLength > 0) {
+    return blob._preloadedBuffer;
+  }
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (attempt > 0) {
+      await new Promise(r => setTimeout(r, Math.min(1500, 250 * attempt)));
+    }
+
+    // 1. Try standard read tiers
+    const buf = await readBlobBufferSafely(blob);
+    if (buf && buf.byteLength > 0) return buf;
+
+    // 2. Try native response arrayBuffer
+    try {
+      const resBuf = await new Response(blob).arrayBuffer();
+      if (resBuf && resBuf.byteLength > 0) return resBuf;
+    } catch (e) {}
+
+    // 3. If image, try bitmap/canvas/dataURL recovery
+    const recovered = await recoverImageBufferViaBitmapOrCanvas(blob);
+    if (recovered && recovered.buffer && recovered.buffer.byteLength > 0) {
+      return recovered.buffer;
+    }
+  }
+
+  return null;
+};
+
 // Image optimization for transmission
 export const optimizeImageForSending = async (fileOrBlob, preloadedBuffer = null) => {
   if (!fileOrBlob) return fileOrBlob;
@@ -725,104 +883,22 @@ export const optimizeImageForSending = async (fileOrBlob, preloadedBuffer = null
 // Prepare file for sending: pre-reads, normalizes, and pre-encrypts
 export const prepareFileForSending = async (rawFile) => {
   let rawBuffer = rawFile._preloadedBuffer || null;
+
+  // If buffer is missing or empty, run resilient progressive retry (supports Android PhotoPicker & cloud sync)
   if (!rawBuffer || rawBuffer.byteLength === 0) {
-    for (let attempt = 0; attempt < 4 && (!rawBuffer || rawBuffer.byteLength === 0); attempt++) {
-      if (attempt > 0) await new Promise(r => setTimeout(r, 150 * attempt));
-      rawBuffer = await readBlobBufferSafely(rawFile);
-      if (!rawBuffer || rawBuffer.byteLength === 0) {
-        try { rawBuffer = await new Response(rawFile).arrayBuffer(); } catch (e) {}
-      }
-      if (!rawBuffer || rawBuffer.byteLength === 0) {
-        try {
-          const objUrl = URL.createObjectURL(rawFile);
-          try {
-            const resp = await fetch(objUrl);
-            const buf = await resp.arrayBuffer();
-            if (buf && buf.byteLength > 0) rawBuffer = buf;
-          } finally {
-            URL.revokeObjectURL(objUrl);
-          }
-        } catch (e) {}
-      }
-      if ((!rawBuffer || rawBuffer.byteLength === 0) && typeof FileReader !== 'undefined') {
-        rawBuffer = await new Promise((resolve) => {
-          try {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result || null);
-            reader.onerror = () => resolve(null);
-            reader.readAsArrayBuffer(rawFile);
-          } catch (err) {
-            resolve(null);
-          }
-        });
-      }
-    }
+    rawBuffer = await readBlobBufferSafelyWithRetry(rawFile, 7);
   }
 
   let canvasFallbackFile = null;
   let canvasFallbackBuffer = null;
+
+  // If still empty, attempt direct bitmap / canvas / data-URL recovery
   if (!rawBuffer || rawBuffer.byteLength === 0) {
-    const maybeImage = inferMimeType(rawFile.name || '', rawFile.type || '');
-    if (maybeImage.startsWith('image/') && maybeImage !== 'image/gif') {
-      try {
-        const reencoded = await new Promise((resolve) => {
-          let objUrl = null;
-          try {
-            objUrl = URL.createObjectURL(rawFile);
-            const img = new window.Image();
-            img.onload = () => {
-              try {
-                const maxDim = 2560;
-                let { naturalWidth: w, naturalHeight: h } = img;
-                if (!w || !h) { if (objUrl) URL.revokeObjectURL(objUrl); return resolve(null); }
-                if (w > maxDim || h > maxDim) {
-                  if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
-                  else { w = Math.round((w * maxDim) / h); h = maxDim; }
-                }
-                const canvas = document.createElement('canvas');
-                canvas.width = w; canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) { if (objUrl) URL.revokeObjectURL(objUrl); return resolve(null); }
-                ctx.drawImage(img, 0, 0, w, h);
-                URL.revokeObjectURL(objUrl); objUrl = null;
-                canvas.toBlob((blob) => {
-                  if (blob && blob.size > 0) {
-                    const name = (rawFile.name || 'photo.jpg').replace(/\.[^/.]+$/, '') + '.jpg';
-                    const f = new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() });
-                    resolve(f);
-                  } else resolve(null);
-                }, 'image/jpeg', 0.88);
-              } catch (e) { if (objUrl) URL.revokeObjectURL(objUrl); resolve(null); }
-            };
-            img.onerror = () => { if (objUrl) URL.revokeObjectURL(objUrl); resolve(null); };
-            img.src = objUrl;
-          } catch (e) { if (objUrl) URL.revokeObjectURL(objUrl); resolve(null); }
-        });
-        if (reencoded) {
-          try {
-            const buf = await reencoded.arrayBuffer();
-            if (buf && buf.byteLength > 0) {
-              canvasFallbackFile = reencoded;
-              canvasFallbackBuffer = buf;
-              rawBuffer = buf;
-            }
-          } catch (e) {}
-          if (!canvasFallbackBuffer) {
-            try {
-              const url2 = URL.createObjectURL(reencoded);
-              try {
-                const r2 = await fetch(url2);
-                const b2 = await r2.arrayBuffer();
-                if (b2 && b2.byteLength > 0) {
-                  canvasFallbackFile = reencoded;
-                  canvasFallbackBuffer = b2;
-                  rawBuffer = b2;
-                }
-              } finally { URL.revokeObjectURL(url2); }
-            } catch (e) {}
-          }
-        }
-      } catch (e) {}
+    const recovered = await recoverImageBufferViaBitmapOrCanvas(rawFile);
+    if (recovered && recovered.buffer && recovered.buffer.byteLength > 0) {
+      rawBuffer = recovered.buffer;
+      canvasFallbackBuffer = recovered.buffer;
+      canvasFallbackFile = recovered.file;
     }
   }
 
