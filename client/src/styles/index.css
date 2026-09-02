@@ -98,8 +98,16 @@ textarea::placeholder,
   background: rgba(255, 255, 255, 0.25);
 }
 
+html {
+  background-color: #000000 !important;
+  color-scheme: dark;
+  height: 100%;
+  width: 100%;
+}
+
 body {
-  background-color: var(--bg-main);
+  background-color: #000000 !important;
+  color-scheme: dark;
   color: var(--text-primary);
   font-family: var(--font-primary);
   -webkit-font-smoothing: antialiased;
