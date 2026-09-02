@@ -2564,7 +2564,7 @@ button {
 }
 
 .attach-menu-popover.is-closing {
-  animation: attachMenuClose 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: attachMenuClose 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   pointer-events: none;
 }
 
@@ -2590,7 +2590,7 @@ button {
   100% {
     opacity: 0;
     transform: scale(0.92) translateY(10px);
-    filter: blur(3px);
+    filter: blur(2px);
   }
 }
 
@@ -2777,7 +2777,7 @@ button {
 }
 
 .apple-emoji-popover-wrapper.is-closing {
-  animation: appleEmojiPopOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: appleEmojiPopOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   pointer-events: none;
 }
 
@@ -2796,10 +2796,12 @@ button {
   0% {
     opacity: 1;
     transform: translateY(0) scale(1);
+    filter: blur(0px);
   }
   100% {
     opacity: 0;
     transform: translateY(12px) scale(0.95);
+    filter: blur(2px);
   }
 }
 
