@@ -3028,9 +3028,13 @@ const ChatArea = React.memo(function ChatArea({
               {selectionMode ? <X size={18} /> : <ArrowLeft size={18} />}
             </div>
           </button>
-          <div className="group-avatar-stack-wrapper">
+          <div className="group-avatar-stack-wrapper chat-header-avatar-wrapper">
             {renderAvatar(activeContact.username, activeContact.customName || activeContact.displayName, activeContact.avatarIcon)}
-            {isGroupMode && <span className="group-avatar-badge"><Users size={11} /></span>}
+            {isGroupMode ? (
+              <span className="group-avatar-badge"><Users size={11} /></span>
+            ) : (
+              <div className={`status-dot chat-header-avatar-status-dot ${activeContact.status === 'online' ? 'online' : 'offline'}`} />
+            )}
           </div>
           <div className="chat-header-name">
             <h2 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -3052,9 +3056,9 @@ const ChatArea = React.memo(function ChatArea({
                 )}
               </span>
             ) : (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <span style={{ fontFamily: 'monospace' }}>@{activeContact.username}</span>
-                <span>•</span>
+              <span className="chat-header-user-status" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <span className="chat-header-username" style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{activeContact.username}</span>
+                <span className="chat-header-status-separator">•</span>
                 <span className={`chat-header-status ${activeContact.status === 'online' ? 'online' : ''}`}>
                   {activeContact.status === 'online' ? 'Online' : 'Offline'}
                 </span>

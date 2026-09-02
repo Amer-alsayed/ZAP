@@ -1315,6 +1315,10 @@ button {
   color: var(--success-color);
 }
 
+.chat-header-avatar-status-dot {
+  display: none;
+}
+
 .chat-header-actions {
   display: flex;
   align-items: center;
@@ -11801,8 +11805,24 @@ textarea {
     gap: 3px !important;
     margin-top: 1px !important;
   }
+  /* Mobile header: avatar presence status dot badge matching main screen */
+  .chat-header-avatar-status-dot {
+    display: block !important;
+    position: absolute !important;
+    bottom: 0px !important;
+    right: 0px !important;
+    width: 10px !important;
+    height: 10px !important;
+    border-radius: 9999px !important;
+    box-shadow: 0 0 0 2px #000000 !important;
+    box-sizing: border-box !important;
+    z-index: 2 !important;
+  }
+
+  /* On mobile, replace overflowing status text ("Online"/"Offline") with avatar presence dot */
+  .chat-header-status-separator,
   .chat-header-status {
-    font-size: 12px !important;
+    display: none !important;
   }
   /* Header buttons: standard 42px touch targets */
   .chat-header .back-btn,
