@@ -28,6 +28,35 @@ if (!jwtSecret) {
   }
 }
 
+// Persistent database validation for cloud environments
+const IS_RENDER = process.env.RENDER === 'true';
+const dbUrl = process.env.DATABASE_URL || null;
+
+if (!dbUrl && IS_PROD) {
+  if (IS_RENDER && process.env.ALLOW_EPHEMERAL_DB !== 'true') {
+    console.error('================================================================================');
+    console.error('❌ FATAL: DATABASE_URL is not set on Render!');
+    console.error('   Render Web Services operate on an EPHEMERAL container filesystem.');
+    console.error('   Running SQLite (zap.db) without persistent disk means ALL USER ACCOUNTS,');
+    console.error('   KEYS, AND MESSAGES WILL BE PERMANENTLY ERASED whenever Render sleeps,');
+    console.error('   restarts, deploys, or reactivates after the monthly free quota.');
+    console.error('');
+    console.error('   👉 HOW TO FIX IN 2 MINUTES (100% FREE & PERMANENT):');
+    console.error('   1. Create a free PostgreSQL database on Neon (https://neon.tech).');
+    console.error('   2. Copy the connection URI (postgresql://user:pass@host/neondb?sslmode=require).');
+    console.error('   3. In Render Dashboard -> Your Service -> Environment:');
+    console.error('      Add Key: DATABASE_URL, Value: <your-neon-postgres-uri>');
+    console.error('   4. Redeploy. Your data will be preserved permanently forever!');
+    console.error('');
+    console.error('   (To bypass this guard for ephemeral testing only, set ALLOW_EPHEMERAL_DB=true)');
+    console.error('================================================================================');
+    process.exit(1);
+  } else if (!IS_RENDER && process.env.ALLOW_EPHEMERAL_DB !== 'true') {
+    console.warn('⚠️ WARNING: DATABASE_URL is not set in production. Using local SQLite.');
+    console.warn('   Ensure this host has a persistent volume mounted at DATABASE_PATH to prevent data loss.');
+  }
+}
+
 // CORS Allowed Origins
 // In production, if CLIENT_ORIGIN is not explicitly set, allow all origins
 // (the client is served from the same server, so same-origin requests are safe).

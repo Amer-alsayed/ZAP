@@ -12,3 +12,5 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
+      - key: DATABASE_URL
+        sync: false # Required for persistence: Paste your free Neon.tech PostgreSQL connection URI (postgresql://user:pass@host/neondb?sslmode=require)

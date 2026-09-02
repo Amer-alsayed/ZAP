@@ -21,18 +21,59 @@ const parseJsonResponse = async (response, fallbackErrorMessage) => {
 };
 
 /**
- * Fetch a user's random authentication salt (returns null if legacy or non-existent).
+ * Fetch a user's authentication salt with automated retry for cloud wake-ups (e.g. Render cold start).
+ * Returns string salt for existing/new users, null explicitly for legacy accounts.
+ * Throws on network, rate-limit, or server failure to prevent generating corrupt fallback hashes.
  */
-export const fetchAuthSalt = async (username) => {
+export const fetchAuthSalt = async (username, maxRetries = 2) => {
   if (!username) return null;
-  try {
-    const response = await fetch(`${BASE_URL}/api/auth/salt/${encodeURIComponent(username)}`);
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data?.authSalt || null;
-  } catch (e) {
-    return null;
+
+  const url = `${BASE_URL}/api/auth/salt/${encodeURIComponent(username.trim())}`;
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url);
+
+      if (response.status === 429) {
+        let errorMsg = 'Too many attempts. Please wait 15 minutes before trying again.';
+        try {
+          const data = await response.json();
+          if (data?.error) errorMsg = data.error;
+        } catch (_) {}
+        throw new Error(errorMsg);
+      }
+
+      // If server is waking up (502, 503, 504), wait and retry
+      if (response.status >= 502 && response.status <= 504 && attempt < maxRetries) {
+        await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Authentication server error (${response.status}). Please try again.`);
+      }
+
+      const data = await response.json();
+      // Explicitly return authSalt if present (or null if the server returned { authSalt: null } for legacy accounts)
+      return data?.authSalt !== undefined ? data.authSalt : null;
+    } catch (err) {
+      lastError = err;
+      // Do not retry rate-limit errors
+      if (err.message && err.message.includes('Too many')) {
+        throw err;
+      }
+      if (attempt < maxRetries) {
+        await new Promise((res) => setTimeout(res, 1200 * (attempt + 1)));
+      }
+    }
   }
+
+  throw new Error(
+    lastError?.message?.includes('Failed to fetch') || lastError?.name === 'TypeError'
+      ? 'Unable to reach the server. It may be waking up from sleep; please try again in a few seconds.'
+      : (lastError?.message || 'Failed to retrieve authentication information from server.')
+  );
 };
 
 /**

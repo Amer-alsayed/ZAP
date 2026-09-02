@@ -14,7 +14,7 @@ import { initDb, dbPing } from './src/db.js';
 import { register, login, searchUser, getAuthSalt } from './src/authController.js';
 import { socketHandler } from './src/socketHandler.js';
 import { authenticateToken } from './src/middleware/authMiddleware.js';
-import { generalLimiter, authLimiter, uploadLimiter } from './src/middleware/rateLimiter.js';
+import { generalLimiter, authLimiter, saltLimiter, uploadLimiter } from './src/middleware/rateLimiter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -110,8 +110,8 @@ app.get('/health', async (req, res) => {
 });
 
 // API Routes with rate limiters & auth protection
-app.get('/api/auth/salt/:username', authLimiter, getAuthSalt);
-app.get('/api/auth/salt', authLimiter, getAuthSalt);
+app.get('/api/auth/salt/:username', saltLimiter, getAuthSalt);
+app.get('/api/auth/salt', saltLimiter, getAuthSalt);
 app.post('/api/auth/register', authLimiter, register);
 app.post('/api/auth/login', authLimiter, login);
 app.get('/api/auth/search', authenticateToken, searchUser);

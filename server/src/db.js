@@ -13,7 +13,12 @@ if (isPostgres) {
     connectionString: config.dbUrl,
     ssl: {
       rejectUnauthorized: false
-    }
+    },
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 15000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000
   });
 
   pgPool.on('error', (err) => {
@@ -62,6 +67,33 @@ function convertSqlPlaceholders(sql) {
   return result;
 }
 
+/**
+ * Resilient query executor for cloud serverless databases (e.g. Neon, Supabase)
+ * Automatically retries queries on transient cold-start or idle connection disconnects.
+ */
+const executePgQueryWithRetry = async (queryFn, maxRetries = 2) => {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await queryFn();
+    } catch (err) {
+      const isTransient =
+        err.code === 'ECONNRESET' ||
+        err.code === '57P01' || // admin_shutdown
+        err.code === '08006' || // connection_failure
+        err.code === '08001' || // sqlclient_unable_to_establish_sqlconnection
+        err.code === 'ETIMEDOUT' ||
+        err.message?.includes('Connection terminated unexpectedly');
+
+      if (isTransient && attempt < maxRetries) {
+        logger.warn(`Transient PostgreSQL connection error (${err.code || err.message}), retrying query (attempt ${attempt + 1}/${maxRetries})...`);
+        await new Promise((res) => setTimeout(res, 600 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+};
+
 // Helper functions to wrap database queries in Promises
 export const dbRun = async (query, params = []) => {
   if (isPostgres) {
@@ -75,11 +107,16 @@ export const dbRun = async (query, params = []) => {
       // expose it through rows[0].id, composite-key tables simply return
       // their own columns. `OR IGNORE` maps to ON CONFLICT DO NOTHING.
       const wasIgnore = /INSERT OR IGNORE/i.test(query);
-      sql += wasIgnore ? ' ON CONFLICT DO NOTHING RETURNING *' : ' RETURNING *';
+      const hasConflict = /ON CONFLICT/i.test(sql);
+      if (wasIgnore && !hasConflict) {
+        sql += ' ON CONFLICT DO NOTHING RETURNING *';
+      } else {
+        sql += ' RETURNING *';
+      }
     }
 
     sql = convertSqlPlaceholders(sql);
-    const res = await pgPool.query(sql, params);
+    const res = await executePgQueryWithRetry(() => pgPool.query(sql, params));
     return {
       id: res.rows[0]?.id || null,
       changes: res.rowCount
@@ -100,7 +137,7 @@ export const dbRun = async (query, params = []) => {
 export const dbGet = async (query, params = []) => {
   if (isPostgres) {
     const sql = convertSqlPlaceholders(query);
-    const res = await pgPool.query(sql, params);
+    const res = await executePgQueryWithRetry(() => pgPool.query(sql, params));
     return res.rows[0] || null;
   } else {
     return new Promise((resolve, reject) => {
@@ -118,7 +155,7 @@ export const dbGet = async (query, params = []) => {
 export const dbAll = async (query, params = []) => {
   if (isPostgres) {
     const sql = convertSqlPlaceholders(query);
-    const res = await pgPool.query(sql, params);
+    const res = await executePgQueryWithRetry(() => pgPool.query(sql, params));
     return res.rows;
   } else {
     return new Promise((resolve, reject) => {
@@ -149,7 +186,7 @@ export const dbPing = async () => {
 // Initialize database tables
 export const initDb = async () => {
   try {
-    // Create Users Table
+    // Create Users Table with complete schema
     await dbRun(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,11 +195,15 @@ export const initDb = async () => {
         public_identity_key TEXT NOT NULL,
         public_signing_key TEXT NOT NULL,
         encrypted_private_keys TEXT NOT NULL,
+        display_name TEXT,
+        avatar_icon TEXT,
+        theme_color TEXT,
+        auth_salt TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Create Messages Table (stores E2EE encrypted messages)
+    // Create Messages Table (stores E2EE encrypted messages) with complete schema
     await dbRun(`
       CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,6 +212,8 @@ export const initDb = async () => {
         ciphertext TEXT NOT NULL,
         iv TEXT NOT NULL,
         signature TEXT NOT NULL,
+        aad TEXT,
+        auth_tag TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         delivered INTEGER DEFAULT 0
       )

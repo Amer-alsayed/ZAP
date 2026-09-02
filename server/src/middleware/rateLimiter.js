@@ -13,13 +13,27 @@ export const generalLimiter = rateLimit({
 });
 
 /**
- * Strict rate limiter for authentication endpoints (Login / Register)
+ * Dedicated rate limiter for salt lookup queries (/api/auth/salt).
+ * Since getAuthSalt utilizes constant-time anti-enumeration HMAC pseudo-salts,
+ * a generous limit allows typing and multiple clients on shared IPs without starvation.
+ * Max 150 requests per 15 minutes per IP.
+ */
+export const saltLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 150,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication salt queries, please try again after a few minutes.' }
+});
+
+/**
+ * Strict rate limiter for authentication submission endpoints (Login / Register)
  * to prevent brute-force credential guessing attacks.
- * Max 30 requests per 15 minutes per IP.
+ * Max 50 requests per 15 minutes per IP.
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts, please try again after 15 minutes.' }
