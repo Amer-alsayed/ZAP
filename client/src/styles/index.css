@@ -2558,39 +2558,35 @@ button {
   backdrop-filter: blur(24px) !important;
   -webkit-backdrop-filter: blur(24px) !important;
   z-index: 1000;
-  animation: attachMenuPop 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: attachMenuPop 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transform-origin: bottom left;
   will-change: transform, opacity;
 }
 
 .attach-menu-popover.is-closing {
-  animation: attachMenuClose 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  pointer-events: none;
+  animation: attachMenuClose 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  pointer-events: none !important;
 }
 
 @keyframes attachMenuPop {
   0% {
     opacity: 0;
-    transform: scale(0.9) translateY(12px);
-    filter: blur(3px);
+    transform: translate3d(0, 14px, 0) scale3d(0.92, 0.92, 1);
   }
   100% {
     opacity: 1;
-    transform: scale(1) translateY(0);
-    filter: blur(0px);
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
   }
 }
 
 @keyframes attachMenuClose {
   0% {
     opacity: 1;
-    transform: scale(1) translateY(0);
-    filter: blur(0px);
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
   }
   100% {
     opacity: 0;
-    transform: scale(0.92) translateY(10px);
-    filter: blur(2px);
+    transform: translate3d(0, 12px, 0) scale3d(0.92, 0.92, 1);
   }
 }
 
@@ -2771,37 +2767,35 @@ button {
   bottom: calc(100% + 12px);
   right: 68px;
   z-index: 1050;
-  animation: appleEmojiPopIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: appleEmojiPopIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transform-origin: bottom right;
   will-change: transform, opacity;
 }
 
 .apple-emoji-popover-wrapper.is-closing {
-  animation: appleEmojiPopOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  pointer-events: none;
+  animation: appleEmojiPopOut 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  pointer-events: none !important;
 }
 
 @keyframes appleEmojiPopIn {
   0% {
     opacity: 0;
-    transform: translateY(14px) scale(0.95);
+    transform: translate3d(0, 16px, 0) scale3d(0.94, 0.94, 1);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
   }
 }
 
 @keyframes appleEmojiPopOut {
   0% {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0px);
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
   }
   100% {
     opacity: 0;
-    transform: translateY(12px) scale(0.95);
-    filter: blur(2px);
+    transform: translate3d(0, 14px, 0) scale3d(0.94, 0.94, 1);
   }
 }
 
@@ -6392,6 +6386,7 @@ textarea {
     left: 8px !important;
     bottom: calc(100% + 10px) !important;
     width: auto !important;
+    transform-origin: bottom center !important;
   }
 
   .apple-emoji-header {
