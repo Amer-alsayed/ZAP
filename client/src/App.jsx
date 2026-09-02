@@ -551,8 +551,12 @@ export default function App() {
       return;
     }
 
-    if (!isFromPopState && (window.history.state === 'chat' || window.history.state === 'settings' || window.history.state === 'recents')) {
-      window.history.back();
+    if (!isFromPopState) {
+      if (window.history.state === 'emoji' || window.history.state === 'attach') {
+        window.history.go(-2);
+      } else if (window.history.state === 'chat' || window.history.state === 'settings' || window.history.state === 'recents') {
+        window.history.back();
+      }
     }
 
     const source = showSettings ? 'settings' : activeContact || activeGroupRef.current ? 'chat' : showRecents ? 'recents' : null;

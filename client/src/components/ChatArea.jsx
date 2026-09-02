@@ -902,9 +902,16 @@ const ChatArea = React.memo(function ChatArea({
   const emojiBtnRef = useRef(null);
 
   const closeAttachMenu = useCallback((isFromPopState = false) => {
-    if (!showAttachMenuRef.current || isClosingAttachMenuRef.current) return;
-    setIsClosingAttachMenu(true);
-    isClosingAttachMenuRef.current = true;
+    if (!showAttachMenuRef.current) return;
+    if (attachMenuCloseTimerRef.current) {
+      clearTimeout(attachMenuCloseTimerRef.current);
+      attachMenuCloseTimerRef.current = null;
+    }
+    showAttachMenuRef.current = false;
+    isClosingAttachMenuRef.current = false;
+    setShowAttachMenu(false);
+    setIsClosingAttachMenu(false);
+
     if (!isFromPopState && (window.history.state === 'attach' || window.history.state?.view === 'attach')) {
       window.__isProgrammaticPop = true;
       window.history.back();
@@ -912,13 +919,6 @@ const ChatArea = React.memo(function ChatArea({
         window.__isProgrammaticPop = false;
       }, 100);
     }
-    if (attachMenuCloseTimerRef.current) clearTimeout(attachMenuCloseTimerRef.current);
-    attachMenuCloseTimerRef.current = setTimeout(() => {
-      setShowAttachMenu(false);
-      setIsClosingAttachMenu(false);
-      isClosingAttachMenuRef.current = false;
-      attachMenuCloseTimerRef.current = null;
-    }, 200);
   }, []);
 
   const cancelAttachMenuClose = useCallback(() => {
@@ -933,9 +933,17 @@ const ChatArea = React.memo(function ChatArea({
   }, []);
 
   const closeEmojiPicker = useCallback((isFromPopState = false) => {
-    if (!showEmojiPickerRef.current || isClosingEmojiPickerRef.current) return;
-    setIsClosingEmojiPicker(true);
-    isClosingEmojiPickerRef.current = true;
+    if (!showEmojiPickerRef.current) return;
+    if (emojiPickerCloseTimerRef.current) {
+      clearTimeout(emojiPickerCloseTimerRef.current);
+      emojiPickerCloseTimerRef.current = null;
+    }
+    showEmojiPickerRef.current = false;
+    isClosingEmojiPickerRef.current = false;
+    setShowEmojiPicker(false);
+    setIsClosingEmojiPicker(false);
+    setHasMountedEmojiPicker(false);
+
     if (!isFromPopState && (window.history.state === 'emoji' || window.history.state?.view === 'emoji')) {
       window.__isProgrammaticPop = true;
       window.history.back();
@@ -943,14 +951,6 @@ const ChatArea = React.memo(function ChatArea({
         window.__isProgrammaticPop = false;
       }, 100);
     }
-    if (emojiPickerCloseTimerRef.current) clearTimeout(emojiPickerCloseTimerRef.current);
-    emojiPickerCloseTimerRef.current = setTimeout(() => {
-      setShowEmojiPicker(false);
-      setIsClosingEmojiPicker(false);
-      setHasMountedEmojiPicker(false);
-      isClosingEmojiPickerRef.current = false;
-      emojiPickerCloseTimerRef.current = null;
-    }, 200);
   }, []);
 
   const cancelEmojiPickerClose = useCallback(() => {
@@ -1187,19 +1187,14 @@ const ChatArea = React.memo(function ChatArea({
     }
 
     // 2. Close emoji picker if open
-    if (showEmojiPickerRef.current && !isClosingEmojiPickerRef.current) {
+    if (showEmojiPickerRef.current) {
       closeEmojiPicker(true);
       return true;
     }
 
     // 3. Close attach menu if open
-    if (showAttachMenuRef.current && !isClosingAttachMenuRef.current) {
+    if (showAttachMenuRef.current) {
       closeAttachMenu(true);
-      return true;
-    }
-
-    // 3b. A popover is already animating out — consume the back event so we don't exit the chat
-    if (isClosingEmojiPickerRef.current || isClosingAttachMenuRef.current) {
       return true;
     }
 
@@ -1236,19 +1231,15 @@ const ChatArea = React.memo(function ChatArea({
       return;
     }
     if (activeGalleryRef.current && !isClosingGalleryRef.current) {
-      handleCloseGallery(true);
+      handleCloseGallery(false);
       return;
     }
-    if (showEmojiPickerRef.current && !isClosingEmojiPickerRef.current) {
+    // If emoji picker or attach menu is open, close them cleanly
+    if (showEmojiPickerRef.current) {
       closeEmojiPicker(true);
-      return;
     }
-    if (showAttachMenuRef.current && !isClosingAttachMenuRef.current) {
+    if (showAttachMenuRef.current) {
       closeAttachMenu(true);
-      return;
-    }
-    if (isClosingEmojiPickerRef.current || isClosingAttachMenuRef.current) {
-      return;
     }
     if (isRecordingRef.current) {
       stopRecordingRef.current?.(false);
@@ -1262,6 +1253,7 @@ const ChatArea = React.memo(function ChatArea({
       handleClearAllFilesWithAnimation();
       return;
     }
+    // Return to main menu
     if (typeof onBack === 'function') {
       onBack();
     }
