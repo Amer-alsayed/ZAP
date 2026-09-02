@@ -15,10 +15,13 @@ export default function Login({ onAuthSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // Track input focus state with delay to prevent switching focus flickering
+  // Track input focus state without flicker when switching fields
   const [isFocused, setIsFocused] = useState(false);
+  const isKeyboardOpenRef = useRef(false);
+  const maxViewportHeightRef = useRef(
+    typeof window !== 'undefined' && window.visualViewport ? window.visualViewport.height : 800
+  );
   const focusTimeout = useRef(null);
-  const isKeyboardOpen = useRef(false);
   const authContainerRef = useRef(null);
   const authCardRef = useRef(null);
 
@@ -39,33 +42,77 @@ export default function Login({ onAuthSuccess }) {
     }
   };
 
-  const handleBlur = () => {
+  const handleBlur = (e) => {
+    // If focus is moving to another input/button in the auth card (e.g. username -> password),
+    // do NOT blur and do NOT toggle isFocused. This completely eliminates flickering!
+    if (e?.relatedTarget && authCardRef.current?.contains(e.relatedTarget)) {
+      return;
+    }
+
+    // If virtual keyboard is currently open, keep logo collapsed until keyboard actually closes
+    if (isKeyboardOpenRef.current) {
+      return;
+    }
+
+    if (focusTimeout.current) clearTimeout(focusTimeout.current);
     focusTimeout.current = setTimeout(() => {
-      setIsFocused(false);
-    }, 150); // 150ms buffer to switch focus smoothly without logo flicker
+      const activeEl = document.activeElement;
+      if (!authCardRef.current?.contains(activeEl) && !isKeyboardOpenRef.current) {
+        setIsFocused(false);
+      }
+    }, 100);
   };
 
-  // Safe keyboard close detector
+  // Keyboard close & back gesture detector (Android back button, gesture navigation, dismiss)
   useEffect(() => {
-    const handleResize = () => {
+    const handleViewportChange = () => {
       const vv = window.visualViewport;
-      if (!vv) return;
+      const currentHeight = vv ? vv.height : window.innerHeight;
 
-      if (vv.height < window.innerHeight * 0.8) {
-        // Keyboard is fully open
-        isKeyboardOpen.current = true;
-      } else if (isKeyboardOpen.current && vv.height >= window.innerHeight * 0.95) {
-        // Keyboard was open and is now closed
-        isKeyboardOpen.current = false;
-        if (document.activeElement && (document.activeElement.tagName === 'INPUT')) {
-          document.activeElement.blur();
+      // Update baseline when no inputs are focused (e.g. orientation changes, screen resize)
+      if (!document.activeElement || (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA')) {
+        maxViewportHeightRef.current = Math.max(maxViewportHeightRef.current, currentHeight);
+      }
+
+      // Detect if keyboard is open based on significant height drop (> 120px)
+      const heightDifference = maxViewportHeightRef.current - currentHeight;
+      const isKeyboardNowOpen = heightDifference > 120;
+
+      if (isKeyboardNowOpen) {
+        isKeyboardOpenRef.current = true;
+        setIsFocused(true);
+      } else {
+        // Keyboard has closed (e.g. Android back gesture, keyboard dismiss)
+        const wasOpen = isKeyboardOpenRef.current;
+        isKeyboardOpenRef.current = false;
+
+        // If keyboard closed or user exited inputs, immediately blur and restore logo
+        if (wasOpen || (document.activeElement && document.activeElement.tagName === 'INPUT')) {
+          if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+            document.activeElement.blur();
+          }
+          setIsFocused(false);
         }
       }
     };
 
-    window.visualViewport?.addEventListener('resize', handleResize);
+    const handlePopState = () => {
+      // Android system back gesture / button pops history
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+        document.activeElement.blur();
+      }
+      isKeyboardOpenRef.current = false;
+      setIsFocused(false);
+    };
+
+    window.visualViewport?.addEventListener('resize', handleViewportChange);
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('popstate', handlePopState);
+
     return () => {
-      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('popstate', handlePopState);
       if (focusTimeout.current) clearTimeout(focusTimeout.current);
     };
   }, []);
@@ -202,7 +249,20 @@ export default function Login({ onAuthSuccess }) {
   };
 
   return (
-    <div className="auth-wrapper" ref={authContainerRef}>
+    <div 
+      className="auth-wrapper" 
+      ref={authContainerRef}
+      onClick={(e) => {
+        // If clicking outside an input or button, dismiss keyboard and restore logo
+        if (!e.target.closest('input, button, a, .password-toggle-btn')) {
+          if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+            document.activeElement.blur();
+          }
+          setIsFocused(false);
+          isKeyboardOpenRef.current = false;
+        }
+      }}
+    >
       <div className={`auth-card glass ${isFocused ? 'inputs-focused' : ''}`} ref={authCardRef}>
         <div className="auth-logo">
           <ZapLogo size={64} />
