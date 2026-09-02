@@ -3076,11 +3076,6 @@ button {
   user-select: none !important;
 }
 
-.gif-pills-scroll-row.is-dragging .gif-pill-btn {
-  cursor: grabbing !important;
-  pointer-events: none;
-}
-
 .gif-pills-scroll-row::-webkit-scrollbar {
   display: none;
 }
@@ -3099,6 +3094,11 @@ button {
   white-space: nowrap;
   cursor: pointer;
   transition: all 0.15s ease;
+  user-select: none;
+}
+
+.gif-pill-btn * {
+  pointer-events: none;
 }
 
 .gif-pill-btn:hover {

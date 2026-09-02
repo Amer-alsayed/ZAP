@@ -357,14 +357,13 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({
   }, [activeTab]);
 
   const handlePillsMouseDown = (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0) return; // Only left click
     const el = gifPillsRowRef.current;
     if (!el) return;
     isDraggingPillsRef.current = true;
     hasMovedPillsRef.current = false;
     startXPillsRef.current = e.pageX - el.offsetLeft;
     scrollLeftPillsRef.current = el.scrollLeft;
-    el.classList.add('is-dragging');
   };
 
   const handlePillsMouseMove = (e) => {
@@ -373,20 +372,23 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({
     if (!el) return;
     const x = e.pageX - el.offsetLeft;
     const walk = x - startXPillsRef.current;
-    if (Math.abs(walk) > 4) {
+    if (Math.abs(walk) > 6) {
       hasMovedPillsRef.current = true;
-      e.preventDefault();
+      el.classList.add('is-dragging');
+      el.scrollLeft = scrollLeftPillsRef.current - walk;
     }
-    el.scrollLeft = scrollLeftPillsRef.current - walk;
   };
 
   const handlePillsMouseUpOrLeave = () => {
+    if (!isDraggingPillsRef.current) return;
     isDraggingPillsRef.current = false;
     const el = gifPillsRowRef.current;
     if (el) el.classList.remove('is-dragging');
-    setTimeout(() => {
-      hasMovedPillsRef.current = false;
-    }, 60);
+    if (hasMovedPillsRef.current) {
+      setTimeout(() => {
+        hasMovedPillsRef.current = false;
+      }, 50);
+    }
   };
 
   // Fetch GIFs on query or pill change
