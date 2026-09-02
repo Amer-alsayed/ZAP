@@ -407,6 +407,52 @@ export default function App() {
   // Link group call state back to 1-on-1 webrtc
   webrtc.gcStateRef = groupCalls.gcStateRef;
 
+  const isCallMinimizedRef = useRef(isCallMinimized);
+  useEffect(() => {
+    isCallMinimizedRef.current = isCallMinimized;
+  }, [isCallMinimized]);
+
+  const gcMinimizedRef = useRef(gcMinimized);
+  useEffect(() => {
+    gcMinimizedRef.current = gcMinimized;
+  }, [gcMinimized]);
+
+  // Synchronize history state for calls on mobile/browser back gestures
+  useEffect(() => {
+    const isOngoing = callState !== 'idle' || gcState !== 'idle';
+    if (!isOngoing) {
+      if (
+        window.history.state === 'call' || 
+        window.history.state === 'group-call' || 
+        window.history.state === 'call-active' || 
+        window.history.state === 'call-minimized'
+      ) {
+        window.__isProgrammaticPop = true;
+        window.history.back();
+        setTimeout(() => {
+          window.__isProgrammaticPop = false;
+        }, 120);
+      }
+      return;
+    }
+
+    const isFullCall = (callState === 'calling' || callState === 'ringing' || (callState === 'connected' && !isCallMinimized)) ||
+                       (gcState === 'calling' || ((gcState === 'connected' || gcState === 'joined') && !gcMinimized));
+
+    if (isFullCall) {
+      if (window.history.state !== 'call' && window.history.state !== 'group-call') {
+        window.history.pushState(gcState !== 'idle' ? 'group-call' : 'call', '');
+      }
+    } else {
+      const isAtRoot = !activeContact && !activeGroup && !showSettings && !showRecents;
+      if (isAtRoot) {
+        if (window.history.state !== 'call-active' && window.history.state !== 'call-minimized') {
+          window.history.pushState('call-active', '');
+        }
+      }
+    }
+  }, [callState, gcState, isCallMinimized, gcMinimized, activeContact, activeGroup, showSettings, showRecents]);
+
   const showSafetyModalRef = useRef(false);
   useEffect(() => {
     showSafetyModalRef.current = showSafetyModal;
@@ -743,17 +789,66 @@ export default function App() {
         return;
       }
       
-      if (callStateRef.current === 'connected' && !isCallMinimized) {
-        setIsCallMinimized(true);
+      // 1. Cancel outgoing call if currently making one
+      const isOutgoingCall = callStateRef.current === 'calling' || callStateRef.current === 'ringing' || groupCalls.gcStateRef?.current === 'calling';
+      if (isOutgoingCall) {
+        if (callStateRef.current !== 'idle') {
+          handleHangUp();
+        }
+        if (groupCalls.gcStateRef?.current && groupCalls.gcStateRef.current !== 'idle') {
+          handleLeaveGroupCall();
+        }
+        showToast?.('Call cancelled', 'info');
+        return;
+      }
+
+      // 2. If in an active connected call and full-screen, the first back gesture minimizes the call
+      const isConnected1on1 = callStateRef.current === 'connected';
+      const isConnectedGc = groupCalls.gcStateRef?.current === 'connected' || groupCalls.gcStateRef?.current === 'joined';
+      const is1on1Maximized = isConnected1on1 && !isCallMinimizedRef.current;
+      const isGcMaximized = isConnectedGc && !gcMinimizedRef.current;
+
+      if (is1on1Maximized || isGcMaximized) {
+        if (is1on1Maximized) {
+          setIsCallMinimized(true);
+        }
+        if (isGcMaximized) {
+          setGcMinimized(true);
+        }
+        if (window.history.state !== 'call-minimized') {
+          window.history.pushState('call-minimized', '');
+        }
         return;
       }
 
       if (chatBackHandlerRef.current?.()) return;
       if (selectionBackRef.current?.(true)) return;
 
+      // 3. If in a chat, settings, or recents view, navigate back to main menu
       if (activeContactRef.current || activeGroupRef.current || showSettingsRef.current || showRecentsRef.current) {
         handleBackToMenu(true);
+        const hasOngoingCall = callStateRef.current !== 'idle' || (groupCalls.gcStateRef?.current && groupCalls.gcStateRef.current !== 'idle');
+        if (hasOngoingCall && window.history.state !== 'call-active') {
+          window.history.pushState('call-active', '');
+        }
+        return;
       }
+
+      // 4. User is at top-level main menu!
+      // Before closing the app on the next back, end the call so it is not left hanging!
+      const hasOngoingCallAtRoot = callStateRef.current !== 'idle' || (groupCalls.gcStateRef?.current && groupCalls.gcStateRef.current !== 'idle');
+      if (hasOngoingCallAtRoot) {
+        if (callStateRef.current !== 'idle') {
+          handleHangUp();
+        }
+        if (groupCalls.gcStateRef?.current && groupCalls.gcStateRef.current !== 'idle') {
+          handleLeaveGroupCall();
+        }
+        showToast?.('Call ended', 'info', 'Call Ended');
+        return;
+      }
+
+      // 5. At main menu with NO call active -> allow Android to close the app!
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -762,15 +857,20 @@ export default function App() {
     callStateRef,
     chatManager.lightboxRef,
     closeConfirm,
+    groupCalls,
     handleBackToMenu,
     handleCloseLightbox,
     handleCloseSafetyModal,
+    handleHangUp,
+    handleLeaveGroupCall,
     isCallMinimized,
     lightboxImageSrc,
     setForwardingMessage,
+    setGcMinimized,
     setGroupInfoGroupId,
     setIsCallMinimized,
-    setShowCreateGroup
+    setShowCreateGroup,
+    showToast
   ]);
 
   // Fullscreen change listener

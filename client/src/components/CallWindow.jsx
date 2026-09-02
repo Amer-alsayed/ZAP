@@ -25,13 +25,20 @@ export default function CallWindow({
   onToggleCamera,
   onToggleScreenShare,
   onSwitchCamera,
-  cameraFacingMode = 'user'
+  cameraFacingMode = 'user',
+  isCallMinimized: propIsCallMinimized,
+  setIsCallMinimized: propSetIsCallMinimized
 }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const [callDuration, setCallDuration] = useState(0);
-  const [isCallMinimized, setIsCallMinimized] = useState(false);
+  const [internalMinimized, setInternalMinimized] = useState(false);
+  const isCallMinimized = propIsCallMinimized !== undefined ? propIsCallMinimized : internalMinimized;
+  const setIsCallMinimized = useCallback((val) => {
+    setInternalMinimized(val);
+    propSetIsCallMinimized?.(val);
+  }, [propSetIsCallMinimized]);
   const [showControls, setShowControls] = useState(true);
   const controlsTimerRef = useRef(null);
   const [renderState, setRenderState] = useState(callState);
@@ -61,11 +68,24 @@ export default function CallWindow({
 
   useEffect(() => {
     if (callState === 'idle') {
+      setInternalMinimized(false);
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch(() => {});
       }
     }
   }, [callState]);
+
+  useEffect(() => {
+    if (propIsCallMinimized) {
+      const { defaultLeft, defaultTop } = getDockBounds();
+      setPipPosition(prev => {
+        if (prev.x === 0 && prev.y === 0) {
+          return { x: defaultLeft, y: defaultTop };
+        }
+        return prev;
+      });
+    }
+  }, [propIsCallMinimized, getDockBounds]);
 
   // Synchronous callback refs for 100% immediate stream attachment upon DOM insertion
   const bindLocalVideo = (node) => {

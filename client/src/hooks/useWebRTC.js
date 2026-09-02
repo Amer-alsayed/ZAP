@@ -336,6 +336,7 @@ export function useWebRTC({
     setRemoteCameraOff(false);
     setRemoteMuted(false);
     setCameraFacingMode('user');
+    setIsCallMinimized(false);
   }, [onSendCallLog, setCallParty, setCallState, setLocalStream]);
 
   const setupPeerConnection = useCallback((targetUser, stream) => {
