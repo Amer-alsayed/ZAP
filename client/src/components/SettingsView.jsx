@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, User, Check, ShieldAlert, CheckCircle, LogOut, Camera, Trash2, ChevronDown, ChevronUp, Play, Volume2, Ban, Unlock } from 'lucide-react';
+import { ArrowLeft, User, Check, ShieldAlert, CheckCircle, LogOut, Camera, Trash2, ChevronDown, ChevronUp, Play, Volume2, Ban, Unlock, Lock, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { renderAvatar } from './Sidebar';
 import { emitUpdateProfile } from '../services/socket';
 import { soundEngine } from '../services/soundEffects';
 import { applyThemeTokens } from '../utils/themeTokens';
 import { useElasticBounce } from '../hooks/useElasticBounce';
+import { deriveKeysFromPassword, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys, generateRandomSalt } from '../services/crypto';
+import { changeUserPassword, fetchAuthSalt } from '../services/api';
 
 export default function SettingsView({ currentUser, onBack, onLogout, isNavigatingBack, onProfileUpdate, blockedUsers = [], onUnblockUser }) {
   const settingsContainerRef = useRef(null);
@@ -91,6 +93,138 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
   };
 
   const fileInputRef = useRef(null);
+
+  // Change Password state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  const handleChangePassword = async (e) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (!currentPassword) {
+      setPasswordError('Please enter your current password');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters long');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('New passwords do not match');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPasswordError('New password must be different from current password');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    setPasswordError('');
+    setPasswordSuccess(false);
+
+    try {
+      // 1. Fetch the user's current authentication salt
+      const currentSalt = await fetchAuthSalt(currentUser.username);
+
+      // 2. Derive keys from current password
+      const { loginHash: currentLoginHash, encryptionKey: currentEncryptionKey } = await deriveKeysFromPassword(
+        currentPassword,
+        currentUser.username,
+        currentSalt
+      );
+
+      // 3. Obtain user's private keys (either already decrypted in currentUser.keys or by decrypting backup)
+      let identityPrivateKey = currentUser?.keys?.privateIdentityKey;
+      let signingPrivateKey = currentUser?.keys?.privateSigningKey;
+
+      if (!identityPrivateKey || !signingPrivateKey) {
+        if (!currentUser?.encryptedPrivateKeys) {
+          throw new Error('No local encrypted private keys found to re-wrap');
+        }
+        const decrypted = await decryptRestoredPrivateKeys(currentUser.encryptedPrivateKeys, currentEncryptionKey);
+        identityPrivateKey = decrypted.identityPrivateKey;
+        signingPrivateKey = decrypted.signingPrivateKey;
+      } else {
+        // Test decryption of current backup with current password to ensure password is correct before proceeding
+        try {
+          if (currentUser?.encryptedPrivateKeys) {
+            await decryptRestoredPrivateKeys(currentUser.encryptedPrivateKeys, currentEncryptionKey);
+          }
+        } catch (decryptErr) {
+          throw new Error('Current password is incorrect');
+        }
+      }
+
+      // 4. Generate fresh 16-byte CSPRNG salt for new password
+      const newAuthSalt = generateRandomSalt();
+
+      // 5. Derive keys from new password
+      const { loginHash: newLoginHash, encryptionKey: newEncryptionKey } = await deriveKeysFromPassword(
+        newPassword,
+        currentUser.username,
+        newAuthSalt
+      );
+
+      // 6. Re-encrypt the private keys with the new password-derived key
+      const newBackup = await encryptAndBackupPrivateKeys(
+        identityPrivateKey,
+        signingPrivateKey,
+        newEncryptionKey
+      );
+
+      // 7. Call the server endpoint to update password hash and re-wrapped encrypted private keys
+      await changeUserPassword(
+        currentLoginHash,
+        newLoginHash,
+        newBackup,
+        newAuthSalt,
+        currentUser.token
+      );
+
+      // 8. Update session encryption key in localStorage
+      const rawKey = await window.crypto.subtle.exportKey('raw', newEncryptionKey);
+      const bytes = new Uint8Array(rawKey);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64Key = btoa(binary);
+
+      try {
+        localStorage.setItem('session_enc_key', base64Key);
+        localStorage.setItem('zap_encrypted_private_keys', JSON.stringify(newBackup));
+      } catch (storageErr) {
+        console.warn('LocalStorage quota restricted session_enc_key persist:', storageErr);
+      }
+
+      // 9. Update state in React context
+      if (typeof onProfileUpdate === 'function') {
+        onProfileUpdate({ encryptedPrivateKeys: newBackup });
+      }
+
+      // 10. Success UI & Feedback
+      setPasswordSuccess(true);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      soundEngine.playKeyboardTick?.();
+
+      setTimeout(() => {
+        setPasswordSuccess(false);
+      }, 3500);
+    } catch (err) {
+      console.error('Failed to change password:', err);
+      setPasswordError(err.message || 'Failed to update password. Please verify your current password.');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
 
   // Centering, cropping and JPEG compression pipeline
   const processProfileImage = (file) => {
@@ -577,6 +711,119 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
               </div>
             </div>
 
+            {/* Security & Password Management */}
+            <div className="settings-section">
+              <label style={{ display: 'block', marginBottom: '8px' }}>Security & Password</label>
+              <p className="section-description">
+                Change your account password. Because ZAP uses Zero-Knowledge cryptography, your new password will re-encrypt your local identity and signing keys.
+              </p>
+
+              <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ fontSize: '12.5px', marginBottom: '6px' }}>Current Password</label>
+                  <div className="input-with-icon">
+                    <Lock size={18} className="input-icon" />
+                    <input
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      placeholder="Enter current password..."
+                      value={currentPassword}
+                      onChange={(e) => { setCurrentPassword(e.target.value); setPasswordError(''); }}
+                      autoComplete="current-password"
+                      disabled={isChangingPassword}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      onClick={() => setShowCurrentPassword(p => !p)}
+                      tabIndex="-1"
+                      aria-label={showCurrentPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ fontSize: '12.5px', marginBottom: '6px' }}>New Password (min. 6 characters)</label>
+                  <div className="input-with-icon">
+                    <KeyRound size={18} className="input-icon" />
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      placeholder="Enter new password..."
+                      value={newPassword}
+                      onChange={(e) => { setNewPassword(e.target.value); setPasswordError(''); }}
+                      autoComplete="new-password"
+                      disabled={isChangingPassword}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      onClick={() => setShowNewPassword(p => !p)}
+                      tabIndex="-1"
+                      aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ fontSize: '12.5px', marginBottom: '6px' }}>Confirm New Password</label>
+                  <div className="input-with-icon">
+                    <KeyRound size={18} className="input-icon" />
+                    <input
+                      type={showConfirmNewPassword ? 'text' : 'password'}
+                      placeholder="Re-enter new password..."
+                      value={confirmNewPassword}
+                      onChange={(e) => { setConfirmNewPassword(e.target.value); setPasswordError(''); }}
+                      autoComplete="new-password"
+                      disabled={isChangingPassword}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      onClick={() => setShowConfirmNewPassword(p => !p)}
+                      tabIndex="-1"
+                      aria-label={showConfirmNewPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {passwordError && (
+                  <div className="settings-feedback error-feedback" style={{ marginTop: '2px' }}>
+                    <ShieldAlert size={16} />
+                    <span>{passwordError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className={`save-profile-btn ${passwordSuccess ? 'is-success' : ''}`}
+                  disabled={isChangingPassword || !currentPassword || !newPassword || !confirmNewPassword}
+                  style={{ marginTop: '4px' }}
+                >
+                  {isChangingPassword ? (
+                    <span className="btn-state-content">
+                      <div className="btn-spinner" />
+                      Updating credentials & re-encrypting keys...
+                    </span>
+                  ) : passwordSuccess ? (
+                    <span className="btn-state-content">
+                      <Check size={16} strokeWidth={2.6} />
+                      Password Changed Successfully
+                    </span>
+                  ) : (
+                    <span className="btn-state-content">
+                      <Lock size={16} />
+                      Update Password
+                    </span>
+                  )}
+                </button>
+              </form>
+            </div>
+
             {/* Form feedback indicators */}
             {error && (
               <div className="settings-feedback error-feedback">
@@ -624,6 +871,12 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
         <div className="settings-floating-toast" role="status" aria-live="polite">
           <CheckCircle size={16} className="toast-icon" />
           <span>Profile updated successfully</span>
+        </div>
+      )}
+      {passwordSuccess && (
+        <div className="settings-floating-toast" role="status" aria-live="polite">
+          <CheckCircle size={16} className="toast-icon" />
+          <span>Password updated successfully</span>
         </div>
       )}
     </div>

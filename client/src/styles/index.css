@@ -425,6 +425,53 @@ button {
   color: var(--text-primary);
 }
 
+/* Password visibility toggle button styling */
+.password-toggle-btn {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--text-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  transition: color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.password-toggle-btn:hover {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.password-toggle-btn:active {
+  transform: scale(0.92);
+}
+
+.input-container .password-toggle-btn {
+  margin-right: -4px;
+}
+
+.input-container .password-toggle-btn svg {
+  margin-right: 0 !important;
+}
+
+.input-with-icon .password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  z-index: 2;
+}
+
+.input-with-icon .password-toggle-btn svg {
+  margin-right: 0 !important;
+}
+
+.input-with-icon:has(.password-toggle-btn) input {
+  padding-right: 44px !important;
+}
+
 .auth-btn {
   height: 54px;
   margin-top: 12px;

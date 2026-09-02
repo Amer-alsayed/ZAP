@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 import config from './src/config.js';
 import logger from './src/logger.js';
 import { initDb, dbPing } from './src/db.js';
-import { register, login, searchUser, getAuthSalt } from './src/authController.js';
+import { register, login, searchUser, getAuthSalt, changePassword } from './src/authController.js';
 import { socketHandler } from './src/socketHandler.js';
 import { authenticateToken } from './src/middleware/authMiddleware.js';
 import { generalLimiter, authLimiter, saltLimiter, uploadLimiter } from './src/middleware/rateLimiter.js';
@@ -114,6 +114,7 @@ app.get('/api/auth/salt/:username', saltLimiter, getAuthSalt);
 app.get('/api/auth/salt', saltLimiter, getAuthSalt);
 app.post('/api/auth/register', authLimiter, register);
 app.post('/api/auth/login', authLimiter, login);
+app.post('/api/auth/change-password', authLimiter, authenticateToken, changePassword);
 app.get('/api/auth/search', authenticateToken, searchUser);
 
 // File upload endpoint (receives client-side encrypted file payload)

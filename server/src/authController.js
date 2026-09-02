@@ -190,3 +190,78 @@ export const searchUser = async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+export const changePassword = async (req, res) => {
+  const { currentLoginHash, newLoginHash, encryptedPrivateKeys, authSalt } = req.body;
+  const userId = req.user?.id;
+  const username = req.user?.username;
+
+  if (!userId || !username) {
+    return res.status(401).json({ error: 'Unauthorized: authentication required' });
+  }
+
+  if (!currentLoginHash || !newLoginHash || !encryptedPrivateKeys) {
+    return res.status(400).json({ error: 'All fields are required to change password' });
+  }
+
+  if (typeof currentLoginHash !== 'string' || currentLoginHash.length > 512 ||
+      typeof newLoginHash !== 'string' || newLoginHash.length > 512) {
+    return res.status(400).json({ error: 'Invalid password authentication data format' });
+  }
+
+  // Validate encryptedPrivateKeys bundle
+  const encKeysObj = typeof encryptedPrivateKeys === 'string' ? safeJsonParse(encryptedPrivateKeys) : encryptedPrivateKeys;
+  if (!encKeysObj || typeof encKeysObj !== 'object' || !encKeysObj.ciphertext || !encKeysObj.iv) {
+    return res.status(400).json({ error: 'Invalid encrypted private keys payload' });
+  }
+
+  if (authSalt && (typeof authSalt !== 'string' || authSalt.length > 128)) {
+    return res.status(400).json({ error: 'Invalid authentication salt format' });
+  }
+
+  try {
+    const user = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify current password hash
+    const isValid = await bcrypt.compare(currentLoginHash, user.password_hash);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    // Prevent changing to exact same password hash
+    const isSame = await bcrypt.compare(newLoginHash, user.password_hash);
+    if (isSame) {
+      return res.status(400).json({ error: 'New password must be different from current password' });
+    }
+
+    // Hash the new loginHash with fresh bcrypt salt
+    const salt = await bcrypt.genSalt(10);
+    const newPasswordHash = await bcrypt.hash(newLoginHash, salt);
+
+    // Save updated credentials & re-wrapped encrypted private keys
+    await dbRun(
+      `UPDATE users 
+       SET password_hash = ?, encrypted_private_keys = ?, auth_salt = ?
+       WHERE id = ?`,
+      [
+        newPasswordHash,
+        typeof encryptedPrivateKeys === 'string' ? encryptedPrivateKeys : JSON.stringify(encryptedPrivateKeys),
+        authSalt || user.auth_salt || null,
+        userId
+      ]
+    );
+
+    logger.info(`Password successfully updated for user: ${username}`);
+
+    return res.status(200).json({
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    logger.error('Change password error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+

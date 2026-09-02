@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, User, Lock, KeyRound, AlertTriangle } from 'lucide-react';
+import { Shield, User, Lock, KeyRound, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import ZapLogo from './ZapLogo';
 import { deriveKeysFromPassword, generateKeyPairs, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys, generateRandomSalt } from '../services/crypto';
 import { registerUser, loginUser, fetchAuthSalt } from '../services/api';
@@ -9,6 +9,9 @@ export default function Login({ onAuthSuccess }) {
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -73,9 +76,15 @@ export default function Login({ onAuthSuccess }) {
       return;
     }
 
-    if (isRegister && password.length < 6) {
-      setError('Password must be at least 6 characters long for security');
-      return;
+    if (isRegister) {
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters long for security');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match. Please verify and try again.');
+        return;
+      }
     }
     
     setLoading(true);
@@ -227,7 +236,7 @@ export default function Login({ onAuthSuccess }) {
               <Lock size={20} />
               <input
                 id="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="Enter strong password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -235,10 +244,49 @@ export default function Login({ onAuthSuccess }) {
                 onBlur={handleBlur}
                 required
                 disabled={loading}
-                autoComplete="current-password"
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
               />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowPassword(p => !p)}
+                tabIndex="-1"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
+
+          {isRegister && (
+            <div className="form-group">
+              <label htmlFor="confirm-password">Confirm Password</label>
+              <div className="input-container">
+                <Lock size={20} />
+                <input
+                  id="confirm-password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Re-enter password to confirm"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                  required
+                  disabled={loading}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowConfirmPassword(p => !p)}
+                  tabIndex="-1"
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className={`warning-box-container ${isRegister ? 'visible' : ''}`}>
             <div className="warning-box">
@@ -257,12 +305,12 @@ export default function Login({ onAuthSuccess }) {
           {isRegister ? (
             <>
               Already have an account?{' '}
-              <span onClick={() => { setIsRegister(false); setError(''); }}>Login here</span>
+              <span onClick={() => { setIsRegister(false); setError(''); setConfirmPassword(''); }}>Login here</span>
             </>
           ) : (
             <>
               New to ZAP?{' '}
-              <span onClick={() => { setIsRegister(true); setError(''); }}>Create account</span>
+              <span onClick={() => { setIsRegister(true); setError(''); setConfirmPassword(''); }}>Create account</span>
             </>
           )}
         </div>

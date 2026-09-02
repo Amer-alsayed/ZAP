@@ -110,6 +110,27 @@ export const loginUser = async (username, loginHash) => {
 };
 
 /**
+ * Change the user's password with Zero-Knowledge re-wrapped private keys.
+ */
+export const changeUserPassword = async (currentLoginHash, newLoginHash, encryptedPrivateKeys, authSalt, token) => {
+  const response = await fetch(`${BASE_URL}/api/auth/change-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      currentLoginHash,
+      newLoginHash,
+      encryptedPrivateKeys,
+      authSalt
+    })
+  });
+
+  return parseJsonResponse(response, 'Password change failed');
+};
+
+/**
  * Search for a user by username.
  */
 export const searchUser = async (username, token) => {
