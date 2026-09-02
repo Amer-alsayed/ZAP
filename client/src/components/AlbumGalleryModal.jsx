@@ -181,7 +181,16 @@ export const AlbumGalleryModal = ({ items, initialIndex = 0, isExiting = false, 
 
       {/* Bottom Filmstrip Carousel */}
       {total > 1 && (
-        <div className="album-gallery-filmstrip" onClick={(e) => e.stopPropagation()}>
+        <div 
+          className="album-gallery-filmstrip" 
+          onClick={(e) => e.stopPropagation()}
+          onWheel={(e) => {
+            if (e.deltaY !== 0 || e.deltaX !== 0) {
+              const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+              e.currentTarget.scrollLeft += delta;
+            }
+          }}
+        >
           <div className="filmstrip-track">
             {items.map((item, idx) => {
               const itemFile = item.fileMetadata;

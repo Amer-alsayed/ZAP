@@ -3060,10 +3060,25 @@ button {
   gap: 6px;
   padding: 8px 12px;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  touch-action: pan-x;
+}
+
+.gif-pills-scroll-row.is-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+.gif-pills-scroll-row.is-dragging .gif-pill-btn {
+  cursor: grabbing !important;
+  pointer-events: none;
 }
 
 .gif-pills-scroll-row::-webkit-scrollbar {

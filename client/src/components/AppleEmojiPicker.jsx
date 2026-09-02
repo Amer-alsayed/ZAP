@@ -328,8 +328,66 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({
   const [isLoadingGifs, setIsLoadingGifs] = useState(false);
   const gifScrollRef = useRef(null);
   const gifBounceRef = useRef(null);
+  const gifPillsRowRef = useRef(null);
+  const isDraggingPillsRef = useRef(false);
+  const startXPillsRef = useRef(0);
+  const scrollLeftPillsRef = useRef(0);
+  const hasMovedPillsRef = useRef(false);
 
   useElasticBounce(gifScrollRef, gifBounceRef, activeTab === 'gifs');
+
+  // Mouse wheel horizontal scrolling for GIF reaction pills
+  useEffect(() => {
+    if (activeTab !== 'gifs') return;
+    const el = gifPillsRowRef.current;
+    if (!el) return;
+
+    const onWheel = (e) => {
+      if (e.deltaY !== 0 || e.deltaX !== 0) {
+        e.preventDefault();
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        el.scrollLeft += delta;
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [activeTab]);
+
+  const handlePillsMouseDown = (e) => {
+    if (e.button !== 0) return;
+    const el = gifPillsRowRef.current;
+    if (!el) return;
+    isDraggingPillsRef.current = true;
+    hasMovedPillsRef.current = false;
+    startXPillsRef.current = e.pageX - el.offsetLeft;
+    scrollLeftPillsRef.current = el.scrollLeft;
+    el.classList.add('is-dragging');
+  };
+
+  const handlePillsMouseMove = (e) => {
+    if (!isDraggingPillsRef.current) return;
+    const el = gifPillsRowRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = x - startXPillsRef.current;
+    if (Math.abs(walk) > 4) {
+      hasMovedPillsRef.current = true;
+      e.preventDefault();
+    }
+    el.scrollLeft = scrollLeftPillsRef.current - walk;
+  };
+
+  const handlePillsMouseUpOrLeave = () => {
+    isDraggingPillsRef.current = false;
+    const el = gifPillsRowRef.current;
+    if (el) el.classList.remove('is-dragging');
+    setTimeout(() => {
+      hasMovedPillsRef.current = false;
+    }, 60);
+  };
 
   // Fetch GIFs on query or pill change
   useEffect(() => {
@@ -619,13 +677,21 @@ const AppleEmojiPicker = memo(function AppleEmojiPicker({
       {activeTab === 'gifs' && (
         <div className="apple-gifs-wrapper">
           {/* Reaction Quick Filter Pills */}
-          <div className="gif-pills-scroll-row">
+          <div 
+            ref={gifPillsRowRef}
+            className="gif-pills-scroll-row"
+            onMouseDown={handlePillsMouseDown}
+            onMouseMove={handlePillsMouseMove}
+            onMouseUp={handlePillsMouseUpOrLeave}
+            onMouseLeave={handlePillsMouseUpOrLeave}
+          >
             {GIF_REACTION_PILLS.map((pill) => (
               <button
                 key={pill.id}
                 type="button"
                 className={`gif-pill-btn ${activeGifPill === pill.query && !searchQuery ? 'is-active' : ''}`}
                 onClick={() => {
+                  if (hasMovedPillsRef.current) return;
                   setSearchQuery('');
                   setActiveGifPill(pill.query);
                 }}
