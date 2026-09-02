@@ -7,3 +7,4 @@ server/uploads/
 client/dist/
 .DS_Store
 *.log
+.jules/
