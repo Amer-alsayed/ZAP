@@ -204,18 +204,6 @@ export default function CallWindow({
     return { minX, maxX, minY, maxY, pipWidth, pipHeight, margin, defaultLeft, defaultTop };
   }, []);
 
-  useEffect(() => {
-    if (propIsCallMinimized) {
-      const { defaultLeft, defaultTop } = getDockBounds();
-      setPipPosition(prev => {
-        if (prev.x === 0 && prev.y === 0) {
-          return { x: defaultLeft, y: defaultTop };
-        }
-        return prev;
-      });
-    }
-  }, [propIsCallMinimized, getDockBounds]);
-
   // Compute best snap corner based on current position and flick velocity
   const calculateSnapTarget = useCallback((posX, posY, vx, vy) => {
     const { minX, maxX, minY, maxY } = getDockBounds();
