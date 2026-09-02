@@ -27,19 +27,12 @@ export default function Login({ onAuthSuccess }) {
 
   useElasticBounce(authContainerRef, authCardRef);
 
-  const handleFocus = (e) => {
+  const handleFocus = () => {
     if (focusTimeout.current) {
       clearTimeout(focusTimeout.current);
       focusTimeout.current = null;
     }
     setIsFocused(true);
-
-    const target = e?.target;
-    if (target) {
-      setTimeout(() => {
-        target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 250);
-    }
   };
 
   const handleBlur = (e) => {
@@ -49,18 +42,13 @@ export default function Login({ onAuthSuccess }) {
       return;
     }
 
-    // If virtual keyboard is currently open, keep logo collapsed until keyboard actually closes
-    if (isKeyboardOpenRef.current) {
-      return;
-    }
-
     if (focusTimeout.current) clearTimeout(focusTimeout.current);
     focusTimeout.current = setTimeout(() => {
       const activeEl = document.activeElement;
-      if (!authCardRef.current?.contains(activeEl) && !isKeyboardOpenRef.current) {
+      if (!authCardRef.current?.contains(activeEl)) {
         setIsFocused(false);
       }
-    }, 100);
+    }, 150);
   };
 
   // Keyboard close & back gesture detector (Android back button, gesture navigation, dismiss)
@@ -86,8 +74,8 @@ export default function Login({ onAuthSuccess }) {
         const wasOpen = isKeyboardOpenRef.current;
         isKeyboardOpenRef.current = false;
 
-        // If keyboard closed or user exited inputs, immediately blur and restore logo
-        if (wasOpen || (document.activeElement && document.activeElement.tagName === 'INPUT')) {
+        // ONLY if the keyboard was previously open and has now closed
+        if (wasOpen) {
           if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
             document.activeElement.blur();
           }
@@ -249,20 +237,7 @@ export default function Login({ onAuthSuccess }) {
   };
 
   return (
-    <div 
-      className="auth-wrapper" 
-      ref={authContainerRef}
-      onClick={(e) => {
-        // If clicking outside an input or button, dismiss keyboard and restore logo
-        if (!e.target.closest('input, button, a, .password-toggle-btn')) {
-          if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
-            document.activeElement.blur();
-          }
-          setIsFocused(false);
-          isKeyboardOpenRef.current = false;
-        }
-      }}
-    >
+    <div className="auth-wrapper" ref={authContainerRef}>
       <div className={`auth-card glass ${isFocused ? 'inputs-focused' : ''}`} ref={authCardRef}>
         <div className="auth-logo">
           <ZapLogo size={64} />
