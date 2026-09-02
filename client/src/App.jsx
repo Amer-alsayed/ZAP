@@ -206,17 +206,21 @@ export default function App() {
   const sharedSecrets = useRef({});
   const contactsRef = useRef([]);
 
+  const chatManagerRef = useRef(null);
+  const groupManagerRef = useRef(null);
+  const handleBackToMenuRef = useRef(null);
+
   // Group Manager Hook
   const groupManager = useGroupManager({
     currentUser,
     contactsRef,
     sharedSecrets,
     showToast,
-    onBackToMenu: () => handleBackToMenu(),
+    onBackToMenu: () => handleBackToMenuRef.current?.(),
     onClearActiveContact: () => {
-      if (chatManager.activeContactRef.current) {
-        chatManager.setActiveContact(null);
-        chatManager.activeContactRef.current = null;
+      if (chatManagerRef.current?.activeContactRef?.current) {
+        chatManagerRef.current.setActiveContact(null);
+        chatManagerRef.current.activeContactRef.current = null;
       }
       if (showSettingsRef.current) {
         setShowSettings(false);
@@ -228,6 +232,7 @@ export default function App() {
       }
     }
   });
+  groupManagerRef.current = groupManager;
 
   const {
     groups,
@@ -293,6 +298,7 @@ export default function App() {
       return Promise.resolve();
     }
   });
+  chatManagerRef.current = chatManager;
 
   const {
     contacts,
@@ -335,12 +341,14 @@ export default function App() {
     updateContactProfileAndStatus
   } = chatManager;
 
+  const fallbackGcStateRef = useRef('idle');
+
   // 1-on-1 WebRTC Hook
   const webrtc = useWebRTC({
     currentUser,
     activeContact,
     contactsRef,
-    gcStateRef: useRef('idle'), // Updated below
+    gcStateRef: fallbackGcStateRef, // Updated below
     showToast,
     onSelectContact: handleSelectContact,
     onSendCallLog: sendCallLogMessage
@@ -640,6 +648,8 @@ export default function App() {
     showSettings
   ]);
 
+  handleBackToMenuRef.current = handleBackToMenu;
+
   const openSettingsView = useCallback(() => {
     if (window.history.state !== 'settings') {
       window.history.pushState('settings', '');
@@ -754,7 +764,7 @@ export default function App() {
 
       if (sidebarBackHandlerRef.current?.()) return;
 
-      if (chatManager.lightboxRef?.current || lightboxImageSrc) {
+      if (chatManagerRef.current?.lightboxRef?.current || lightboxImageSrc) {
         handleCloseLightbox(true);
         return;
       }
@@ -882,12 +892,10 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  const chatManagerRef = useRef(chatManager);
   useEffect(() => {
     chatManagerRef.current = chatManager;
   }, [chatManager]);
 
-  const groupManagerRef = useRef(groupManager);
   useEffect(() => {
     groupManagerRef.current = groupManager;
   }, [groupManager]);
