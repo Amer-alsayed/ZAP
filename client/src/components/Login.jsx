@@ -24,12 +24,19 @@ export default function Login({ onAuthSuccess }) {
 
   useElasticBounce(authContainerRef, authCardRef);
 
-  const handleFocus = () => {
+  const handleFocus = (e) => {
     if (focusTimeout.current) {
       clearTimeout(focusTimeout.current);
       focusTimeout.current = null;
     }
     setIsFocused(true);
+
+    const target = e?.target;
+    if (target) {
+      setTimeout(() => {
+        target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 250);
+    }
   };
 
   const handleBlur = () => {
@@ -218,7 +225,7 @@ export default function Login({ onAuthSuccess }) {
               <input
                 id="username"
                 type="text"
-                placeholder="Enter unique username"
+                placeholder="Choose username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
                 onFocus={handleFocus}
@@ -237,7 +244,7 @@ export default function Login({ onAuthSuccess }) {
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Enter strong password"
+                placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onFocus={handleFocus}
@@ -266,7 +273,7 @@ export default function Login({ onAuthSuccess }) {
                 <input
                   id="confirm-password"
                   type={showConfirmPassword ? 'text' : 'password'}
-                  placeholder="Re-enter password to confirm"
+                  placeholder="Confirm password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   onFocus={handleFocus}
