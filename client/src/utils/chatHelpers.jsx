@@ -457,7 +457,33 @@ export const readBlobBufferSafely = async (blob) => {
     } catch (e) {}
   }
 
-  // Tier 2: blob.slice().arrayBuffer()
+  // Tier 2: Stream reading (resilient against Android Scoped Storage fragmentation & large files)
+  if (typeof blob.stream === 'function') {
+    try {
+      const reader = blob.stream().getReader();
+      const chunks = [];
+      let totalLength = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value && value.byteLength > 0) {
+          chunks.push(value);
+          totalLength += value.byteLength;
+        }
+      }
+      if (totalLength > 0) {
+        const fullBuf = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+          fullBuf.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        return fullBuf.buffer;
+      }
+    } catch (e) {}
+  }
+
+  // Tier 3: blob.slice().arrayBuffer()
   try {
     const sliced = blob.slice(0, blob.size, blob.type);
     if (typeof sliced.arrayBuffer === 'function') {
@@ -466,14 +492,14 @@ export const readBlobBufferSafely = async (blob) => {
     }
   } catch (e) {}
 
-  // Tier 3: Response(blob).arrayBuffer()
+  // Tier 4: Response(blob).arrayBuffer()
   try {
     const res = new Response(blob);
     const buf = await res.arrayBuffer();
     if (buf && buf.byteLength > 0) return buf;
   } catch (e) {}
 
-  // Tier 4: FileReader.readAsArrayBuffer
+  // Tier 5: FileReader.readAsArrayBuffer
   const frBuf = await new Promise((resolve) => {
     try {
       const reader = new FileReader();
@@ -492,7 +518,7 @@ export const readBlobBufferSafely = async (blob) => {
   });
   if (frBuf && frBuf.byteLength > 0) return frBuf;
 
-  // Tier 5: FileReader.readAsDataURL (Resilient on Android WebViews)
+  // Tier 6: FileReader.readAsDataURL (Resilient on Android WebViews)
   const dataUrlBuf = await new Promise((resolve) => {
     try {
       const reader = new FileReader();
@@ -524,8 +550,36 @@ export const readBlobBufferSafely = async (blob) => {
   });
   if (dataUrlBuf && dataUrlBuf.byteLength > 0) return dataUrlBuf;
 
-  // Tier 6: Image Canvas Re-encode for photos on Android
+  // Tier 7: Native window.createImageBitmap (hardware-accelerated, clamps dimensions safely)
   const mime = inferMimeType(blob.name || '', blob.type || '');
+  if (mime.startsWith('image/') && typeof window !== 'undefined' && typeof window.createImageBitmap === 'function') {
+    try {
+      const bitmap = await window.createImageBitmap(blob);
+      let { width: w, height: h } = bitmap;
+      const maxDim = 2560;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+        else { w = Math.round((w * maxDim) / h); h = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(bitmap, 0, 0, w, h);
+        bitmap.close();
+        const b = await new Promise(res => canvas.toBlob(res, mime === 'image/png' ? 'image/png' : 'image/jpeg', 0.90));
+        if (b) {
+          const ab = await b.arrayBuffer();
+          if (ab && ab.byteLength > 0) return ab;
+        }
+      } else {
+        bitmap.close();
+      }
+    } catch (e) {}
+  }
+
+  // Tier 8: Image Canvas Re-encode for photos on Android (clamped to max 2560 to prevent canvas OOM)
   if (mime.startsWith('image/')) {
     const canvasBuf = await new Promise((resolve) => {
       let objUrl = null;
@@ -534,15 +588,22 @@ export const readBlobBufferSafely = async (blob) => {
         const img = new Image();
         img.onload = () => {
           try {
+            const maxDim = 2560;
+            let w = img.naturalWidth || img.width;
+            let h = img.naturalHeight || img.height;
+            if (w > maxDim || h > maxDim) {
+              if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+              else { w = Math.round((w * maxDim) / h); h = maxDim; }
+            }
             const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth || img.width;
-            canvas.height = img.naturalHeight || img.height;
+            canvas.width = w;
+            canvas.height = h;
             const ctx = canvas.getContext('2d');
             if (!ctx) {
               if (objUrl) URL.revokeObjectURL(objUrl);
               return resolve(null);
             }
-            ctx.drawImage(img, 0, 0);
+            ctx.drawImage(img, 0, 0, w, h);
             if (objUrl) URL.revokeObjectURL(objUrl);
             objUrl = null;
             canvas.toBlob(async (b) => {
@@ -556,7 +617,7 @@ export const readBlobBufferSafely = async (blob) => {
               } else {
                 resolve(null);
               }
-            }, mime === 'image/png' ? 'image/png' : 'image/jpeg', 0.92);
+            }, mime === 'image/png' ? 'image/png' : 'image/jpeg', 0.90);
           } catch (e) {
             if (objUrl) URL.revokeObjectURL(objUrl);
             resolve(null);
@@ -767,7 +828,7 @@ export const prepareFileForSending = async (rawFile) => {
 
   if (!rawBuffer || rawBuffer.byteLength === 0) {
     console.error('prepareFileForSending: all read tiers failed', { name: rawFile.name, size: rawFile.size, type: rawFile.type });
-    throw new Error(`Could not read data for "${rawFile.name}". Please try selecting the file again.`);
+    throw new Error(`Could not access "${rawFile.name}". If this photo is stored in cloud backup, please ensure it is downloaded to device storage or select it again.`);
   }
 
   let file = rawFile;

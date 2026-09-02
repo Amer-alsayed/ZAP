@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, Video as VideoIcon, Play } from 'lucide-react';
+import { ImageOff, VideoOff, RotateCcw, AlertTriangle, Video as VideoIcon, Play } from 'lucide-react';
 import ZapLogo from './ZapLogo';
 import CustomVideoPlayer from './CustomVideoPlayer';
 import { loadOrFetchDecryptedMedia, setCachedMedia, getMemoryMediaUrl, inferMimeType } from '../services/mediaCache';
@@ -14,6 +14,7 @@ export function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, is
   const isInViewRaw = useLazyInView(containerRef, '900px');
   const isCachedEarly = Boolean(fileUrl && (getMemoryMediaUrl(fileUrl, isFullRes) || globalMediaSessionCache.has(fileUrl)));
   const isInView = isCachedEarly || isInViewRaw;
+  const [reloadCount, setReloadCount] = useState(0);
   
   const [imgSrc, setImgSrc] = useState(() => {
     if (!fileUrl) return null;
@@ -36,6 +37,14 @@ export function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, is
       ? (getMemoryMediaUrl(fileUrl, true) || (globalMediaSessionCache.has(fileUrl) ? globalMediaSessionCache.get(fileUrl).fullUrl : null))
       : null
   );
+
+  const handleRetry = (e) => {
+    e?.stopPropagation?.();
+    setError(null);
+    setIsLoaded(false);
+    hasRetriedRef.current = false;
+    setReloadCount(c => c + 1);
+  };
 
   useEffect(() => {
     if (!fileUrl) return;
@@ -82,7 +91,7 @@ export function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, is
         setIsLoaded(true);
         if (onImageLoad) onImageLoad();
       } catch (err) {
-        if (active) setError(err.message || 'Media loading failed');
+        if (active) setError(err.message || 'Media unavailable');
       }
     };
 
@@ -91,12 +100,48 @@ export function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, is
     return () => {
       active = false;
     };
-  }, [fileUrl, isFullRes, isInView]);
-
-  if (error) return <span ref={containerRef} style={{ color: 'var(--text-muted, #a0aec0)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}><AlertTriangle size={14} style={{ color: '#e53e3e' }} /> {error}</span>;
+  }, [fileUrl, isFullRes, isInView, reloadCount]);
 
   const skeletonAspect = !isFullRes ? getSkeletonAspect(fileUrl, fileMetadata?.width, fileMetadata?.height) : null;
   const containerStyle = !isFullRes && !isLoaded ? { '--skeleton-aspect': skeletonAspect } : undefined;
+
+  if (error) {
+    return (
+      <div 
+        ref={containerRef} 
+        className={`image-loader-container is-unavailable ${isFullRes ? 'is-fullres' : ''}`} 
+        style={containerStyle}
+      >
+        <div className="media-unavailable-placeholder">
+          <div className="media-unavailable-icon-wrapper">
+            <ImageOff size={24} className="media-unavailable-icon" />
+          </div>
+          <div className="media-unavailable-info">
+            <span className="media-unavailable-title">Media Unavailable</span>
+            <span className="media-unavailable-subtitle">
+              {String(error).includes('expired') || String(error).includes('404')
+                ? 'No longer stored on this device'
+                : 'Could not load media'}
+            </span>
+            {fileMetadata?.name && (
+              <span className="media-unavailable-filename" title={fileMetadata.name}>
+                {fileMetadata.name}
+              </span>
+            )}
+          </div>
+          <button 
+            type="button" 
+            className="media-unavailable-retry-btn"
+            onClick={handleRetry}
+            title="Retry loading media"
+          >
+            <RotateCcw size={12} />
+            <span>Retry</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className={`image-loader-container ${isLoaded ? 'is-ready' : 'is-decrypting'} ${isFullRes ? 'is-fullres' : ''}`} style={containerStyle}>
@@ -159,11 +204,19 @@ export function ImagePreviewLoader({ fileMetadata, onImageClick, onImageLoad, is
 export function VideoPreviewLoader({ fileMetadata, compact = false }) {
   const [videoSrc, setVideoSrc] = useState(null);
   const [error, setError] = useState(false);
+  const [reloadCount, setReloadCount] = useState(0);
   const objectUrlRef = useRef(null);
   const containerRef = useRef(null);
   const isInViewRaw = useLazyInView(containerRef, '900px');
   const isCached = Boolean(fileMetadata?.url && (getMemoryMediaUrl(fileMetadata.url, false) || globalMediaSessionCache.has(fileMetadata.url)));
   const isInView = isCached || isInViewRaw;
+
+  const handleRetry = (e) => {
+    e?.stopPropagation?.();
+    setError(false);
+    setVideoSrc(null);
+    setReloadCount(c => c + 1);
+  };
 
   useEffect(() => {
     if (!isInView) return;
@@ -202,12 +255,44 @@ export function VideoPreviewLoader({ fileMetadata, compact = false }) {
         objectUrlRef.current = null;
       }
     };
-  }, [fileMetadata, isInView]);
+  }, [fileMetadata, isInView, reloadCount]);
 
   const skeletonAspect = getSkeletonAspect(fileMetadata?.url);
   const showSkeleton = !videoSrc;
 
-  if (error) return <span ref={containerRef} style={{ color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={14} /> Video Decryption Failed</span>;
+  if (error) {
+    return (
+      <div
+        ref={containerRef}
+        className={`video-loader-container is-unavailable ${compact ? 'cvp-compact-host' : ''}`}
+        style={{ '--skeleton-aspect': skeletonAspect }}
+      >
+        <div className="media-unavailable-placeholder">
+          <div className="media-unavailable-icon-wrapper">
+            <VideoOff size={24} className="media-unavailable-icon" />
+          </div>
+          <div className="media-unavailable-info">
+            <span className="media-unavailable-title">Video Unavailable</span>
+            <span className="media-unavailable-subtitle">No longer stored on this device</span>
+            {fileMetadata?.name && (
+              <span className="media-unavailable-filename" title={fileMetadata.name}>
+                {fileMetadata.name}
+              </span>
+            )}
+          </div>
+          <button 
+            type="button" 
+            className="media-unavailable-retry-btn"
+            onClick={handleRetry}
+            title="Retry loading video"
+          >
+            <RotateCcw size={12} />
+            <span>Retry</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (compact) {
     return (

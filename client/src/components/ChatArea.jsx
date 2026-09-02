@@ -2161,7 +2161,7 @@ const ChatArea = React.memo(function ChatArea({
             }
 
             if (!fallbackBuffer || fallbackBuffer.byteLength === 0) {
-              throw new Error(`Could not read data for "${fileToUpload.name}". Please try selecting the file again.`);
+              throw new Error(`Could not access "${fileToUpload.name}". If this photo is stored in cloud backup, please ensure it is downloaded to device storage or select it again.`);
             }
             fileBuffer = fallbackBuffer;
 
