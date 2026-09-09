@@ -16,7 +16,7 @@ if (isPostgres) {
     },
     max: 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 15000,
+    connectionTimeoutMillis: 30000,
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000
   });
@@ -76,17 +76,21 @@ const executePgQueryWithRetry = async (queryFn, maxRetries = 2) => {
     try {
       return await queryFn();
     } catch (err) {
+      const msg = (err.message || '').toLowerCase();
       const isTransient =
         err.code === 'ECONNRESET' ||
         err.code === '57P01' || // admin_shutdown
         err.code === '08006' || // connection_failure
         err.code === '08001' || // sqlclient_unable_to_establish_sqlconnection
         err.code === 'ETIMEDOUT' ||
-        err.message?.includes('Connection terminated unexpectedly');
+        msg.includes('connection terminated') ||
+        msg.includes('connection timeout') ||
+        msg.includes('timeout') ||
+        msg.includes('server closed the connection');
 
       if (isTransient && attempt < maxRetries) {
         logger.warn(`Transient PostgreSQL connection error (${err.code || err.message}), retrying query (attempt ${attempt + 1}/${maxRetries})...`);
-        await new Promise((res) => setTimeout(res, 600 * (attempt + 1)));
+        await new Promise((res) => setTimeout(res, 800 * (attempt + 1)));
         continue;
       }
       throw err;
