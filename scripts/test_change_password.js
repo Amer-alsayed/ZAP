@@ -1,4 +1,4 @@
-﻿import { webcrypto } from 'node:crypto';
+import { webcrypto } from 'node:crypto';
 if (!globalThis.window) {
   globalThis.window = {
     crypto: webcrypto,
@@ -8,9 +8,11 @@ if (!globalThis.window) {
 }
 
 import http from 'http';
+import jwt from '../server/node_modules/jsonwebtoken/index.js';
 import express from '../server/node_modules/express/index.js';
+import config from '../server/src/config.js';
 import { initDb } from '../server/src/db.js';
-import { register, login, getAuthSalt, changePassword } from '../server/src/authController.js';
+import { register, login, getAuthSalt, changePassword, refresh, logout, upgradeLegacySession } from '../server/src/authController.js';
 import { authenticateToken } from '../server/src/middleware/authMiddleware.js';
 import {
   deriveKeysFromPassword,
@@ -48,6 +50,9 @@ async function runPasswordTests() {
   app.get('/api/auth/salt/:username', getAuthSalt);
   app.post('/api/auth/register', register);
   app.post('/api/auth/login', login);
+  app.post('/api/auth/refresh', refresh);
+  app.post('/api/auth/logout', logout);
+  app.post('/api/auth/session', upgradeLegacySession);
   app.post('/api/auth/change-password', authenticateToken, changePassword);
 
   const server = http.createServer(app);
@@ -93,8 +98,19 @@ async function runPasswordTests() {
     });
 
     const regData = await regRes.json();
-    assert(regRes.status === 201 && regData.token, 'Test 1: User registered with initial credentials');
+    assert(regRes.status === 201 && regData.token && regData.refreshToken, 'Test 1: User registered with initial credentials and persistent refresh token');
     const userToken = regData.token;
+    const primaryRefreshToken = regData.refreshToken;
+
+    // Step 1b: Log in from a second device to verify multi-device session isolation on password change
+    const secondLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: testUsername, loginHash: originalLoginHash })
+    });
+    const secondLoginData = await secondLoginRes.json();
+    assert(secondLoginRes.status === 200 && secondLoginData.refreshToken, 'Test 1b: Second device logged in and received independent refresh session');
+    const secondaryRefreshToken = secondLoginData.refreshToken;
 
     // Step 2: Attempt change password with WRONG current password
     const wrongSalt = generateRandomSalt();
@@ -200,6 +216,77 @@ async function runPasswordTests() {
     const signature = await signData(testPayload, restoredKeys.signingPrivateKey);
     const isSignatureValid = await verifyDataSignature(testPayload, signature, publicSigningKey);
     assert(isSignatureValid === true, 'Test 8: Cryptographic signature verified using restored private key and public key');
+
+    // Step 9: Verify password change preserved the primary device session while revoking the second device
+    const primaryRefreshRes = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: primaryRefreshToken })
+    });
+    const primaryRefreshData = await primaryRefreshRes.json();
+    assert(primaryRefreshRes.status === 200 && primaryRefreshData.token && primaryRefreshData.refreshToken, 'Test 9a: Primary device session remains active after changing password');
+
+    const secondaryRefreshRes = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: secondaryRefreshToken })
+    });
+    assert(secondaryRefreshRes.status === 401, 'Test 9b: Other device sessions are automatically revoked on password change');
+
+    // Step 10: Verify rotate-on-confirm resilience (lost response retry, confirmation promotion, and reuse detection)
+    const retryLostResponseRes = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: primaryRefreshToken })
+    });
+    const retryLostResponseData = await retryLostResponseRes.json();
+    assert(retryLostResponseRes.status === 200 && retryLostResponseData.refreshToken, 'Test 10a: Retrying unconfirmed current refresh token succeeds (dropped response resilience)');
+
+    const confirmRotatedRes = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: retryLostResponseData.refreshToken })
+    });
+    const confirmRotatedData = await confirmRotatedRes.json();
+    assert(confirmRotatedRes.status === 200 && confirmRotatedData.refreshToken, 'Test 10b: Presenting pending refresh token promotes it and issues next token');
+
+    const replaySupersededRes = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: primaryRefreshToken })
+    });
+    assert(replaySupersededRes.status === 401, 'Test 10c: Replaying a superseded refresh token triggers reuse detection');
+
+    const afterReuseRes = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: confirmRotatedData.refreshToken })
+    });
+    assert(afterReuseRes.status === 401, 'Test 10d: Compromised session is revoked after refresh token reuse');
+
+    // Step 11: Verify legacy JWT (without sid, even after its 7d exp elapsed) upgrades cleanly into a persistent session, and explicit logout revokes it
+    const decodedNew = jwt.decode(newLoginData.token);
+    const legacyJwt = jwt.sign({ id: decodedNew.id, username: testUsername }, config.jwtSecret, { algorithm: 'HS256', expiresIn: '-1s' });
+    const upgradeRes = await fetch(`${baseUrl}/api/auth/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${legacyJwt}` }
+    });
+    const upgradeData = await upgradeRes.json();
+    assert(upgradeRes.status === 200 && upgradeData.token && upgradeData.refreshToken, 'Test 11a: Legacy 7-day JWT (even expired) upgrades seamlessly to persistent refresh session');
+
+    const logoutRes = await fetch(`${baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: upgradeData.refreshToken })
+    });
+    assert(logoutRes.status === 204, 'Test 11b: Explicit logout endpoint returns 204 No Content');
+
+    const refreshAfterLogoutRes = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: upgradeData.refreshToken })
+    });
+    assert(refreshAfterLogoutRes.status === 401, 'Test 11c: Refresh token is rejected after explicit logout');
 
     console.log('\n================================================================');
     console.log(`  ALL ${passed} / ${passed + failed} PASSWORD CHANGE TESTS PASSED SUCCESSFULLY (100%)  `);

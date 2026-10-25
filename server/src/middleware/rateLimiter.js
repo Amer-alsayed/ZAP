@@ -40,6 +40,20 @@ export const authLimiter = rateLimit({
 });
 
 /**
+ * Rate limiter for session maintenance endpoints (token refresh / logout / legacy upgrade).
+ * Refresh tokens are 256-bit random secrets (not guessable), so this only guards
+ * against abuse while leaving room for many devices/tabs behind a shared IP.
+ * Max 600 requests per 15 minutes per IP.
+ */
+export const sessionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many session requests, please try again later.' }
+});
+
+/**
  * Rate limiter for file upload endpoint to prevent storage exhaustion or abuse.
  * Max 300 file uploads per 15 minutes per IP.
  */

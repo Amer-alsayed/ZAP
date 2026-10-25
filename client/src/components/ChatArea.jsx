@@ -2636,9 +2636,6 @@ const ChatArea = React.memo(function ChatArea({
     setIsSendingVoice(true);
     try {
       const token = currentUserToken || currentUser?.token || localStorage.getItem('zap_token') || localStorage.getItem('chatra_token') || localStorage.getItem('token');
-      if (!token) {
-        throw new Error('User session token is missing. Please re-login.');
-      }
 
       // 1. Read audio blob as ArrayBuffer
       const arrayBuffer = await finalBlob.arrayBuffer();

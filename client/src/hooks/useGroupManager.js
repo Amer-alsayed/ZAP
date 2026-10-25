@@ -220,7 +220,7 @@ export function useGroupManager({
       return await pendingProfilesRef.current[lower];
     }
 
-    if (!currentUser?.token) throw new Error('Session not ready');
+    if (!currentUser?.username) throw new Error('Session not ready');
     const fetchPromise = (async () => {
       try {
         const data = await searchUser(lower, currentUser.token);

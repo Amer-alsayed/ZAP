@@ -32,6 +32,7 @@ import {
   emitMarkAsRead
 } from './services/socket';
 import { warmupMediaCache } from './services/mediaCache';
+import { onSessionInvalidated, logoutSession } from './services/tokenManager';
 
 export default function App() {
   const {
@@ -900,36 +901,39 @@ export default function App() {
     groupManagerRef.current = groupManager;
   }, [groupManager]);
 
+  // Sign the user out ONLY when the server definitively revokes the session
+  // (e.g. signed out elsewhere, password changed on another device, or account removed).
+  // Access-token expiry and transient network/DB errors are recovered silently in the background.
+  useEffect(() => {
+    if (!currentUser?.username) return;
+    return onSessionInvalidated((code) => {
+      const reason = code === 'USER_NOT_FOUND'
+        ? 'Your account was not found on the server. Please register or sign in again.'
+        : 'Your session was ended (for example, after signing out or changing your password). Please sign in again.';
+
+      cleanupCall();
+      gcCleanupAll(true);
+      disconnectSocket();
+      clearUserSession();
+      setContacts([]);
+      setActiveContact(null);
+      setShowSettings(false);
+      setGroups([]);
+      setActiveGroup(null);
+      setShowCreateGroup(false);
+      setGroupInfoGroupId(null);
+      groupKeysRef.current = {};
+      userProfilesRef.current = {};
+      sharedSecrets.current = {};
+      showToast(reason, 'error', 'Session Ended');
+    });
+  }, [currentUser?.username, cleanupCall, gcCleanupAll, clearUserSession, showToast]);
+
   // Socket Connection Setup
   useEffect(() => {
-    if (!currentUser?.token) return;
+    if (!currentUser?.username) return;
 
-    const socket = connectSocket(currentUser.token);
-
-    socket.on('connect_error', (err) => {
-      const msg = err?.message || '';
-      const isAuthError = msg.includes('Authentication error') || msg.includes('Invalid token') || msg.includes('jwt');
-      const isDbReset = msg.includes('database reset');
-
-      if (isAuthError || isDbReset) {
-        const reason = isDbReset
-          ? 'Your session has expired because the server database was reset. Please register/login again.'
-          : 'Your session has expired. Please log in again.';
-
-        clearUserSession();
-        setContacts([]);
-        setActiveContact(null);
-        setShowSettings(false);
-        setGroups([]);
-        setActiveGroup(null);
-        setShowCreateGroup(false);
-        setGroupInfoGroupId(null);
-        groupKeysRef.current = {};
-        userProfilesRef.current = {};
-        sharedSecrets.current = {};
-        showToast(reason, 'error', 'Session Ended');
-      }
-    });
+    const socket = connectSocket();
 
     const syncMessagesForContacts = async (contactList) => {
       if (!currentUser || !contactList || contactList.length === 0) return;
@@ -1114,7 +1118,7 @@ export default function App() {
       socket.off('connect_error', handleDisconnect);
       disconnectSocket();
     };
-  }, [currentUser?.token, currentUser?.username]);
+  }, [currentUser?.username]);
 
   // Secure sign out
   const handleLogout = useCallback(() => {
@@ -1128,6 +1132,7 @@ export default function App() {
         cleanupCall();
         gcCleanupAll(true);
         disconnectSocket();
+        logoutSession();
         clearUserSession();
         previousActiveContactRef.current = null;
         previousActiveGroupRef.current = null;

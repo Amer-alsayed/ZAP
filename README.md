@@ -480,8 +480,9 @@ npm run dev
 | :--- | :---: | :---: | :--- |
 | `NODE_ENV` | `string` | `development` | Runtime environment (`development` or `production`). |
 | `PORT` | `number` | `5000` | HTTP and WebSocket listener port. |
-| `JWT_SECRET` | `string` | — | **Required in production.** Secret key used for signing JWT session tokens. |
-| `JWT_EXPIRES_IN` | `string` | `7d` | Session expiration duration (e.g. `24h`, `7d`). |
+| `JWT_SECRET` | `string` | — | **Required in production.** Secret key used for signing short-lived JWT access tokens. |
+| `ACCESS_TOKEN_TTL` | `string` | `15m` | Short-lived access token lifetime (silently renewed via rotating refresh tokens; `JWT_EXPIRES_IN` is supported as a legacy alias). |
+| `SESSION_IDLE_TIMEOUT_DAYS` | `number` | `0` | Optional inactivity timeout for refresh sessions in days (`0` = sessions never expire unless the user signs out or changes password). |
 | `DATABASE_URL` | `string` | `null` | PostgreSQL connection URI (e.g. Neon, Supabase). Enables PostgreSQL mode with connection pooling. Defaults to SQLite when omitted. |
 | `DATABASE_PATH` | `string` | `../../zap.db` | SQLite database file location when running locally. |
 | `CLIENT_ORIGIN` | `string` | `null` | Allowed CORS origins for standalone client deployments (comma-separated). |
@@ -498,7 +499,10 @@ npm run dev
 | `GET` | `/health` | None | General (500/15m) | Liveness probe and database connectivity verification. |
 | `GET` | `/api/auth/salt/:username` | None | Auth (30/15m) | Retrieves user CSPRNG salt or constant-time deterministic pseudo-salt for anti-enumeration. |
 | `POST` | `/api/auth/register` | None | Auth (30/15m) | Registers user with CSPRNG salt, public keys, and encrypted key bundle. |
-| `POST` | `/api/auth/login` | None | Auth (30/15m) | Authenticates login hash, returns JWT and user key bundle. |
+| `POST` | `/api/auth/login` | None | Auth (50/15m) | Authenticates login hash, returns short-lived JWT access token, rotating refresh token, and user key bundle. |
+| `POST` | `/api/auth/refresh` | Refresh Token | Session (600/15m) | Rotates refresh token (with reuse detection) and issues a fresh access token. |
+| `POST` | `/api/auth/logout` | Refresh Token | Session (600/15m) | Revokes the active refresh session and disconnects its sockets. |
+| `POST` | `/api/auth/session` | JWT | Session (600/15m) | One-time migration endpoint upgrading legacy non-session JWTs into persistent refresh sessions. |
 | `GET` | `/api/auth/search` | JWT | General (500/15m) | Queries users by username prefix. |
 | `POST` | `/api/upload` | JWT | Upload (300/15m) | Uploads client-encrypted binary payload (max 50MB). |
 | `GET` | `/uploads/:filename` | None | General | Serves encrypted binary blobs with sandboxed headers. |

@@ -362,7 +362,25 @@ export const initDb = async () => {
       )
     `);
 
+    // Create User Sessions Table (long-lived, revocable refresh sessions).
+    // Only SHA-256 hashes of refresh token secrets are stored. `pending_token_hash`
+    // holds the most recently issued (not yet confirmed) rotated token so a lost
+    // network response can never strand a client with an unusable token.
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        username TEXT NOT NULL,
+        current_token_hash TEXT NOT NULL,
+        pending_token_hash TEXT,
+        user_agent TEXT,
+        created_at BIGINT NOT NULL,
+        last_used_at BIGINT NOT NULL
+      )
+    `);
+
     // Database indexes for high performance query resolution
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id)');
     await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender, recipient)');
     await dbRun('CREATE INDEX IF NOT EXISTS idx_messages_pending ON messages(recipient, delivered)');
     await dbRun('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');

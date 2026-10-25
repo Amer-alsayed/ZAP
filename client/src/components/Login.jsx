@@ -3,6 +3,7 @@ import { Shield, User, Lock, KeyRound, AlertTriangle, Eye, EyeOff } from 'lucide
 import ZapLogo from './ZapLogo';
 import { deriveKeysFromPassword, generateKeyPairs, encryptAndBackupPrivateKeys, decryptRestoredPrivateKeys, generateRandomSalt } from '../services/crypto';
 import { registerUser, loginUser, fetchAuthSalt } from '../services/api';
+import { storeSessionTokens } from '../services/tokenManager';
 import { useElasticBounce } from '../hooks/useElasticBounce';
 
 export default function Login({ onAuthSuccess }) {
@@ -177,6 +178,8 @@ export default function Login({ onAuthSuccess }) {
           console.warn('LocalStorage quota restricted session_enc_key persist');
         }
 
+        storeSessionTokens({ token: data.token, refreshToken: data.refreshToken });
+
         onAuthSuccess({
           username: data.user.username,
           token: data.token,
@@ -212,6 +215,8 @@ export default function Login({ onAuthSuccess }) {
 
         // Decrypt the returned private keys
         const decryptedKeys = await decryptRestoredPrivateKeys(data.user.encryptedPrivateKeys, encryptionKey);
+
+        storeSessionTokens({ token: data.token, refreshToken: data.refreshToken });
 
         onAuthSuccess({
           username: data.user.username,

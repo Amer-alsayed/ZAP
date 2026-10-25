@@ -11,10 +11,10 @@ import { fileURLToPath } from 'url';
 import config from './src/config.js';
 import logger from './src/logger.js';
 import { initDb, dbPing } from './src/db.js';
-import { register, login, searchUser, getAuthSalt, changePassword } from './src/authController.js';
+import { register, login, searchUser, getAuthSalt, changePassword, refresh, logout, upgradeLegacySession } from './src/authController.js';
 import { socketHandler } from './src/socketHandler.js';
 import { authenticateToken } from './src/middleware/authMiddleware.js';
-import { generalLimiter, authLimiter, saltLimiter, uploadLimiter } from './src/middleware/rateLimiter.js';
+import { generalLimiter, authLimiter, saltLimiter, uploadLimiter, sessionLimiter } from './src/middleware/rateLimiter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -114,6 +114,9 @@ app.get('/api/auth/salt/:username', saltLimiter, getAuthSalt);
 app.get('/api/auth/salt', saltLimiter, getAuthSalt);
 app.post('/api/auth/register', authLimiter, register);
 app.post('/api/auth/login', authLimiter, login);
+app.post('/api/auth/refresh', sessionLimiter, refresh);
+app.post('/api/auth/logout', sessionLimiter, logout);
+app.post('/api/auth/session', sessionLimiter, upgradeLegacySession);
 app.post('/api/auth/change-password', authLimiter, authenticateToken, changePassword);
 app.get('/api/auth/search', authenticateToken, searchUser);
 
@@ -237,6 +240,9 @@ app.get('/api/webrtc/ice-servers', (req, res) => {
 const io = new Server(httpServer, {
   cors: corsOptions
 });
+
+// Expose io to HTTP handlers (e.g. to disconnect sockets of revoked sessions)
+app.set('io', io);
 
 // Attach socket handlers
 socketHandler(io);

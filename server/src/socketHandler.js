@@ -1,7 +1,7 @@
-import jwt from 'jsonwebtoken';
 import { dbAll, dbGet } from './db.js';
-import config from './config.js';
 import logger from './logger.js';
+import { verifyAccessToken } from './middleware/authMiddleware.js';
+import { isSessionActive, sessionRoom } from './sessionService.js';
 import { registerGroupHandlers } from './groupHandler.js';
 import { registerCallHandlers, handleCallDisconnect } from './handlers/callSocketHandler.js';
 import { registerMessageHandlers, deliverOfflineMessages } from './handlers/messageSocketHandler.js';
@@ -70,28 +70,47 @@ const broadcastUserStatus = async (io, username, status) => {
 };
 
 export const socketHandler = (io) => {
+  // Builds a handshake error carrying a machine-readable code in `err.data`
+  // (exposed to the client as `connect_error` -> `err.data.code`).
+  const handshakeError = (message, code) => {
+    const err = new Error(message);
+    err.data = { code };
+    return err;
+  };
+
   // Socket.io JWT Authentication Middleware
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token;
-    if (!token) {
-      return next(new Error('Authentication error: Token missing'));
+
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch (err) {
+      logger.debug('Socket authentication failed:', { code: err.code });
+      // TOKEN_EXPIRED / TOKEN_INVALID are recoverable: the client refreshes and reconnects.
+      return next(handshakeError(`Authentication error: ${err.message}`, err.code));
     }
 
     try {
-      const decoded = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
-      
       const userExists = await dbGet('SELECT 1 FROM users WHERE LOWER(username) = LOWER(?)', [decoded.username]);
       if (!userExists) {
         logger.warn(`Socket auth failed: User "${decoded.username}" not found in DB.`);
-        return next(new Error('Authentication error: User not found'));
+        return next(handshakeError('Authentication error: User not found', 'USER_NOT_FOUND'));
       }
 
-      socket.user = decoded; // Contains id and username
-      next();
+      // Session-bound tokens must belong to a session that has not been revoked (logout / password change)
+      if (decoded.sid && !(await isSessionActive(decoded.sid))) {
+        return next(handshakeError('Authentication error: Session revoked', 'SESSION_REVOKED'));
+      }
     } catch (err) {
-      logger.debug('Socket authentication failed:', { error: err.message });
-      next(new Error('Authentication error: Invalid token'));
+      // Database hiccups (e.g. serverless cold start) must never be reported as auth failures,
+      // otherwise clients would wrongly sign the user out.
+      logger.error('Socket auth lookup failed (transient):', err);
+      return next(handshakeError('Server temporarily unavailable', 'SERVER_UNAVAILABLE'));
     }
+
+    socket.user = decoded; // Contains id, username and (for session tokens) sid
+    next();
   });
 
   io.on('connection', (socket) => {
@@ -101,6 +120,9 @@ export const socketHandler = (io) => {
     // Track online user socket
     const wentOnline = addUserSocket(username, socket.id);
     socket.join(username.toLowerCase());
+    if (socket.user.sid) {
+      socket.join(sessionRoom(socket.user.sid));
+    }
 
     // Subscribe socket to every group room this user belongs to
     dbAll('SELECT group_id FROM group_members WHERE LOWER(username) = LOWER(?)', [username])

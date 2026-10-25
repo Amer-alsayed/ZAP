@@ -1,48 +1,139 @@
 import { io } from 'socket.io-client';
-import { BASE_URL } from './api.js';
+import { BASE_URL } from './baseUrl.js';
+import {
+  getAccessToken,
+  getValidAccessToken,
+  refreshAccessToken,
+  SessionInvalidError
+} from './tokenManager.js';
 
 let socket = null;
 const eventListeners = new Map(); // eventName -> Set of functions
 
+// Handshake rejection codes that a token refresh can recover from.
+const RECOVERABLE_AUTH_CODES = new Set(['TOKEN_EXPIRED', 'TOKEN_INVALID', 'TOKEN_MISSING']);
+// Handshake rejection codes that mean the session itself is gone.
+const TERMINAL_AUTH_CODES = new Set(['SESSION_REVOKED', 'USER_NOT_FOUND']);
+
+const MANUAL_RECONNECT_BASE_MS = 1000;
+const MANUAL_RECONNECT_MAX_MS = 30000;
+
 /**
- * Connect to the Socket.io server with the user JWT token.
- * @param {string} token - JWT Token
+ * Connect to the Socket.io server.
+ *
+ * A fresh access token is supplied on *every* connection attempt (the `auth`
+ * callback is re-evaluated by socket.io on each reconnect), so long-lived
+ * connections survive access-token expiry transparently. If the server rejects
+ * the handshake, the token is refreshed and the connection retried; the user is
+ * only signed out if the session itself has been revoked (broadcast through
+ * `onSessionInvalidated` in the token manager).
+ *
  * @returns {Socket}
  */
-export const connectSocket = (token) => {
+export const connectSocket = () => {
   if (socket) {
     socket.disconnect();
   }
 
-  socket = io(BASE_URL, {
-    auth: { token },
+  let manualReconnectTimer = null;
+  let manualReconnectAttempts = 0;
+
+  const instance = io(BASE_URL, {
+    auth: (cb) => {
+      getValidAccessToken()
+        .then((token) => cb({ token }))
+        // Offline / server asleep: try with whatever we have; the handshake handler recovers.
+        .catch(() => cb({ token: getAccessToken() }));
+    },
     autoConnect: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000
   });
+  socket = instance;
+
+  const scheduleManualReconnect = () => {
+    if (manualReconnectTimer || socket !== instance) return;
+    const delay = Math.min(MANUAL_RECONNECT_MAX_MS, MANUAL_RECONNECT_BASE_MS * 2 ** manualReconnectAttempts)
+      + Math.floor(Math.random() * 500);
+    manualReconnectAttempts++;
+    manualReconnectTimer = setTimeout(() => {
+      manualReconnectTimer = null;
+      if (socket === instance && !instance.connected) {
+        instance.connect();
+      }
+    }, delay);
+  };
 
   // Re-attach all registered listeners across reconnects
   for (const [event, cbs] of eventListeners.entries()) {
     for (const cb of cbs) {
-      socket.on(event, cb);
+      instance.on(event, cb);
     }
   }
 
-  socket.on('connect', () => {
-    console.log('Connected to chat server (Socket ID:', socket.id, ')');
+  instance.on('connect', () => {
+    manualReconnectAttempts = 0;
+    console.log('Connected to chat server (Socket ID:', instance.id, ')');
   });
 
-  socket.on('disconnect', (reason) => {
+  instance.on('disconnect', (reason) => {
     console.log('Disconnected from chat server:', reason);
+    // The server forcibly closed the connection (e.g. session revoked); socket.io won't retry
+    // on its own. Reconnecting will either succeed or surface the precise auth error.
+    if (reason === 'io server disconnect' && socket === instance) {
+      scheduleManualReconnect();
+    }
   });
 
-  socket.on('connect_error', (error) => {
+  instance.on('connect_error', (error) => {
     console.error('Socket connection error:', error.message);
+
+    // Transport-level failures: socket.io's built-in reconnection keeps retrying.
+    if (instance.active) return;
+
+    // The server middleware rejected the handshake: socket.io will NOT retry automatically.
+    const code = error?.data?.code;
+
+    if (TERMINAL_AUTH_CODES.has(code)) {
+      // Confirm with the refresh endpoint (the authoritative check). If the session is really
+      // gone, the token manager broadcasts it via onSessionInvalidated and the app signs out.
+      refreshAccessToken(getAccessToken())
+        .then(() => scheduleManualReconnect())
+        .catch((err) => {
+          if (!(err instanceof SessionInvalidError)) scheduleManualReconnect();
+        });
+      return;
+    }
+
+    if (RECOVERABLE_AUTH_CODES.has(code)) {
+      refreshAccessToken(getAccessToken())
+        .then(() => {
+          if (socket === instance) instance.connect();
+        })
+        .catch((err) => {
+          // SessionInvalidError is broadcast by the token manager; transient errors -> retry later
+          if (!(err instanceof SessionInvalidError)) scheduleManualReconnect();
+        });
+      return;
+    }
+
+    // SERVER_UNAVAILABLE or unknown middleware errors: back off and retry.
+    scheduleManualReconnect();
   });
 
-  return socket;
+  // Ensure pending manual reconnects are cancelled when this socket is replaced/closed.
+  const originalDisconnect = instance.disconnect.bind(instance);
+  instance.disconnect = (...args) => {
+    if (manualReconnectTimer) {
+      clearTimeout(manualReconnectTimer);
+      manualReconnectTimer = null;
+    }
+    return originalDisconnect(...args);
+  };
+
+  return instance;
 };
 
 /**

@@ -13,7 +13,7 @@ const helmet = require('../server/node_modules/helmet');
 import config from '../server/src/config.js';
 import { initDb } from '../server/src/db.js';
 import { socketHandler } from '../server/src/socketHandler.js';
-import { register, login, searchUser, getAuthSalt } from '../server/src/authController.js';
+import { register, login, searchUser, getAuthSalt, changePassword, refresh, logout, upgradeLegacySession } from '../server/src/authController.js';
 import { authenticateToken } from '../server/src/middleware/authMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -93,6 +93,10 @@ async function main() {
   app.get('/api/auth/salt', getAuthSalt);
   app.post('/api/auth/register', register);
   app.post('/api/auth/login', login);
+  app.post('/api/auth/refresh', refresh);
+  app.post('/api/auth/logout', logout);
+  app.post('/api/auth/session', upgradeLegacySession);
+  app.post('/api/auth/change-password', authenticateToken, changePassword);
   app.get('/api/auth/search', authenticateToken, searchUser);
 
   // Upload Route
@@ -126,6 +130,7 @@ async function main() {
 
   const server = http.createServer(app);
   const io = new Server(server, { cors: { origin: '*' } });
+  app.set('io', io);
   socketHandler(io);
 
   await new Promise(resolve => server.listen(0, resolve));

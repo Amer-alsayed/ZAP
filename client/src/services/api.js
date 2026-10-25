@@ -1,4 +1,5 @@
-const BASE_URL = '';
+import { BASE_URL } from './baseUrl.js';
+import { authorizedFetch, getValidAccessToken, refreshAccessToken } from './tokenManager.js';
 
 /**
  * Helper to safely parse JSON response and provide meaningful error messages on HTTP errors or non-JSON returns.
@@ -111,13 +112,13 @@ export const loginUser = async (username, loginHash) => {
 
 /**
  * Change the user's password with Zero-Knowledge re-wrapped private keys.
+ * Authentication is handled by the token manager (the legacy `token` argument is ignored).
  */
-export const changeUserPassword = async (currentLoginHash, newLoginHash, encryptedPrivateKeys, authSalt, token) => {
-  const response = await fetch(`${BASE_URL}/api/auth/change-password`, {
+export const changeUserPassword = async (currentLoginHash, newLoginHash, encryptedPrivateKeys, authSalt, _token) => {
+  const response = await authorizedFetch(`${BASE_URL}/api/auth/change-password`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       currentLoginHash,
@@ -132,13 +133,13 @@ export const changeUserPassword = async (currentLoginHash, newLoginHash, encrypt
 
 /**
  * Search for a user by username.
+ * Authentication is handled by the token manager (the legacy `token` argument is ignored).
  */
-export const searchUser = async (username, token) => {
-  const response = await fetch(`${BASE_URL}/api/auth/search?username=${encodeURIComponent(username)}`, {
+export const searchUser = async (username, _token) => {
+  const response = await authorizedFetch(`${BASE_URL}/api/auth/search?username=${encodeURIComponent(username)}`, {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      'Content-Type': 'application/json'
     }
   });
 
@@ -147,28 +148,63 @@ export const searchUser = async (username, token) => {
 
 /**
  * Upload an encrypted file to the server.
+ * A valid access token is obtained (and refreshed when needed) automatically;
+ * the legacy `token` argument is ignored.
  * @param {string} filename 
  * @param {string} fileDataBase64 
- * @param {string} token 
+ * @param {string} [_token] - deprecated, ignored
  * @param {Function} [onProgress]
  * @param {{ current: Function|null }} [cancelRef] - receives an abort() handle in `.current`
  * @returns {Promise<{ fileUrl: string }>}
  */
-export const uploadEncryptedFile = (filename, fileDataBase64, token, onProgress, cancelRef) => {
+export const uploadEncryptedFile = async (filename, fileDataBase64, _token, onProgress, cancelRef) => {
+  let cancelled = false;
+  let activeAbort = null;
+
+  if (cancelRef && typeof cancelRef === 'object') {
+    cancelRef.current = () => {
+      cancelled = true;
+      if (activeAbort) activeAbort();
+    };
+  }
+
+  const clearCancelHandle = () => {
+    if (cancelRef && typeof cancelRef === 'object') {
+      cancelRef.current = null;
+    }
+  };
+
+  const abortedError = () => {
+    const err = new Error('File upload was aborted');
+    err.isCancelled = true;
+    return err;
+  };
+
+  try {
+    const token = await getValidAccessToken();
+    if (cancelled) throw abortedError();
+    try {
+      return await sendUploadRequest(filename, fileDataBase64, token, onProgress, (abort) => { activeAbort = abort; });
+    } catch (err) {
+      if (err.status !== 401 || cancelled) throw err;
+      // Access token was rejected (expired / server secret rotated): renew and retry once.
+      const renewed = await refreshAccessToken(token);
+      if (cancelled) throw abortedError();
+      return await sendUploadRequest(filename, fileDataBase64, renewed, onProgress, (abort) => { activeAbort = abort; });
+    }
+  } finally {
+    clearCancelHandle();
+  }
+};
+
+const sendUploadRequest = (filename, fileDataBase64, token, onProgress, registerAbort) => {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${BASE_URL}/api/upload`);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
-    if (cancelRef && typeof cancelRef === 'object') {
-      cancelRef.current = () => xhr.abort();
-    }
-    const clearCancelHandle = () => {
-      if (cancelRef && typeof cancelRef === 'object') {
-        cancelRef.current = null;
-      }
-    };
+    registerAbort(() => xhr.abort());
 
     if (xhr.upload && typeof onProgress === 'function') {
       xhr.upload.onprogress = (event) => {
@@ -180,7 +216,6 @@ export const uploadEncryptedFile = (filename, fileDataBase64, token, onProgress,
     }
 
     xhr.onload = () => {
-      clearCancelHandle();
       let data = null;
       try {
         data = JSON.parse(xhr.responseText);
@@ -188,23 +223,25 @@ export const uploadEncryptedFile = (filename, fileDataBase64, token, onProgress,
         if (xhr.status >= 200 && xhr.status < 300) {
           return resolve(data);
         }
-        return reject(new Error(`File upload failed (Server returned ${xhr.status})`));
+        const err = new Error(`File upload failed (Server returned ${xhr.status})`);
+        err.status = xhr.status;
+        return reject(err);
       }
 
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(data);
       } else {
-        reject(new Error(data?.error || `File upload failed (${xhr.status})`));
+        const err = new Error(data?.error || `File upload failed (${xhr.status})`);
+        err.status = xhr.status;
+        reject(err);
       }
     };
 
     xhr.onerror = () => {
-      clearCancelHandle();
       reject(new Error('Network error during file upload'));
     };
 
     xhr.onabort = () => {
-      clearCancelHandle();
       const err = new Error('File upload was aborted');
       err.isCancelled = true;
       reject(err);

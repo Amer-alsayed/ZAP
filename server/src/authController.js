@@ -4,6 +4,16 @@ import jwt from 'jsonwebtoken';
 import { dbGet, dbRun } from './db.js';
 import config from './config.js';
 import logger from './logger.js';
+import {
+  createSession,
+  refreshSession,
+  revokeSession,
+  revokeUserSessions,
+  resolveSessionFromRefreshToken,
+  disconnectSessionSockets,
+  SessionError,
+  SESSION_ERROR
+} from './sessionService.js';
 
 const safeJsonParse = (val) => {
   if (!val) return null;
@@ -98,14 +108,19 @@ export const register = async (req, res) => {
       ]
     );
 
-    // Create JWT Token
-    const token = jwt.sign({ id: result.id, username }, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+    // Create a long-lived session (short-lived access token + refresh token)
+    const { token, refreshToken } = await createSession({
+      userId: result.id,
+      username,
+      userAgent: req.get('user-agent')
+    });
 
     logger.info(`User registered successfully: ${username}`);
 
     return res.status(201).json({
       message: 'User registered successfully',
       token,
+      refreshToken,
       user: {
         username,
         publicIdentityKey,
@@ -138,14 +153,19 @@ export const login = async (req, res) => {
       return res.status(400).json({ error: 'Invalid username or password' });
     }
 
-    // Create JWT Token
-    const token = jwt.sign({ id: user.id, username: user.username }, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+    // Create a long-lived session (short-lived access token + refresh token)
+    const { token, refreshToken } = await createSession({
+      userId: user.id,
+      username: user.username,
+      userAgent: req.get('user-agent')
+    });
 
     logger.info(`Login successful: ${user.username}`);
 
     return res.status(200).json({
       message: 'Login successful',
       token,
+      refreshToken,
       user: {
         username: user.username,
         displayName: user.display_name,
@@ -256,8 +276,20 @@ export const changePassword = async (req, res) => {
 
     logger.info(`Password successfully updated for user: ${username}`);
 
+    // Security: a password change signs out every *other* device/session.
+    // The session that performed the change stays signed in.
+    let revokedSessions = 0;
+    try {
+      const revokedIds = await revokeUserSessions(userId, { exceptSessionId: req.user?.sid || null });
+      revokedSessions = revokedIds.length;
+      disconnectSessionSockets(req.app.get('io'), revokedIds);
+    } catch (revokeErr) {
+      logger.error('Failed to revoke other sessions after password change:', revokeErr);
+    }
+
     return res.status(200).json({
-      message: 'Password changed successfully'
+      message: 'Password changed successfully',
+      revokedSessions
     });
   } catch (error) {
     logger.error('Change password error:', error);
@@ -265,3 +297,105 @@ export const changePassword = async (req, res) => {
   }
 };
 
+
+/**
+ * POST /api/auth/refresh
+ * Exchange a refresh token for a fresh access token and a rotated refresh token.
+ * 401 => session is definitively gone (client must sign in again).
+ * 409 / 5xx => transient; client keeps its session and retries later.
+ */
+export const refresh = async (req, res) => {
+  const { refreshToken } = req.body || {};
+  if (!refreshToken || typeof refreshToken !== 'string') {
+    return res.status(401).json({ error: 'Refresh token is required', code: SESSION_ERROR.INVALID });
+  }
+
+  try {
+    const tokens = await refreshSession(refreshToken);
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json(tokens);
+  } catch (error) {
+    if (error instanceof SessionError) {
+      if (error.code === SESSION_ERROR.CONFLICT) {
+        return res.status(409).json({ error: 'Session refresh already in progress, please retry', code: error.code });
+      }
+      return res.status(401).json({ error: 'Your session has ended. Please sign in again.', code: error.code });
+    }
+    logger.error('Session refresh error:', error);
+    return res.status(503).json({ error: 'Session service temporarily unavailable' });
+  }
+};
+
+/**
+ * POST /api/auth/logout
+ * Revoke the session identified by the given refresh token and disconnect its sockets.
+ * Always responds 204 so logout is idempotent and leaks nothing about token validity.
+ */
+export const logout = async (req, res) => {
+  const { refreshToken } = req.body || {};
+  try {
+    const session = await resolveSessionFromRefreshToken(refreshToken);
+    if (session) {
+      await revokeSession(session.id);
+      disconnectSessionSockets(req.app.get('io'), [session.id]);
+      logger.info(`User signed out: ${session.username}`);
+    }
+  } catch (error) {
+    logger.error('Logout error:', error);
+  }
+  return res.status(204).end();
+};
+
+/**
+ * POST /api/auth/session
+ * One-time migration path for clients that signed in before refresh sessions
+ * existed: exchanges a legacy HS256-signed JWT (no `sid` claim) for a long-lived
+ * refresh session so existing users are not forced to sign in again after upgrading,
+ * even if their old 7-day JWT timestamp has already elapsed.
+ * Tokens that already carry a `sid` claim must use `/api/auth/refresh` and are rejected here.
+ */
+export const upgradeLegacySession = async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  const rawToken = authHeader && authHeader.split(' ')[1];
+  if (!rawToken) {
+    return res.status(401).json({ error: 'Access token missing', code: 'TOKEN_MISSING' });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(rawToken, config.jwtSecret, {
+      algorithms: ['HS256'],
+      ignoreExpiration: true
+    });
+  } catch {
+    return res.status(401).json({ error: 'Invalid access token', code: 'TOKEN_INVALID' });
+  }
+
+  const { id: userId, username, sid } = decoded || {};
+  if (sid) {
+    return res.status(400).json({ error: 'Token is already bound to a session' });
+  }
+  if (!userId || !username) {
+    return res.status(401).json({ error: 'Invalid access token', code: 'TOKEN_INVALID' });
+  }
+
+  try {
+    const user = await dbGet('SELECT id, username FROM users WHERE id = ?', [userId]);
+    if (!user || user.username.toLowerCase() !== String(username).toLowerCase()) {
+      return res.status(401).json({ error: 'Account no longer exists', code: SESSION_ERROR.REVOKED });
+    }
+
+    const { token, refreshToken } = await createSession({
+      userId: user.id,
+      username: user.username,
+      userAgent: req.get('user-agent')
+    });
+
+    logger.info(`Upgraded legacy token to persistent session for: ${user.username}`);
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json({ token, refreshToken });
+  } catch (error) {
+    logger.error('Legacy session upgrade error:', error);
+    return res.status(503).json({ error: 'Session service temporarily unavailable' });
+  }
+};

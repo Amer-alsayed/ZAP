@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { applyThemeTokens } from '../utils/themeTokens';
 import { base64ToBuffer, decryptRestoredPrivateKeys } from '../services/crypto';
+import { getAccessToken, hasStoredSession, clearSessionTokens } from '../services/tokenManager';
 
 export function useAuthSession() {
   const [currentUser, setCurrentUser] = useState(null); // { username, token, keys }
   const [isRestoring, setIsRestoring] = useState(() => {
     try {
-      const token = localStorage.getItem('zap_token') || localStorage.getItem('chatra_token');
       const username = localStorage.getItem('zap_username') || localStorage.getItem('chatra_username');
       const sessionEncKeyBase64 = localStorage.getItem('session_enc_key');
       const encPrivateKeysStr = localStorage.getItem('zap_encrypted_private_keys') || localStorage.getItem('chatra_encrypted_private_keys');
-      return !!(token && username && sessionEncKeyBase64 && encPrivateKeysStr);
+      return !!(hasStoredSession() && username && sessionEncKeyBase64 && encPrivateKeysStr);
     } catch (e) {
       return false;
     }
@@ -25,7 +25,10 @@ export function useAuthSession() {
         applyThemeTokens(savedRgb);
       }
 
-      const token = localStorage.getItem('zap_token') || localStorage.getItem('chatra_token');
+      // The session is restored fully offline: tokens are renewed lazily by the
+      // token manager when the socket / API first needs them.
+      const hasSession = hasStoredSession();
+      const token = getAccessToken();
       const username = localStorage.getItem('zap_username') || localStorage.getItem('chatra_username');
       const sessionEncKeyBase64 = localStorage.getItem('session_enc_key');
       const encPrivateKeysStr = localStorage.getItem('zap_encrypted_private_keys') || localStorage.getItem('chatra_encrypted_private_keys');
@@ -34,7 +37,7 @@ export function useAuthSession() {
       const displayName = localStorage.getItem('zap_display_name') || localStorage.getItem('chatra_display_name') || null;
       const avatarIcon = localStorage.getItem('zap_avatar_icon') || localStorage.getItem('chatra_avatar_icon') || null;
 
-      if (token && username && sessionEncKeyBase64 && encPrivateKeysStr && pubIdentityKeyStr && pubSigningKeyStr) {
+      if (hasSession && username && sessionEncKeyBase64 && encPrivateKeysStr && pubIdentityKeyStr && pubSigningKeyStr) {
         try {
           const rawKeyBytes = base64ToBuffer(sessionEncKeyBase64);
           const backupKey = await window.crypto.subtle.importKey(
@@ -70,8 +73,7 @@ export function useAuthSession() {
           console.log('E2EE Session restored successfully.');
         } catch (err) {
           console.error('Failed to restore session:', err);
-          localStorage.removeItem('zap_token');
-          localStorage.removeItem('chatra_token');
+          clearSessionTokens();
           setIsRestoring(false);
           setIsPreloaderFading(false);
         }
@@ -114,11 +116,12 @@ export function useAuthSession() {
     }
   }, []);
 
-  // Persist currentUser details to localStorage and apply theme
+  // Persist currentUser details to localStorage and apply theme.
+  // Note: auth tokens are owned by the token manager (they rotate in the background),
+  // so they are intentionally NOT written from React state here.
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('zap_username', currentUser.username);
-      localStorage.setItem('zap_token', currentUser.token);
       if (currentUser.encryptedPrivateKeys) {
         localStorage.setItem('zap_encrypted_private_keys', typeof currentUser.encryptedPrivateKeys === 'string' ? currentUser.encryptedPrivateKeys : JSON.stringify(currentUser.encryptedPrivateKeys));
       }
@@ -147,6 +150,7 @@ export function useAuthSession() {
   }, [currentUser]);
 
   const clearUserSession = useCallback(() => {
+    clearSessionTokens();
     localStorage.removeItem('session_enc_key');
     ['username', 'token', 'encrypted_private_keys', 'public_identity_key', 'public_signing_key', 'display_name', 'avatar_icon', 'active_view', 'active_contact'].forEach(key => {
       localStorage.removeItem(`zap_${key}`);

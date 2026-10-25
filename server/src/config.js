@@ -72,7 +72,14 @@ export const config = {
   isProd: IS_PROD,
   port: parseInt(process.env.PORT || '5000', 10),
   jwtSecret,
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  // Short-lived, stateless access token (JWT). Clients renew it silently using
+  // their long-lived refresh token, so this value never forces a re-login.
+  // JWT_EXPIRES_IN is honoured as a legacy alias for ACCESS_TOKEN_TTL.
+  accessTokenTtl: process.env.ACCESS_TOKEN_TTL || process.env.JWT_EXPIRES_IN || '15m',
+  // Optional inactivity timeout for refresh sessions, in days.
+  // 0 (default) = sessions never expire; users stay signed in until they sign out
+  // (or the session is revoked, e.g. by a password change on another device).
+  sessionIdleTimeoutDays: Math.max(0, parseInt(process.env.SESSION_IDLE_TIMEOUT_DAYS || '0', 10) || 0),
   allowedOrigins,
   dbUrl: process.env.DATABASE_URL || null,
   dbPath: process.env.DATABASE_PATH || path.resolve(__dirname, '../../zap.db'),
