@@ -20,7 +20,6 @@ ENV PORT=5000
 COPY package*.json ./
 COPY server/ ./server/
 COPY --from=builder /app/client/dist ./client/dist
-COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/server/node_modules ./server/node_modules
 
 EXPOSE 5000
