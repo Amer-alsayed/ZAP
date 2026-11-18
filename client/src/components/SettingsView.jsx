@@ -32,7 +32,7 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [callQuality, setCallQuality] = useState(() => {
-    return localStorage.getItem('zap_call_quality') || localStorage.getItem('chatra_call_quality') || 'medium';
+    return localStorage.getItem('zap_call_quality') || localStorage.getItem('chatra_call_quality') || 'high';
   });
 
   const hexToRgb = (hex) => {
@@ -479,8 +479,8 @@ export default function SettingsView({ currentUser, onBack, onLogout, isNavigati
               <div className="quality-selector-group">
                 {[
                   { id: 'low', name: 'Low Quality', desc: '480p Video • 720p 15fps Screen • 24kbps Audio (Slow connections)' },
-                  { id: 'medium', name: 'Medium (Default)', desc: '720p Video • 1080p 30fps Screen • 64kbps Audio (Balanced HD)' },
-                  { id: 'high', name: 'High Definition', desc: '1080p Video • 1080p 60fps Screen • 128kbps Hi-Fi Audio (Studio)' }
+                  { id: 'medium', name: 'Medium', desc: '720p Video • 1080p 30fps Screen • 64kbps Audio (Balanced HD)' },
+                  { id: 'high', name: 'High Definition (Default)', desc: '1080p Video • 1080p 60fps Screen • 128kbps Hi-Fi Audio (Studio)' }
                 ].map((q) => {
                   const isSelected = callQuality === q.id;
                   return (
