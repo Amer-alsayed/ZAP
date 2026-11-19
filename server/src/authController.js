@@ -264,12 +264,13 @@ export const changePassword = async (req, res) => {
     // Save updated credentials & re-wrapped encrypted private keys
     await dbRun(
       `UPDATE users 
-       SET password_hash = ?, encrypted_private_keys = ?, auth_salt = ?
+       SET password_hash = ?, encrypted_private_keys = ?, auth_salt = ?, password_changed_at = ?
        WHERE id = ?`,
       [
         newPasswordHash,
         typeof encryptedPrivateKeys === 'string' ? encryptedPrivateKeys : JSON.stringify(encryptedPrivateKeys),
         authSalt || user.auth_salt || null,
+        Date.now(),
         userId
       ]
     );
@@ -371,7 +372,7 @@ export const upgradeLegacySession = async (req, res) => {
     return res.status(401).json({ error: 'Invalid access token', code: 'TOKEN_INVALID' });
   }
 
-  const { id: userId, username, sid } = decoded || {};
+  const { id: userId, username, sid, exp, iat } = decoded || {};
   if (sid) {
     return res.status(400).json({ error: 'Token is already bound to a session' });
   }
@@ -379,10 +380,31 @@ export const upgradeLegacySession = async (req, res) => {
     return res.status(401).json({ error: 'Invalid access token', code: 'TOKEN_INVALID' });
   }
 
+  // Enforce a bounded 30-day grace window past expiration so ancient leaked tokens cannot be replayed
+  const LEGACY_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
+  if (typeof exp === 'number' && Date.now() - exp * 1000 > LEGACY_GRACE_MS) {
+    return res.status(401).json({ error: 'Legacy token is too old to upgrade. Please sign in again.', code: SESSION_ERROR.EXPIRED });
+  }
+
   try {
-    const user = await dbGet('SELECT id, username FROM users WHERE id = ?', [userId]);
+    const user = await dbGet('SELECT id, username, password_changed_at FROM users WHERE id = ?', [userId]);
     if (!user || user.username.toLowerCase() !== String(username).toLowerCase()) {
       return res.status(401).json({ error: 'Account no longer exists', code: SESSION_ERROR.REVOKED });
+    }
+
+    // Reject legacy tokens issued before the user's last password change
+    if (user.password_changed_at && typeof iat === 'number' && iat * 1000 < Number(user.password_changed_at) - 1000) {
+      return res.status(401).json({ error: 'Legacy token revoked by password change', code: SESSION_ERROR.REVOKED });
+    }
+
+    // Enforce one-time use per legacy JWT so it cannot be replayed to mint unlimited sessions
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const insertRes = await dbRun(
+      'INSERT OR IGNORE INTO upgraded_legacy_tokens (token_hash, upgraded_at) VALUES (?, ?)',
+      [tokenHash, Date.now()]
+    );
+    if (!insertRes || insertRes.changes !== 1) {
+      return res.status(401).json({ error: 'Legacy token has already been upgraded', code: SESSION_ERROR.REVOKED });
     }
 
     const { token, refreshToken } = await createSession({

@@ -77,12 +77,56 @@ export const registerUserHandlers = (socket, io, { isUserOnline }) => {
 
       if (typeof callback === 'function') callback({ success: true });
 
-      socket.broadcast.emit('user-profile-updated', {
+      // Scope profile updates to contacts, group co-members, and the user's own other tabs,
+      // strictly excluding anyone in a blocked relationship.
+      const profilePayload = {
         username: user,
         displayName: displayName || null,
         avatarIcon: avatarIcon || null,
         themeColor: themeColor || null
-      });
+      };
+
+      const [blockedRows, contactRows, groupPeerRows] = await Promise.all([
+        dbAll(
+          'SELECT username, blocked_username FROM blocked_users WHERE LOWER(username) = LOWER(?) OR LOWER(blocked_username) = LOWER(?)',
+          [user, user]
+        ),
+        dbAll(
+          `SELECT DISTINCT CASE WHEN LOWER(sender) = LOWER(?) THEN recipient ELSE sender END AS peer
+           FROM messages WHERE LOWER(sender) = LOWER(?) OR LOWER(recipient) = LOWER(?)`,
+          [user, user, user]
+        ),
+        dbAll(
+          `SELECT DISTINCT gm2.username AS peer
+           FROM group_members gm1
+           JOIN group_members gm2 ON gm1.group_id = gm2.group_id
+           WHERE LOWER(gm1.username) = LOWER(?)`,
+          [user]
+        )
+      ]);
+
+      const blockedSet = new Set();
+      for (const row of blockedRows) {
+        if (row.username.toLowerCase() === user.toLowerCase()) {
+          blockedSet.add(row.blocked_username.toLowerCase());
+        } else {
+          blockedSet.add(row.username.toLowerCase());
+        }
+      }
+
+      const recipients = new Set([user.toLowerCase()]);
+      for (const row of contactRows) {
+        if (row.peer) recipients.add(row.peer.toLowerCase());
+      }
+      for (const row of groupPeerRows) {
+        if (row.peer) recipients.add(row.peer.toLowerCase());
+      }
+
+      for (const recipientLower of recipients) {
+        if (!blockedSet.has(recipientLower) && isUserOnline(recipientLower)) {
+          socket.to(recipientLower).emit('user-profile-updated', profilePayload);
+        }
+      }
     } catch (err) {
       logger.error('Error updating user profile:', err);
       if (typeof callback === 'function') callback({ error: 'Failed to update profile' });
@@ -122,7 +166,12 @@ export const registerUserHandlers = (socket, io, { isUserOnline }) => {
         [username.toLowerCase(), targetUsername.toLowerCase()]
       );
 
-      if (isUserOnline(targetUsername) && isUserOnline(username)) {
+      // Only reveal online status if the other user has NOT blocked us
+      const reverseBlocked = await dbGet(
+        'SELECT 1 FROM blocked_users WHERE LOWER(username) = LOWER(?) AND LOWER(blocked_username) = LOWER(?)',
+        [targetUsername, username]
+      );
+      if (!reverseBlocked && isUserOnline(targetUsername) && isUserOnline(username)) {
         io.to(targetUsername.toLowerCase()).emit('user-status', { username, status: 'online' });
         io.to(username.toLowerCase()).emit('user-status', { username: targetUsername, status: 'online' });
       }

@@ -6,6 +6,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 import config from './src/config.js';
@@ -27,37 +28,92 @@ const httpServer = createServer(app);
 // Enable Reverse Proxy Trust for accurate rate limiting on cloud platforms
 app.set('trust proxy', 1);
 
-// Security Headers with Helmet
+// Security Headers with Helmet (strict CSP with no unsafe-inline scripts)
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://*.giphy.com'],
+        mediaSrc: ["'self'", 'blob:', 'data:'],
+        connectSrc: ["'self'", 'ws:', 'wss:', 'https://api.giphy.com', 'https://*.giphy.com'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
   })
 );
 
-// Configurable CORS configuration
-const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, server-to-server)
-    if (!origin) return callback(null, true);
-    // In development / local testing, allow any origin
-    if (!config.allowedOrigins) return callback(null, true);
-    // In production, check against allowed origins
-    if (!config.isProd) return callback(null, true);
-    if (config.allowedOrigins.includes(origin)) {
-      return callback(null, true);
+// Helper to determine whether an Origin header is permitted
+const isOriginAllowed = (origin, hostHeader) => {
+  // Allow requests with no origin (same-origin GETs, mobile apps, curl, server-to-server)
+  if (!origin) return true;
+  // In development, allow configured origins or local dev origins
+  if (!config.isProd) return true;
+  // In production, if CLIENT_ORIGIN is explicitly set, check allowlist
+  if (config.allowedOrigins) {
+    return config.allowedOrigins.includes(origin);
+  }
+  // In production with no CLIENT_ORIGIN, allow strictly same-origin requests only
+  if (hostHeader) {
+    try {
+      const parsed = new URL(origin);
+      return parsed.host === hostHeader;
+    } catch {
+      return false;
     }
-    return callback(new Error('Blocked by CORS policy'));
+  }
+  return false;
+};
+
+// Express CORS delegate (has access to Host header for same-origin checks in production)
+const expressCorsDelegate = (req, callback) => {
+  const origin = req.header('Origin');
+  const allowed = isOriginAllowed(origin, req.header('Host'));
+  if (allowed) {
+    callback(null, {
+      origin: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      credentials: true,
+    });
+  } else {
+    callback(new Error('Blocked by CORS policy'));
+  }
+};
+
+// Socket.IO CORS configuration
+const socketCorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (!config.isProd) return callback(null, true);
+    if (config.allowedOrigins) {
+      return config.allowedOrigins.includes(origin)
+        ? callback(null, true)
+        : callback(new Error('Blocked by CORS policy'));
+    }
+    // Same-origin Socket.IO connections when CLIENT_ORIGIN is not explicitly configured:
+    // allowOriginRequest handles host verification below, so deny unknown cross-origin here
+    return callback(null, false);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
 };
 
-app.use(cors(corsOptions));
+app.use(cors(expressCorsDelegate));
 
-// Body Parser with strict 50MB payload limits
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Body Parser with tight global limits (50MB is reserved strictly for authenticated /api/upload)
+const defaultJsonParser = express.json({ limit: '256kb' });
+const uploadJsonParser = express.json({ limit: '50mb' });
+app.use((req, res, next) => {
+  if (req.path === '/api/upload') return next();
+  return defaultJsonParser(req, res, next);
+});
+app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
 // Ensure upload directory exists
 if (!fs.existsSync(config.uploadsDir)) {
@@ -83,11 +139,14 @@ setInterval(async () => {
   }
 }, 60 * 60 * 1000);
 
-// Static uploads serving with security headers
+// Static uploads serving with strict non-executable security headers
+// All uploads are client-side encrypted ciphertext blobs and must never be rendered as HTML/SVG.
 app.use('/uploads', express.static(config.uploadsDir, {
   dotfiles: 'ignore',
   index: false,
   setHeaders: (res) => {
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
   }
@@ -121,7 +180,7 @@ app.post('/api/auth/change-password', authLimiter, authenticateToken, changePass
 app.get('/api/auth/search', authenticateToken, searchUser);
 
 // File upload endpoint (receives client-side encrypted file payload)
-app.post('/api/upload', uploadLimiter, authenticateToken, async (req, res) => {
+app.post('/api/upload', uploadLimiter, authenticateToken, uploadJsonParser, async (req, res) => {
   const { filename, fileData } = req.body;
 
   if (!filename || !fileData) {
@@ -133,10 +192,9 @@ app.post('/api/upload', uploadLimiter, authenticateToken, async (req, res) => {
   }
 
   try {
-    // Strict filename sanitization to eliminate path traversal attempts (e.g. .., /, \)
-    const cleanBasename = path.basename(filename).replace(/[^a-zA-Z0-9.-]/g, '_');
-    const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const safeFilename = `${uniquePrefix}-${cleanBasename}`;
+    // Always store encrypted blobs under a randomized opaque .bin filename so
+    // attacker-supplied extensions (.html, .svg, .js) can never be served or executed.
+    const safeFilename = `${Date.now()}-${crypto.randomBytes(12).toString('hex')}.bin`;
     const resolvedUploadsDir = path.resolve(config.uploadsDir);
     const filePath = path.resolve(resolvedUploadsDir, safeFilename);
 
@@ -165,31 +223,8 @@ app.post('/api/upload', uploadLimiter, authenticateToken, async (req, res) => {
   }
 });
 
-// Serve frontend if built, otherwise display API status
-const clientDist = path.resolve(__dirname, '../client/dist');
-if (fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
-} else {
-  app.get('/', (req, res) => {
-    res.send('ZAP E2EE Server is running...');
-  });
-}
-
-// Centralized Global Error Handling Middleware
-app.use((err, req, res, next) => {
-  logger.error('Unhandled server error:', err);
-  const status = err.status || 500;
-  const message = config.isProd
-    ? 'An unexpected error occurred on the server'
-    : (err.message || 'Internal server error');
-  res.status(status).json({ error: message });
-});
-
-// WebRTC Dynamic ICE Servers Discovery endpoint
-app.get('/api/webrtc/ice-servers', (req, res) => {
+// WebRTC Dynamic ICE Servers Discovery endpoint (authenticated so private TURN credentials are never leaked)
+app.get('/api/webrtc/ice-servers', authenticateToken, (req, res) => {
   const iceServers = [];
 
   // 1. If custom STUN is configured
@@ -236,9 +271,36 @@ app.get('/api/webrtc/ice-servers', (req, res) => {
   res.status(200).json({ iceServers });
 });
 
+// Serve frontend if built, otherwise display API status
+const clientDist = path.resolve(__dirname, '../client/dist');
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.send('ZAP E2EE Server is running...');
+  });
+}
+
+// Centralized Global Error Handling Middleware
+app.use((err, req, res, next) => {
+  logger.error('Unhandled server error:', err);
+  const status = err.status || 500;
+  const message = config.isProd
+    ? 'An unexpected error occurred on the server'
+    : (err.message || 'Internal server error');
+  res.status(status).json({ error: message });
+});
+
 // Initialize Socket.io
 const io = new Server(httpServer, {
-  cors: corsOptions
+  cors: socketCorsOptions,
+  allowRequest: (req, callback) => {
+    const allowed = isOriginAllowed(req.headers.origin, req.headers.host);
+    callback(null, allowed);
+  }
 });
 
 // Expose io to HTTP handlers (e.g. to disconnect sockets of revoked sessions)

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authorizedFetch, hasStoredSession } from '../services/tokenManager.js';
 
 export const defaultIceServers = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -27,7 +28,8 @@ export function useIceServers() {
   const [dynamicIceServers, setDynamicIceServers] = useState(defaultIceServers);
 
   useEffect(() => {
-    fetch('/api/webrtc/ice-servers')
+    if (!hasStoredSession()) return;
+    authorizedFetch('/api/webrtc/ice-servers')
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data && Array.isArray(data.iceServers) && data.iceServers.length > 0) {

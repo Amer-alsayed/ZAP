@@ -205,6 +205,19 @@ export function purgeMemoryMedia(url) {
 }
 
 /**
+ * Validate that a media URL points strictly to a same-origin /uploads/ path.
+ * Prevents a malicious sender from embedding external tracking URLs in fileMetadata.url
+ * to silently leak the recipient's IP address or User-Agent.
+ */
+export function isSafeMediaUrl(url) {
+  if (typeof url !== 'string' || !url) return false;
+  // Must start with /uploads/ (never //, http://, https://, data:, javascript:, etc.)
+  if (!url.startsWith('/uploads/')) return false;
+  if (url.includes('..') || url.includes('\\') || url.includes('\0')) return false;
+  return /^\/uploads\/[a-zA-Z0-9._-]+$/.test(url);
+}
+
+/**
  * Load or fetch and decrypt media.
  * Checks Memory first, then IndexedDB. If missing, fetches from server, decrypts, saves to IndexedDB & Memory, and returns Blob.
  * @param {Object} fileMetadata { url, keyJwk, iv, mimeType, name }
@@ -214,6 +227,9 @@ export function purgeMemoryMedia(url) {
 export async function loadOrFetchDecryptedMedia(fileMetadata, forceBypassMemory = false) {
   const { url, keyJwk, iv, mimeType, name } = fileMetadata || {};
   if (!url) throw new Error('Invalid file metadata: missing URL');
+  if (!isSafeMediaUrl(url)) {
+    throw new Error('Blocked unsafe media URL');
+  }
 
   if (forceBypassMemory) {
     purgeMemoryMedia(url);
@@ -285,7 +301,7 @@ export async function warmupMediaCache(messages) {
   // Only warm the tail of long conversations — off-screen media will lazy-load via IntersectionObserver
   const recent = messages.length > 24 ? messages.slice(-18) : messages;
   const mediaList = recent
-    .filter(m => m.mediaType === 'file' && m.fileMetadata?.url && !memoryBlobCache.has(m.fileMetadata.url))
+    .filter(m => m.mediaType === 'file' && isSafeMediaUrl(m.fileMetadata?.url) && !memoryBlobCache.has(m.fileMetadata.url))
     .map(m => m.fileMetadata);
 
   if (!mediaList.length) return;

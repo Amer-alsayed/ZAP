@@ -256,9 +256,10 @@ export const registerMessageHandlers = (socket, io, { isUserOnline }) => {
       `;
       const params = [currentUser, currentUser, withUser, withUser, currentUser, currentUser];
 
-      if (beforeId) {
-        query += ` AND id < ?`;
-        params.push(beforeId);
+      const before = parseInt(beforeId, 10);
+      if (Number.isInteger(before) && before > 0) {
+        query += ` AND m.id < ?`;
+        params.push(before);
       }
 
       query += ` ORDER BY timestamp ASC, id ASC`;
@@ -304,7 +305,7 @@ export const registerMessageHandlers = (socket, io, { isUserOnline }) => {
       const { sender } = data || {};
       const recipient = socket.user.username;
 
-      if (!sender) return;
+      if (!sender || typeof sender !== 'string' || sender.length > 50) return;
 
       await dbRun(
         `UPDATE messages SET delivered = 2

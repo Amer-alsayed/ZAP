@@ -12,12 +12,12 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
-      - JWT_SECRET=zap-production-super-secret-key-replace-in-env
-      - DATABASE_URL=postgresql://zapuser:zappassword@postgres:5432/zapdb
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in your environment or .env file}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-zapuser}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment or .env file}@postgres:5432/${POSTGRES_DB:-zapdb}
       - REDIS_URL=redis://redis:6379
-      - TURN_URL=turn:coturn:3478
-      - TURN_USERNAME=zapuser
-      - TURN_CREDENTIAL=zapturnsecret998877
+      - TURN_URL=${TURN_URL:-turn:coturn:3478}
+      - TURN_USERNAME=${TURN_USERNAME:-zapuser}
+      - TURN_CREDENTIAL=${TURN_CREDENTIAL:?Set TURN_CREDENTIAL in your environment or .env file}
     depends_on:
       postgres:
         condition: service_healthy
@@ -31,9 +31,9 @@ services:
     container_name: zap-postgres
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=zapuser
-      - POSTGRES_PASSWORD=zappassword
-      - POSTGRES_DB=zapdb
+      - POSTGRES_USER=${POSTGRES_USER:-zapuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment or .env file}
+      - POSTGRES_DB=${POSTGRES_DB:-zapdb}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

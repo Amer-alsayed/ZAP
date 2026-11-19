@@ -385,6 +385,38 @@ export function useGroupManager({
       return null;
     }
 
+    // Cryptographically verify the sender's ECDSA signature BEFORE trusting or rendering payload
+    // (including system messages, which otherwise could be forged by any group member).
+    let isSignatureValid = false;
+    try {
+      const senderProfile = await getProfileCached(encMsg.sender);
+      if (senderProfile?.publicSigningKey && encMsg.signature) {
+        const boundData = `${encMsg.groupId}:${encMsg.kv}:${encMsg.iv}:${encMsg.ciphertext}`;
+        isSignatureValid = await verifyDataSignature(
+          boundData,
+          encMsg.signature,
+          senderProfile.publicSigningKey,
+          encMsg.ciphertext // Backward-compatible fallback for older group messages
+        );
+      }
+    } catch (sigErr) {
+      console.warn('Group message signature verification error:', encMsg.id, sigErr);
+      isSignatureValid = false;
+    }
+
+    if (!isSignatureValid) {
+      console.error('WARNING: Group message failed ECDSA signature verification! Dropping payload for msg:', encMsg.id);
+      return {
+        id: encMsg.id,
+        groupId: encMsg.groupId,
+        sender: encMsg.sender,
+        timestamp: encMsg.timestamp,
+        text: '⚠️ ERROR: Group message failed cryptographic signature verification.',
+        mediaType: 'text',
+        status: 0
+      };
+    }
+
     let payload;
     try {
       payload = await decryptGroupPayload(encMsg.ciphertext, key, encMsg.iv);
@@ -404,14 +436,6 @@ export function useGroupManager({
         status: 0
       };
     }
-
-    getProfileCached(encMsg.sender)
-      .then(senderProfile => {
-        if (senderProfile?.publicSigningKey) {
-          verifyDataSignature(encMsg.ciphertext, encMsg.signature, senderProfile.publicSigningKey);
-        }
-      })
-      .catch(() => {});
 
     return {
       id: encMsg.id,
@@ -536,7 +560,7 @@ export function useGroupManager({
   const sendSystemMessageWith = useCallback(async (groupId, kvVersion, cryptoKey, text) => {
     try {
       const { ciphertext, iv } = await encryptGroupPayload({ type: 'system', text }, cryptoKey);
-      const signature = await signData(ciphertext, currentUser.keys.privateSigningKey);
+      const signature = await signData(`${groupId}:${kvVersion}:${iv}:${ciphertext}`, currentUser.keys.privateSigningKey);
       await emitSendGroupMessage(groupId, ciphertext, iv, signature);
     } catch (err) {
       console.warn('Failed to post system message:', err);
@@ -584,7 +608,7 @@ export function useGroupManager({
       const payload = { ...msgContent };
       delete payload.isNew;
       const { ciphertext, iv } = await encryptGroupPayload(payload, groupKey);
-      const signature = await signData(ciphertext, currentUser.keys.privateSigningKey);
+      const signature = await signData(`${group.id}:${group.kv}:${iv}:${ciphertext}`, currentUser.keys.privateSigningKey);
       const ack = await emitSendGroupMessage(group.id, ciphertext, iv, signature);
 
       const localMsg = {

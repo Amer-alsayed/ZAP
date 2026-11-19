@@ -22,5 +22,8 @@ COPY server/ ./server/
 COPY --from=builder /app/client/dist ./client/dist
 COPY --from=builder /app/server/node_modules ./server/node_modules
 
+RUN mkdir -p /app/server/uploads && chown -R node:node /app
+USER node
+
 EXPOSE 5000
 CMD ["node", "server/server.js"]

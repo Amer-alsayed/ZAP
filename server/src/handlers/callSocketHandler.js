@@ -20,6 +20,22 @@ const cleanupInterval = setInterval(() => {
 
 cleanupInterval.unref();
 
+// Helper: find an active call session involving both userA and userB
+const findActiveCallBetween = (userA, userB) => {
+  if (!userA || !userB) return null;
+  const a = userA.toLowerCase();
+  const b = userB.toLowerCase();
+  const direct = activeCalls.get(a);
+  if (direct && direct.recipient.toLowerCase() === b) {
+    return { key: a, session: direct };
+  }
+  const reverse = activeCalls.get(b);
+  if (reverse && reverse.recipient.toLowerCase() === a) {
+    return { key: b, session: reverse };
+  }
+  return null;
+};
+
 export const registerCallHandlers = (socket, io, { isUserOnline }) => {
   const username = socket.user.username;
 
@@ -29,7 +45,8 @@ export const registerCallHandlers = (socket, io, { isUserOnline }) => {
       const { to, offer, mediaType } = data || {};
       const from = socket.user.username;
 
-      if (!to || typeof to !== 'string' || !offer) return;
+      if (!to || typeof to !== 'string' || to.length > 50 || !offer) return;
+      if (to.toLowerCase() === from.toLowerCase()) return;
 
       // Check if either user has blocked the other
       const isBlocked = await dbGet(
@@ -72,12 +89,13 @@ export const registerCallHandlers = (socket, io, { isUserOnline }) => {
       const { to, answer } = data || {};
       const from = socket.user.username;
 
-      if (!to || !answer) return;
+      if (!to || typeof to !== 'string' || to.length > 50 || !answer) return;
 
+      // Only the intended callee of an active call from `to` may answer
       const session = activeCalls.get(to.toLowerCase());
-      if (session) {
-        session.status = 'connected';
-      }
+      if (!session || session.recipient.toLowerCase() !== from.toLowerCase()) return;
+
+      session.status = 'connected';
 
       if (isUserOnline(to)) {
         io.to(to.toLowerCase()).emit('answer-made', {
@@ -95,7 +113,10 @@ export const registerCallHandlers = (socket, io, { isUserOnline }) => {
       const { to, candidate } = data || {};
       const from = socket.user.username;
 
-      if (!to || !candidate) return;
+      if (!to || typeof to !== 'string' || to.length > 50 || !candidate) return;
+
+      // Only relay ICE candidates between participants of an active call
+      if (!findActiveCallBetween(from, to)) return;
 
       if (isUserOnline(to)) {
         io.to(to.toLowerCase()).emit('ice-candidate-relay', {
@@ -113,7 +134,10 @@ export const registerCallHandlers = (socket, io, { isUserOnline }) => {
       const { to, mediaType, screenSharing, cameraOff, muted } = data || {};
       const from = socket.user.username;
 
-      if (!to) return;
+      if (!to || typeof to !== 'string' || to.length > 50) return;
+
+      // Only relay media state updates between participants of an active call
+      if (!findActiveCallBetween(from, to)) return;
 
       if (isUserOnline(to)) {
         io.to(to.toLowerCase()).emit('call-media-updated', { 
@@ -134,13 +158,24 @@ export const registerCallHandlers = (socket, io, { isUserOnline }) => {
       const { to, reason } = data || {};
       const from = socket.user.username;
 
-      activeCalls.delete(from.toLowerCase());
-      if (to) {
-        activeCalls.delete(to.toLowerCase());
-      }
+      if (to && typeof to === 'string' && to.length <= 50) {
+        // Only allow hanging up an active call that actually involves both `from` and `to`
+        const active = findActiveCallBetween(from, to);
+        if (!active) return;
 
-      if (to && isUserOnline(to)) {
-        io.to(to.toLowerCase()).emit('call-ended', { from, reason });
+        activeCalls.delete(active.key);
+        if (isUserOnline(to)) {
+          io.to(to.toLowerCase()).emit('call-ended', { from, reason });
+        }
+      } else {
+        // Fallback: hang up any call initiated by `from`
+        const ownCall = activeCalls.get(from.toLowerCase());
+        if (ownCall) {
+          activeCalls.delete(from.toLowerCase());
+          if (isUserOnline(ownCall.recipient)) {
+            io.to(ownCall.recipient.toLowerCase()).emit('call-ended', { from, reason });
+          }
+        }
       }
     } catch (err) {
       logger.error('Error in hang-up event:', err);

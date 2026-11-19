@@ -490,6 +490,33 @@ export function useChatManager({
         return;
       }
 
+      // Verify AAD sender/recipient binding matches the transport envelope to block misdirection/spoofing
+      if (msg.aad) {
+        try {
+          const parsedAad = typeof msg.aad === 'string' ? JSON.parse(msg.aad) : msg.aad;
+          if (parsedAad && typeof parsedAad === 'object') {
+            const aadSender = typeof parsedAad.s === 'string' ? parsedAad.s.toLowerCase() : null;
+            const aadRecipient = typeof parsedAad.r === 'string' ? parsedAad.r.toLowerCase() : null;
+            if ((aadSender && aadSender !== msg.sender.toLowerCase()) ||
+                (aadRecipient && aadRecipient !== msg.recipient.toLowerCase())) {
+              console.error('WARNING: E2EE AAD sender/recipient mismatch! Message dropped.');
+              appendMessageToContact(chatPartner, {
+                id: msg.id,
+                sender: msg.sender,
+                recipient: msg.recipient,
+                timestamp: msg.timestamp,
+                text: '⚠️ ERROR: Message failed cryptographic integrity verification.',
+                mediaType: 'text',
+                status: msg.delivered
+              }, false, contactKeys);
+              return;
+            }
+          }
+        } catch {
+          // Non-JSON legacy AAD
+        }
+      }
+
       const decryptedString = await decryptMessage(msg.ciphertext, secret, msg.iv, msg.aad);
       const decryptedPayload = JSON.parse(decryptedString);
 
@@ -557,6 +584,36 @@ export function useChatManager({
         }
 
         if (!isAuthenticated) {
+          decryptedMsgs.push({
+            id: msg.id,
+            sender: msg.sender,
+            recipient: msg.recipient,
+            timestamp: normTimestamp,
+            text: '⚠️ ERROR: Message failed cryptographic integrity verification.',
+            mediaType: 'text',
+            status: msg.delivered
+          });
+          continue;
+        }
+
+        // Verify AAD sender/recipient binding matches the transport envelope
+        let aadMismatch = false;
+        if (msg.aad) {
+          try {
+            const parsedAad = typeof msg.aad === 'string' ? JSON.parse(msg.aad) : msg.aad;
+            if (parsedAad && typeof parsedAad === 'object') {
+              const aadSender = typeof parsedAad.s === 'string' ? parsedAad.s.toLowerCase() : null;
+              const aadRecipient = typeof parsedAad.r === 'string' ? parsedAad.r.toLowerCase() : null;
+              if ((aadSender && aadSender !== msg.sender.toLowerCase()) ||
+                  (aadRecipient && aadRecipient !== msg.recipient.toLowerCase())) {
+                aadMismatch = true;
+              }
+            }
+          } catch {
+            // Non-JSON legacy AAD
+          }
+        }
+        if (aadMismatch) {
           decryptedMsgs.push({
             id: msg.id,
             sender: msg.sender,
@@ -805,7 +862,7 @@ export function useChatManager({
         }
 
         const { ciphertext, iv } = await encryptGroupPayload(msgContent, groupKey);
-        const signature = await signData(ciphertext, currentUser.keys.privateSigningKey);
+        const signature = await signData(`${groupId}:${group.kv}:${iv}:${ciphertext}`, currentUser.keys.privateSigningKey);
         await emitSendGroupMessage(groupId, ciphertext, iv, signature);
 
         showToast?.(`Message forwarded to "${group.name}".`, 'success');

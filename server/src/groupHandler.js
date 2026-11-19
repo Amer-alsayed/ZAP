@@ -395,7 +395,7 @@ export const registerGroupHandlers = (socket, io, helpers) => {
         if (!isValidUsername(m?.username)) return callback?.({ error: 'Invalid member username format' });
         const lower = m.username.toLowerCase();
         if (rosterLower.has(lower) || seenNew.has(lower)) continue;
-        if (roster.size + seenNew.size >= MAX_GROUP_MEMBERS) {
+        if (roster.length + seenNew.size >= MAX_GROUP_MEMBERS) {
           return callback?.({ error: `Group member limit (${MAX_GROUP_MEMBERS}) reached` });
         }
         seenNew.add(lower);
@@ -554,6 +554,16 @@ export const registerGroupHandlers = (socket, io, helpers) => {
         logger.warn(`remove-group-member: room leave issue for ${removedLower}:`, leaveErr);
       }
 
+      // Evict removed user from any active group call
+      const ongoingCall = activeGroupCalls.get(gid);
+      if (ongoingCall && ongoingCall.participants.delete(removedLower)) {
+        io.to(`group_${gid}`).emit('group-call-left', { groupId: gid, username: targetUsername });
+        if (ongoingCall.participants.size === 0) {
+          activeGroupCalls.delete(gid);
+          io.to(`group_${gid}`).emit('group-call-ended', { groupId: gid });
+        }
+      }
+
       // Notify the removed user directly
       io.to(removedLower).emit('group-kicked', { groupId: gid, removedBy: username });
 
@@ -581,6 +591,16 @@ export const registerGroupHandlers = (socket, io, helpers) => {
         await io.in(username.toLowerCase()).socketsLeave(`group_${gid}`);
       } catch (leaveErr) {
         logger.warn(`leave-group: room leave issue for ${username}:`, leaveErr);
+      }
+
+      // Evict leaving user from any active group call
+      const ongoingLeaveCall = activeGroupCalls.get(gid);
+      if (ongoingLeaveCall && ongoingLeaveCall.participants.delete(username.toLowerCase())) {
+        io.to(`group_${gid}`).emit('group-call-left', { groupId: gid, username });
+        if (ongoingLeaveCall.participants.size === 0) {
+          activeGroupCalls.delete(gid);
+          io.to(`group_${gid}`).emit('group-call-ended', { groupId: gid });
+        }
       }
 
       const roster = await getRoster(gid);
@@ -654,6 +674,9 @@ export const registerGroupHandlers = (socket, io, helpers) => {
       if (myMembership.role !== 'owner') return callback?.({ error: 'Only the group owner can delete the group' });
 
       await deleteGroupEverywhere(gid);
+      if (activeGroupCalls.delete(gid)) {
+        io.to(`group_${gid}`).emit('group-call-ended', { groupId: gid });
+      }
       callback?.({ success: true });
       io.to(`group_${gid}`).emit('group-deleted', { groupId: gid, deletedBy: username });
       logger.info(`Group ${gid} deleted by owner ${username}`);
@@ -916,11 +939,14 @@ export const registerGroupHandlers = (socket, io, helpers) => {
   });
 
   // Join an ongoing group call; the joiner receives the pre-existing roster
-  socket.on('join-group-call', (data, callback) => {
+  socket.on('join-group-call', async (data, callback) => {
     try {
       const { groupId } = data || {};
       const gid = parseInt(groupId, 10);
       if (!Number.isInteger(gid) || gid <= 0) return callback?.({ error: 'Invalid groupId' });
+
+      const membership = await getMembership(gid, username);
+      if (!membership) return callback?.({ error: 'not_member' });
 
       const session = gcSession(gid);
       if (!session) return callback?.({ error: 'no_call' });
@@ -992,8 +1018,7 @@ export const registerGroupHandlers = (socket, io, helpers) => {
       if (!Number.isInteger(gid)) return;
 
       const session = gcSession(gid);
-      if (!session) return;
-      session.participants.delete(gcLower());
+      if (!session || !session.participants.delete(gcLower())) return;
       io.to(`group_${gid}`).emit('group-call-left', { groupId: gid, username });
       await gcEndIfEmpty(gid, session);
     } catch (err) {

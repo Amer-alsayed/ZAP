@@ -12,7 +12,7 @@ if (isPostgres) {
   pgPool = new pg.Pool({
     connectionString: config.dbUrl,
     ssl: {
-      rejectUnauthorized: false
+      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'
     },
     max: 10,
     idleTimeoutMillis: 30000,
@@ -203,6 +203,7 @@ export const initDb = async () => {
         avatar_icon TEXT,
         theme_color TEXT,
         auth_salt TEXT,
+        password_changed_at BIGINT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -248,6 +249,13 @@ export const initDb = async () => {
     try {
       await dbRun('ALTER TABLE users ADD COLUMN auth_salt TEXT');
       logger.info('Database migration: Added auth_salt column to users table.');
+    } catch (e) {
+      // Column already exists
+    }
+
+    try {
+      await dbRun('ALTER TABLE users ADD COLUMN password_changed_at BIGINT');
+      logger.info('Database migration: Added password_changed_at column to users table.');
     } catch (e) {
       // Column already exists
     }
@@ -376,6 +384,14 @@ export const initDb = async () => {
         user_agent TEXT,
         created_at BIGINT NOT NULL,
         last_used_at BIGINT NOT NULL
+      )
+    `);
+
+    // Track one-time legacy JWT upgrades so a legacy token can never be replayed
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS upgraded_legacy_tokens (
+        token_hash TEXT PRIMARY KEY,
+        upgraded_at BIGINT NOT NULL
       )
     `);
 
